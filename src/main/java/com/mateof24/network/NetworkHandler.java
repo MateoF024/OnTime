@@ -1,0 +1,69 @@
+package com.mateof24.network;
+
+import com.mateof24.OnTime;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
+
+public class NetworkHandler {
+    public static final ResourceLocation TIMER_SYNC_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_sync");
+
+    // Register server-side packets
+    public static void registerPackets() {
+        PayloadTypeRegistry.playS2C().register(TimerSyncPayload.TYPE, TimerSyncPayload.CODEC);
+    }
+
+    // Register client-side packet handlers (called from client side)
+    public static void registerClientPackets() {
+        // This will be registered in OnTimeClient
+    }
+
+    // Send timer sync to all clients
+    public static void syncTimerToClients(net.minecraft.server.MinecraftServer server, String name,
+                                          long currentTicks, long targetTicks, boolean countUp, boolean running) {
+        TimerSyncPayload payload = new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running);
+
+        for (var player : server.getPlayerList().getPlayers()) {
+            ServerPlayNetworking.send(player, payload);
+        }
+    }
+
+    // Timer sync payload
+    public record TimerSyncPayload(String name, long currentTicks, long targetTicks, boolean countUp, boolean running)
+            implements CustomPacketPayload {
+
+        public static final CustomPacketPayload.Type<TimerSyncPayload> TYPE =
+                new CustomPacketPayload.Type<>(TIMER_SYNC_ID);
+
+        public static final StreamCodec<FriendlyByteBuf, TimerSyncPayload> CODEC = StreamCodec.of(
+                TimerSyncPayload::write,
+                TimerSyncPayload::read
+        );
+
+        public static void write(FriendlyByteBuf buf, TimerSyncPayload payload) {
+            buf.writeUtf(payload.name());
+            buf.writeLong(payload.currentTicks());
+            buf.writeLong(payload.targetTicks());
+            buf.writeBoolean(payload.countUp());
+            buf.writeBoolean(payload.running());
+        }
+
+        public static TimerSyncPayload read(FriendlyByteBuf buf) {
+            String name = buf.readUtf();
+            long currentTicks = buf.readLong();
+            long targetTicks = buf.readLong();
+            boolean countUp = buf.readBoolean();
+            boolean running = buf.readBoolean();
+
+            return new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+}

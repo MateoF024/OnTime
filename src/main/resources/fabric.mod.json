@@ -1,0 +1,37 @@
+{
+	"schemaVersion": 1,
+	"id": "ontime",
+	"version": "${version}",
+	"name": "OnTime",
+	"description": "Crea contadores personalizados y ejecuta comandos tras su tiempo!",
+	"authors": [
+		"Me!"
+	],
+	"license": "CC0-1.0",
+	"icon": "assets/ontime/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.mateof24.OnTime"
+		],
+		"client": [
+			"com.mateof24.OnTimeClient"
+		]
+	},
+	"mixins": [
+		"ontime.mixins.json",
+		{
+			"config": "ontime.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.18.1",
+		"minecraft": "~1.21.1",
+		"java": ">=21",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
