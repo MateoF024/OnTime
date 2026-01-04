@@ -5,9 +5,8 @@ import net.minecraft.client.gui.GuiGraphics;
 
 public class TimerRenderer {
     private static final int TEXT_COLOR = 0xFFFFFF;
-    private static final int Y_OFFSET = 12;
+    private static final int Y_OFFSET = 4;
 
-    // Render timer on HUD
     public static void render(GuiGraphics graphics, net.minecraft.client.DeltaTracker tickDelta) {
         if (!ClientTimerState.shouldDisplay()) {
             return;
@@ -24,9 +23,7 @@ public class TimerRenderer {
         int textWidth = mc.font.width(timeText);
         int x = (screenWidth - textWidth) / 2;
 
-        // Draw shadow for better visibility
         graphics.drawString(mc.font, timeText, x + 1, Y_OFFSET + 1, 0x000000, false);
-        // Draw main text
         graphics.drawString(mc.font, timeText, x, Y_OFFSET, TEXT_COLOR, false);
     }
 }

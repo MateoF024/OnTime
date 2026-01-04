@@ -11,17 +11,10 @@ import net.minecraft.resources.ResourceLocation;
 public class NetworkHandler {
     public static final ResourceLocation TIMER_SYNC_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_sync");
 
-    // Register server-side packets
     public static void registerPackets() {
         PayloadTypeRegistry.playS2C().register(TimerSyncPayload.TYPE, TimerSyncPayload.CODEC);
     }
 
-    // Register client-side packet handlers (called from client side)
-    public static void registerClientPackets() {
-        // This will be registered in OnTimeClient
-    }
-
-    // Send timer sync to all clients
     public static void syncTimerToClients(net.minecraft.server.MinecraftServer server, String name,
                                           long currentTicks, long targetTicks, boolean countUp, boolean running) {
         TimerSyncPayload payload = new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running);
@@ -31,7 +24,6 @@ public class NetworkHandler {
         }
     }
 
-    // Timer sync payload
     public record TimerSyncPayload(String name, long currentTicks, long targetTicks, boolean countUp, boolean running)
             implements CustomPacketPayload {
 

@@ -4,6 +4,7 @@ import com.mateof24.command.TimerCommands;
 import com.mateof24.manager.TimerManager;
 import com.mateof24.network.NetworkHandler;
 import com.mateof24.tick.TimerTickHandler;
+import com.mateof24.timer.Timer;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -32,6 +33,12 @@ public class OnTime implements ModInitializer {
         });
 
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
+                if (timer.isRunning()) {
+                    timer.setRunning(false);
+                    LOGGER.info("Timer '{}' paused due to server shutdown", timer.getName());
+                }
+            });
             TimerManager.getInstance().saveTimers();
         });
 

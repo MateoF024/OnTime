@@ -13,9 +13,8 @@ import java.util.Optional;
 
 public class TimerTickHandler {
     private static int syncCounter = 0;
-    private static final int SYNC_INTERVAL = 20; // Sync every second
+    private static final int SYNC_INTERVAL = 20;
 
-    // Tick handler called every server tick
     public static void tick(MinecraftServer server) {
         Optional<Timer> activeTimerOpt = TimerManager.getInstance().getActiveTimer();
 
@@ -29,28 +28,23 @@ public class TimerTickHandler {
             return;
         }
 
-        // Tick the timer and check if it finished
         boolean finished = activeTimer.tick();
 
-        // Sync to clients periodically
         syncCounter++;
         if (syncCounter >= SYNC_INTERVAL) {
             syncCounter = 0;
             syncTimerToClients(server, activeTimer);
         }
 
-        // Handle timer completion
         if (finished) {
             executeTimerCommand(server, activeTimer);
+            activeTimer.reset();
             TimerManager.getInstance().clearActiveTimer();
             TimerManager.getInstance().saveTimers();
-
-            // Clear on clients
             NetworkHandler.syncTimerToClients(server, "", 0, 0, false, false);
         }
     }
 
-    // Sync timer state to all clients
     private static void syncTimerToClients(MinecraftServer server, Timer timer) {
         NetworkHandler.syncTimerToClients(
                 server,
@@ -62,7 +56,6 @@ public class TimerTickHandler {
         );
     }
 
-    // Execute timer command with max privileges
     private static void executeTimerCommand(MinecraftServer server, Timer timer) {
         String command = timer.getCommand();
 
@@ -79,7 +72,7 @@ public class TimerTickHandler {
                     Vec3.ZERO,
                     Vec2.ZERO,
                     overworld,
-                    4, // Max permission level
+                    4,
                     "OnTime",
                     net.minecraft.network.chat.Component.literal("OnTime"),
                     server,

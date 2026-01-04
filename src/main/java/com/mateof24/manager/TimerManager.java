@@ -17,7 +17,6 @@ public class TimerManager {
         return INSTANCE;
     }
 
-    // Create new timer
     public boolean createTimer(String name, int hours, int minutes, int seconds, boolean countUp) {
         if (timers.containsKey(name)) {
             return false;
@@ -29,7 +28,6 @@ public class TimerManager {
         return true;
     }
 
-    // Remove timer
     public boolean removeTimer(String name) {
         if (!timers.containsKey(name)) {
             return false;
@@ -45,8 +43,9 @@ public class TimerManager {
         return true;
     }
 
-    // Start timer
     public boolean startTimer(String name) {
+        reloadCommandsFromDisk();
+
         Timer timer = timers.get(name);
         if (timer == null) {
             return false;
@@ -62,7 +61,6 @@ public class TimerManager {
         return true;
     }
 
-    // Pause active timer
     public boolean pauseTimer() {
         if (activeTimer == null) {
             return false;
@@ -73,7 +71,6 @@ public class TimerManager {
         return true;
     }
 
-    // Set timer time
     public boolean setTimerTime(String name, int hours, int minutes, int seconds) {
         Timer timer = timers.get(name);
         if (timer == null) {
@@ -85,7 +82,6 @@ public class TimerManager {
         return true;
     }
 
-    // Add time to timer
     public boolean addTimerTime(String name, int hours, int minutes, int seconds) {
         Timer timer = timers.get(name);
         if (timer == null) {
@@ -97,37 +93,30 @@ public class TimerManager {
         return true;
     }
 
-    // Get timer
     public Optional<Timer> getTimer(String name) {
         return Optional.ofNullable(timers.get(name));
     }
 
-    // Get active timer
     public Optional<Timer> getActiveTimer() {
         return Optional.ofNullable(activeTimer);
     }
 
-    // Check if timer exists
     public boolean hasTimer(String name) {
         return timers.containsKey(name);
     }
 
-    // Get all timers
     public Map<String, Timer> getAllTimers() {
         return new HashMap<>(timers);
     }
 
-    // Clear active timer reference
     public void clearActiveTimer() {
         activeTimer = null;
     }
 
-    // Save timers to disk
     public void saveTimers() {
         TimerStorage.saveTimers(timers);
     }
 
-    // Load timers from disk
     public void loadTimers() {
         timers.clear();
         activeTimer = null;
@@ -135,11 +124,24 @@ public class TimerManager {
         Map<String, Timer> loadedTimers = TimerStorage.loadTimers();
         timers.putAll(loadedTimers);
 
-        // Find active timer if any
         for (Timer timer : timers.values()) {
             if (timer.isRunning()) {
                 activeTimer = timer;
                 break;
+            }
+        }
+    }
+
+    public void reloadCommandsFromDisk() {
+        Map<String, Timer> diskTimers = TimerStorage.loadTimers();
+
+        for (Map.Entry<String, Timer> entry : diskTimers.entrySet()) {
+            String name = entry.getKey();
+            Timer diskTimer = entry.getValue();
+            Timer memTimer = timers.get(name);
+
+            if (memTimer != null) {
+                memTimer.setCommand(diskTimer.getCommand());
             }
         }
     }

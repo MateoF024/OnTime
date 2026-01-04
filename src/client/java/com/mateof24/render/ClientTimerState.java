@@ -1,5 +1,9 @@
 package com.mateof24.render;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+
 public class ClientTimerState {
     private static String timerName = "";
     private static long currentTicks = 0;
@@ -8,8 +12,10 @@ public class ClientTimerState {
     private static boolean running = false;
     private static long lastUpdateTime = 0;
     private static long serverTicks = 0;
+    private static long lastSecond = -1;
+    private static long pausedTicks = 0;
+    private static boolean wasPaused = false;
 
-    // Update timer state from server
     public static void updateTimer(String name, long current, long target, boolean up, boolean run) {
         timerName = name;
         serverTicks = current;
@@ -18,16 +24,66 @@ public class ClientTimerState {
         countUp = up;
         running = run;
         lastUpdateTime = System.currentTimeMillis();
+        lastSecond = current / 20L;
+        pausedTicks = 0;
+        wasPaused = false;
     }
 
-    // Get interpolated current time for smooth rendering
+    public static void tick() {
+        Minecraft mc = Minecraft.getInstance();
+
+        if (mc.isPaused()) {
+            if (!wasPaused) {
+                pausedTicks = getInterpolatedTicks();
+                wasPaused = true;
+            }
+            return;
+        }
+
+        if (wasPaused) {
+            lastUpdateTime = System.currentTimeMillis();
+            serverTicks = pausedTicks;
+            wasPaused = false;
+        }
+
+        if (!running) {
+            return;
+        }
+
+        long currentSecond = getInterpolatedTicks() / 20L;
+        long remainingSeconds = countUp ? (targetTicks / 20L) - currentSecond : currentSecond;
+
+        if (currentSecond != lastSecond && lastSecond != -1 && remainingSeconds <= 30) {
+            if (mc.player != null && mc.level != null) {
+                mc.level.playLocalSound(
+                        mc.player.getX(),
+                        mc.player.getY(),
+                        mc.player.getZ(),
+                        SoundEvents.NOTE_BLOCK_HAT.value(),
+                        SoundSource.MASTER,
+                        0.75F,
+                        2.0F,
+                        false
+                );
+            }
+        }
+
+        lastSecond = currentSecond;
+    }
+
     public static long getInterpolatedTicks() {
+        Minecraft mc = Minecraft.getInstance();
+
+        if (mc.isPaused() && wasPaused) {
+            return pausedTicks;
+        }
+
         if (!running) {
             return currentTicks;
         }
 
         long timeSinceUpdate = System.currentTimeMillis() - lastUpdateTime;
-        long estimatedTicks = timeSinceUpdate / 50L; // 50ms per tick
+        long estimatedTicks = timeSinceUpdate / 50L;
 
         if (countUp) {
             long interpolated = serverTicks + estimatedTicks;
@@ -38,7 +94,6 @@ public class ClientTimerState {
         }
     }
 
-    // Get formatted time string
     public static String getFormattedTime() {
         long totalSeconds = getInterpolatedTicks() / 20L;
         long hours = totalSeconds / 3600;
@@ -52,12 +107,10 @@ public class ClientTimerState {
         }
     }
 
-    // Check if timer should be displayed
     public static boolean shouldDisplay() {
-        return running && !timerName.isEmpty();
+        return !timerName.isEmpty();
     }
 
-    // Clear timer state
     public static void clear() {
         timerName = "";
         currentTicks = 0;
@@ -66,9 +119,11 @@ public class ClientTimerState {
         running = false;
         lastUpdateTime = 0;
         serverTicks = 0;
+        lastSecond = -1;
+        pausedTicks = 0;
+        wasPaused = false;
     }
 
-    // Getters
     public static String getTimerName() { return timerName; }
     public static boolean isRunning() { return running; }
 }

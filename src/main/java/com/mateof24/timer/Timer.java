@@ -87,7 +87,7 @@ public class Timer {
         json.addProperty("targetTicks", targetTicks);
         json.addProperty("countUp", countUp);
         json.addProperty("running", running);
-        json.addProperty("command", command);
+        json.addProperty("command", command != null ? command : "");
         return json;
     }
 
@@ -105,7 +105,12 @@ public class Timer {
         Timer timer = new Timer(name, hours, minutes, seconds, countUp);
         timer.currentTicks = json.get("currentTicks").getAsLong();
         timer.running = json.get("running").getAsBoolean();
-        timer.command = json.get("command").getAsString();
+
+        if (json.has("command") && !json.get("command").isJsonNull()) {
+            timer.command = json.get("command").getAsString();
+        } else {
+            timer.command = "";
+        }
 
         return timer;
     }
@@ -118,6 +123,8 @@ public class Timer {
     public boolean isRunning() { return running; }
     public void setRunning(boolean running) { this.running = running; }
     public String getCommand() { return command; }
-    public void setCommand(String command) { this.command = command; }
+    public void setCommand(String command) {
+        this.command = command != null ? command : "";
+    }
     public void setCurrentTicks(long ticks) { this.currentTicks = ticks; }
 }
