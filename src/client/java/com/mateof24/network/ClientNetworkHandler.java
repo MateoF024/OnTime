@@ -16,7 +16,8 @@ public class ClientNetworkHandler {
                             payload.currentTicks(),
                             payload.targetTicks(),
                             payload.countUp(),
-                            payload.running()
+                            payload.running(),
+                            payload.silent()
                     );
                 }
             });

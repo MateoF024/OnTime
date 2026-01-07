@@ -15,14 +15,16 @@ public class ClientTimerState {
     private static long lastSecond = -1;
     private static long pausedTicks = 0;
     private static boolean wasPaused = false;
+    private static boolean silent = false;
 
-    public static void updateTimer(String name, long current, long target, boolean up, boolean run) {
+    public static void updateTimer(String name, long current, long target, boolean up, boolean run, boolean sil) {
         timerName = name;
         serverTicks = current;
         currentTicks = current;
         targetTicks = target;
         countUp = up;
         running = run;
+        silent = sil;
         lastUpdateTime = System.currentTimeMillis();
         lastSecond = current / 20L;
         pausedTicks = 0;
@@ -51,9 +53,8 @@ public class ClientTimerState {
         }
 
         long currentSecond = getInterpolatedTicks() / 20L;
-        long remainingSeconds = countUp ? (targetTicks / 20L) - currentSecond : currentSecond;
 
-        if (currentSecond != lastSecond && lastSecond != -1 && remainingSeconds <= 30) {
+        if (!silent && currentSecond != lastSecond && lastSecond != -1) {
             if (mc.player != null && mc.level != null) {
                 mc.level.playLocalSound(
                         mc.player.getX(),
@@ -122,8 +123,10 @@ public class ClientTimerState {
         lastSecond = -1;
         pausedTicks = 0;
         wasPaused = false;
+        silent = false;
     }
 
     public static String getTimerName() { return timerName; }
     public static boolean isRunning() { return running; }
+    public static boolean isSilent() { return silent; }
 }

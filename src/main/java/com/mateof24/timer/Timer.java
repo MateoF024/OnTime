@@ -10,8 +10,8 @@ public class Timer {
     private boolean running;
     private String command;
     private final long initialTicks;
+    private boolean silent;
 
-    // Constructor
     public Timer(String name, int hours, int minutes, int seconds, boolean countUp) {
         this.name = name;
         this.targetTicks = (hours * 3600L + minutes * 60L + seconds) * 20L;
@@ -20,9 +20,9 @@ public class Timer {
         this.initialTicks = this.currentTicks;
         this.running = false;
         this.command = "";
+        this.silent = false;
     }
 
-    // Tick update - returns true if timer finished
     public boolean tick() {
         if (!running) return false;
 
@@ -42,18 +42,15 @@ public class Timer {
         return false;
     }
 
-    // Reset timer to initial state
     public void reset() {
         currentTicks = countUp ? 0 : targetTicks;
         running = false;
     }
 
-    // Set time in ticks
     public void setTime(int hours, int minutes, int seconds) {
         currentTicks = (hours * 3600L + minutes * 60L + seconds) * 20L;
     }
 
-    // Add time in ticks
     public void addTime(int hours, int minutes, int seconds) {
         long additionalTicks = (hours * 3600L + minutes * 60L + seconds) * 20L;
         currentTicks += additionalTicks;
@@ -65,7 +62,6 @@ public class Timer {
         }
     }
 
-    // Get formatted time string (HH:MM:SS or MM:SS)
     public String getFormattedTime() {
         long totalSeconds = currentTicks / 20L;
         long hours = totalSeconds / 3600;
@@ -79,7 +75,6 @@ public class Timer {
         }
     }
 
-    // Serialization
     public JsonObject toJson() {
         JsonObject json = new JsonObject();
         json.addProperty("name", name);
@@ -88,10 +83,10 @@ public class Timer {
         json.addProperty("countUp", countUp);
         json.addProperty("running", running);
         json.addProperty("command", command != null ? command : "");
+        json.addProperty("silent", silent);
         return json;
     }
 
-    // Deserialization
     public static Timer fromJson(JsonObject json) {
         String name = json.get("name").getAsString();
         long targetTicks = json.get("targetTicks").getAsLong();
@@ -112,10 +107,15 @@ public class Timer {
             timer.command = "";
         }
 
+        if (json.has("silent")) {
+            timer.silent = json.get("silent").getAsBoolean();
+        } else {
+            timer.silent = false;
+        }
+
         return timer;
     }
 
-    // Getters and setters
     public String getName() { return name; }
     public long getCurrentTicks() { return currentTicks; }
     public long getTargetTicks() { return targetTicks; }
@@ -127,4 +127,6 @@ public class Timer {
         this.command = command != null ? command : "";
     }
     public void setCurrentTicks(long ticks) { this.currentTicks = ticks; }
+    public boolean isSilent() { return silent; }
+    public void setSilent(boolean silent) { this.silent = silent; }
 }

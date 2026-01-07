@@ -3,9 +3,9 @@
 	"id": "ontime",
 	"version": "${version}",
 	"name": "OnTime",
-	"description": "Crea contadores personalizados y ejecuta comandos tras su tiempo!",
+    "description": "Create custom timers and execute commands after their time!",
 	"authors": [
-		"Me!"
+		"MateoF24"
 	],
 	"license": "CC0-1.0",
 	"icon": "assets/ontime/icon.png",

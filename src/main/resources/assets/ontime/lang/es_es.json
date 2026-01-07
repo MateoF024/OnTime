@@ -1,0 +1,23 @@
+{
+  "ontime.command.create.success": "§aContador §f'%s' §acreado con tiempo §f%s §acomo §f%s",
+  "ontime.command.create.exists": "§cEl contador §f'%s' §cya existe",
+  "ontime.command.set.success": "§aContador §f'%s' §aestablecido en §f%s",
+  "ontime.command.start.success": "§aContador §f'%s' §ainiciado",
+  "ontime.command.start.running": "§cEl contador §f'%s' §cya está en ejecución",
+  "ontime.command.start.active": "§cEl contador §f'%s' §cestá actualmente activo. Pausalo primero",
+  "ontime.command.pause.success": "§aContador §f'%s' §apausado",
+  "ontime.command.pause.none": "§cNo hay ningún contador activo para pausar",
+  "ontime.command.resume.success": "§aContador §f'%s' §areanudado",
+  "ontime.command.remove.success": "§aContador §f'%s' §aeliminado",
+  "ontime.command.add.success": "§aSe agregó §f%s §aal contador §f'%s'",
+  "ontime.command.silent.enabled": "§aSonido del contador §f'%s' §aactivado",
+  "ontime.command.silent.disabled": "§cSonido del contador §f'%s' §cdesactivado",
+  "ontime.command.silent.none": "§cNo hay ningún contador activo para cambiar el sonido",
+  "ontime.command.notfound": "§cNo se encontró el contador §f'%s'",
+  "ontime.command.list.empty": "§7No se encontraron contadores",
+  "ontime.command.list.header": "§e=== Contadores ===",
+  "ontime.list.status.running": "§a[EJECUTANDO]",
+  "ontime.list.status.stopped": "§7[DETENIDO]",
+  "ontime.mode.countup": "ascendente",
+  "ontime.mode.countdown": "descendente"
+}

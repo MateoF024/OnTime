@@ -17,7 +17,6 @@ import java.util.Optional;
 
 public class TimerCommands {
 
-    // Register all timer commands
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("timer")
                 .requires(source -> source.hasPermission(2))
@@ -73,10 +72,12 @@ public class TimerCommands {
                 .then(Commands.literal("list")
                         .executes(TimerCommands::listTimers)
                 )
+                .then(Commands.literal("silent")
+                        .executes(TimerCommands::toggleSilent)
+                )
         );
     }
 
-    // Create timer command
     private static int createTimer(CommandContext<CommandSourceStack> ctx, boolean countUp) {
         String name = StringArgumentType.getString(ctx, "name");
         int hours = IntegerArgumentType.getInteger(ctx, "hours");
@@ -84,18 +85,17 @@ public class TimerCommands {
         int seconds = IntegerArgumentType.getInteger(ctx, "seconds");
 
         if (TimerManager.getInstance().createTimer(name, hours, minutes, seconds, countUp)) {
-            String time = String.format("%02d:%02d:%02d", hours, minutes, seconds);
-            String mode = countUp ? "count-up" : "countdown";
             ctx.getSource().sendSuccess(() ->
-                    Component.literal(String.format("§aTimer '%s' created as %s with time %s", name, mode, time)), true);
+                    Component.translatable("ontime.command.create.success", name,
+                            String.format("%02d:%02d:%02d", hours, minutes, seconds),
+                            Component.translatable(countUp ? "ontime.mode.countup" : "ontime.mode.countdown")), true);
             return 1;
         } else {
-            ctx.getSource().sendFailure(Component.literal(String.format("§cTimer '%s' already exists", name)));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.create.exists", name));
             return 0;
         }
     }
 
-    // Set timer time command
     private static int setTimer(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         int hours = IntegerArgumentType.getInteger(ctx, "hours");
@@ -103,43 +103,42 @@ public class TimerCommands {
         int seconds = IntegerArgumentType.getInteger(ctx, "seconds");
 
         if (TimerManager.getInstance().setTimerTime(name, hours, minutes, seconds)) {
-            String time = String.format("%02d:%02d:%02d", hours, minutes, seconds);
             ctx.getSource().sendSuccess(() ->
-                    Component.literal(String.format("§aTimer '%s' set to %s", name, time)), true);
+                    Component.translatable("ontime.command.set.success", name,
+                            String.format("%02d:%02d:%02d", hours, minutes, seconds)), true);
 
             syncIfActive(ctx, name);
             return 1;
         } else {
-            ctx.getSource().sendFailure(Component.literal(String.format("§cTimer '%s' not found", name)));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
     }
 
-    // Start timer command
     private static int startTimer(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
 
         Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
         if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.literal(String.format("§cTimer '%s' not found", name)));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
 
         Timer timer = timerOpt.get();
         if (timer.isRunning()) {
-            ctx.getSource().sendFailure(Component.literal(String.format("§cTimer '%s' is already running", name)));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.start.running", name));
             return 0;
         }
 
         Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
         if (activeTimer.isPresent()) {
-            ctx.getSource().sendFailure(Component.literal(String.format("§cTimer '%s' is currently active. Pause it first", activeTimer.get().getName())));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.start.active", activeTimer.get().getName()));
             return 0;
         }
 
         if (TimerManager.getInstance().startTimer(name)) {
             ctx.getSource().sendSuccess(() ->
-                    Component.literal(String.format("§aTimer '%s' started", name)), true);
+                    Component.translatable("ontime.command.start.success", name), true);
 
             NetworkHandler.syncTimerToClients(
                     ctx.getSource().getServer(),
@@ -147,19 +146,20 @@ public class TimerCommands {
                     timer.getCurrentTicks(),
                     timer.getTargetTicks(),
                     timer.isCountUp(),
-                    true
+                    true,
+                    timer.isSilent()
             );
             return 1;
         }
 
         return 0;
     }
-    // Pause timer command
+
     private static int pauseTimer(CommandContext<CommandSourceStack> ctx) {
         Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
 
         if (activeTimer.isEmpty()) {
-            ctx.getSource().sendFailure(Component.literal("§cNo active timer to pause"));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.pause.none"));
             return 0;
         }
 
@@ -170,7 +170,7 @@ public class TimerCommands {
             TimerManager.getInstance().saveTimers();
 
             ctx.getSource().sendSuccess(() ->
-                    Component.literal(String.format("§aTimer '%s' paused", timer.getName())), true);
+                    Component.translatable("ontime.command.pause.success", timer.getName()), true);
 
             NetworkHandler.syncTimerToClients(
                     ctx.getSource().getServer(),
@@ -178,7 +178,8 @@ public class TimerCommands {
                     timer.getCurrentTicks(),
                     timer.getTargetTicks(),
                     timer.isCountUp(),
-                    false
+                    false,
+                    timer.isSilent()
             );
             return 1;
         } else {
@@ -186,7 +187,7 @@ public class TimerCommands {
             TimerManager.getInstance().saveTimers();
 
             ctx.getSource().sendSuccess(() ->
-                    Component.literal(String.format("§aTimer '%s' resumed", timer.getName())), true);
+                    Component.translatable("ontime.command.resume.success", timer.getName()), true);
 
             NetworkHandler.syncTimerToClients(
                     ctx.getSource().getServer(),
@@ -194,29 +195,28 @@ public class TimerCommands {
                     timer.getCurrentTicks(),
                     timer.getTargetTicks(),
                     timer.isCountUp(),
-                    true
+                    true,
+                    timer.isSilent()
             );
             return 1;
         }
     }
 
-    // Remove timer command
     private static int removeTimer(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
 
         if (TimerManager.getInstance().removeTimer(name)) {
             ctx.getSource().sendSuccess(() ->
-                    Component.literal(String.format("§aTimer '%s' removed", name)), true);
+                    Component.translatable("ontime.command.remove.success", name), true);
 
-            NetworkHandler.syncTimerToClients(ctx.getSource().getServer(), "", 0, 0, false, false);
+            NetworkHandler.syncTimerToClients(ctx.getSource().getServer(), "", 0, 0, false, false, false);
             return 1;
         } else {
-            ctx.getSource().sendFailure(Component.literal(String.format("§cTimer '%s' not found", name)));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
     }
 
-    // Add time to timer command
     private static int addTime(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         int hours = IntegerArgumentType.getInteger(ctx, "hours");
@@ -224,19 +224,46 @@ public class TimerCommands {
         int seconds = IntegerArgumentType.getInteger(ctx, "seconds");
 
         if (TimerManager.getInstance().addTimerTime(name, hours, minutes, seconds)) {
-            String time = String.format("%02d:%02d:%02d", hours, minutes, seconds);
             ctx.getSource().sendSuccess(() ->
-                    Component.literal(String.format("§aAdded %s to timer '%s'", time, name)), true);
+                    Component.translatable("ontime.command.add.success",
+                            String.format("%02d:%02d:%02d", hours, minutes, seconds), name), true);
 
             syncIfActive(ctx, name);
             return 1;
         } else {
-            ctx.getSource().sendFailure(Component.literal(String.format("§cTimer '%s' not found", name)));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
     }
 
-    // Helper to sync timer if it's active
+    private static int toggleSilent(CommandContext<CommandSourceStack> ctx) {
+        Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
+
+        if (activeTimer.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.silent.none"));
+            return 0;
+        }
+
+        Timer timer = activeTimer.get();
+        timer.setSilent(!timer.isSilent());
+        TimerManager.getInstance().saveTimers();
+
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable(timer.isSilent() ? "ontime.command.silent.disabled" : "ontime.command.silent.enabled", timer.getName()), true);
+
+        NetworkHandler.syncTimerToClients(
+                ctx.getSource().getServer(),
+                timer.getName(),
+                timer.getCurrentTicks(),
+                timer.getTargetTicks(),
+                timer.isCountUp(),
+                timer.isRunning(),
+                timer.isSilent()
+        );
+
+        return 1;
+    }
+
     private static void syncIfActive(CommandContext<CommandSourceStack> ctx, String name) {
         Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
         if (activeTimer.isPresent() && activeTimer.get().getName().equals(name)) {
@@ -247,7 +274,8 @@ public class TimerCommands {
                     timer.getCurrentTicks(),
                     timer.getTargetTicks(),
                     timer.isCountUp(),
-                    timer.isRunning()
+                    timer.isRunning(),
+                    timer.isSilent()
             );
         }
     }
@@ -256,21 +284,24 @@ public class TimerCommands {
         Map<String, Timer> timers = TimerManager.getInstance().getAllTimers();
 
         if (timers.isEmpty()) {
-            ctx.getSource().sendSuccess(() -> Component.literal("No timers found"), false);
+            ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.list.empty"), false);
             return 0;
         }
 
-        ctx.getSource().sendSuccess(() -> Component.literal("=== Timers ==="), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.list.header"), false);
 
         Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
 
         for (Timer timer : timers.values()) {
-            String status = timer.isRunning() ? "§a[RUNNING]" : "§7[STOPPED]";
+            Component statusComponent = Component.translatable(
+                    timer.isRunning() ? "ontime.list.status.running" : "ontime.list.status.stopped"
+            );
             String active = activeTimer.isPresent() && activeTimer.get().getName().equals(timer.getName()) ? " §e*" : "";
             String type = timer.isCountUp() ? "↑" : "↓";
+            String silent = timer.isSilent() ? " §7[S]" : "";
 
-            String message = String.format("%s %s %s - %s%s",
-                    status, timer.getName(), type, timer.getFormattedTime(), active);
+            String message = String.format("%s §f%s §7%s - §f%s%s%s",
+                    statusComponent.getString(), timer.getName(), type, timer.getFormattedTime(), active, silent);
 
             ctx.getSource().sendSuccess(() -> Component.literal(message), false);
         }

@@ -1,0 +1,23 @@
+{
+  "ontime.command.create.success": "§aTimer §f'%s' §acreated with time §f%s §aas §f%s",
+  "ontime.command.create.exists": "§cTimer §f'%s' §calready exists",
+  "ontime.command.set.success": "§aTimer §f'%s' §aset to §f%s",
+  "ontime.command.start.success": "§aTimer §f'%s' §astarted",
+  "ontime.command.start.running": "§cTimer §f'%s' §cis already running",
+  "ontime.command.start.active": "§cTimer §f'%s' §cis currently active. Pause it first",
+  "ontime.command.pause.success": "§aTimer §f'%s' §apaused",
+  "ontime.command.pause.none": "§cNo active timer to pause",
+  "ontime.command.resume.success": "§aTimer §f'%s' §aresumed",
+  "ontime.command.remove.success": "§aTimer §f'%s' §aremoved",
+  "ontime.command.add.success": "§aAdded §f%s §ato timer §f'%s'",
+  "ontime.command.silent.enabled": "§aTimer §f'%s' §asound enabled",
+  "ontime.command.silent.disabled": "§cTimer §f'%s' §csound disabled",
+  "ontime.command.silent.none": "§cNo active timer to toggle sound",
+  "ontime.command.notfound": "§cTimer §f'%s' §cnot found",
+  "ontime.command.list.empty": "§7No timers found",
+  "ontime.command.list.header": "§e=== Timers ===",
+  "ontime.list.status.running": "§a[RUNNING]",
+  "ontime.list.status.stopped": "§7[STOPPED]",
+  "ontime.mode.countup": "count-up",
+  "ontime.mode.countdown": "countdown"
+}

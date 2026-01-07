@@ -41,7 +41,7 @@ public class TimerTickHandler {
             activeTimer.reset();
             TimerManager.getInstance().clearActiveTimer();
             TimerManager.getInstance().saveTimers();
-            NetworkHandler.syncTimerToClients(server, "", 0, 0, false, false);
+            NetworkHandler.syncTimerToClients(server, "", 0, 0, false, false, false);
         }
     }
 
@@ -52,7 +52,8 @@ public class TimerTickHandler {
                 timer.getCurrentTicks(),
                 timer.getTargetTicks(),
                 timer.isCountUp(),
-                timer.isRunning()
+                timer.isRunning(),
+                timer.isSilent()
         );
     }
 
