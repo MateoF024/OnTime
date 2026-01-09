@@ -1,5 +1,7 @@
 package com.mateof24.manager;
 
+import com.mateof24.OnTime;
+import com.mateof24.config.ModConfig;
 import com.mateof24.storage.TimerStorage;
 import com.mateof24.timer.Timer;
 import java.util.HashMap;
@@ -19,6 +21,13 @@ public class TimerManager {
 
     public boolean createTimer(String name, int hours, int minutes, int seconds, boolean countUp) {
         if (timers.containsKey(name)) {
+            return false;
+        }
+
+        long totalSeconds = hours * 3600L + minutes * 60L + seconds;
+        long maxSeconds = ModConfig.getInstance().getMaxTimerSeconds();
+
+        if (totalSeconds > maxSeconds) {
             return false;
         }
 
@@ -114,26 +123,28 @@ public class TimerManager {
     }
 
     public void saveTimers() {
-        TimerStorage.saveTimers(timers);
+        String activeTimerName = activeTimer != null ? activeTimer.getName() : null;
+        TimerStorage.saveTimers(timers, activeTimerName);
     }
 
     public void loadTimers() {
         timers.clear();
         activeTimer = null;
 
-        Map<String, Timer> loadedTimers = TimerStorage.loadTimers();
-        timers.putAll(loadedTimers);
+        TimerStorage.TimerLoadResult result = TimerStorage.loadTimers();
+        timers.putAll(result.getTimers());
 
-        for (Timer timer : timers.values()) {
-            if (timer.isRunning()) {
-                activeTimer = timer;
-                break;
-            }
+        String activeTimerName = result.getActiveTimerName();
+        if (activeTimerName != null && timers.containsKey(activeTimerName)) {
+            activeTimer = timers.get(activeTimerName);
+            OnTime.LOGGER.info("Restored active timer: '{}'", activeTimerName);
         }
+        validateActiveTimer();
     }
 
     public void reloadCommandsFromDisk() {
-        Map<String, Timer> diskTimers = TimerStorage.loadTimers();
+        TimerStorage.TimerLoadResult result = TimerStorage.loadTimers();
+        Map<String, Timer> diskTimers = result.getTimers();
 
         for (Map.Entry<String, Timer> entry : diskTimers.entrySet()) {
             String name = entry.getKey();
@@ -144,5 +155,15 @@ public class TimerManager {
                 memTimer.setCommand(diskTimer.getCommand());
             }
         }
+    }
+
+    public boolean validateActiveTimer() {
+        if (activeTimer != null && !timers.containsValue(activeTimer)) {
+            OnTime.LOGGER.warn("Active timer '{}' not found in timers map, clearing", activeTimer.getName());
+            activeTimer = null;
+            saveTimers();
+            return false;
+        }
+        return true;
     }
 }

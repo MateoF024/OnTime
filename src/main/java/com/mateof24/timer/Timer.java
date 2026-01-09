@@ -11,6 +11,7 @@ public class Timer {
     private String command;
     private final long initialTicks;
     private boolean silent;
+    private boolean wasRunningBeforeShutdown;
 
     public Timer(String name, int hours, int minutes, int seconds, boolean countUp) {
         this.name = name;
@@ -21,6 +22,7 @@ public class Timer {
         this.running = false;
         this.command = "";
         this.silent = false;
+        this.wasRunningBeforeShutdown = false;
     }
 
     public boolean tick() {
@@ -84,6 +86,7 @@ public class Timer {
         json.addProperty("running", running);
         json.addProperty("command", command != null ? command : "");
         json.addProperty("silent", silent);
+        json.addProperty("wasRunningBeforeShutdown", wasRunningBeforeShutdown);
         return json;
     }
 
@@ -113,6 +116,12 @@ public class Timer {
             timer.silent = false;
         }
 
+        if (json.has("wasRunningBeforeShutdown")) {
+            timer.wasRunningBeforeShutdown = json.get("wasRunningBeforeShutdown").getAsBoolean();
+        } else {
+            timer.wasRunningBeforeShutdown = false;
+        }
+
         return timer;
     }
 
@@ -129,4 +138,6 @@ public class Timer {
     public void setCurrentTicks(long ticks) { this.currentTicks = ticks; }
     public boolean isSilent() { return silent; }
     public void setSilent(boolean silent) { this.silent = silent; }
+    public boolean wasRunningBeforeShutdown() { return wasRunningBeforeShutdown; }
+    public void setWasRunningBeforeShutdown(boolean was) { this.wasRunningBeforeShutdown = was; }
 }

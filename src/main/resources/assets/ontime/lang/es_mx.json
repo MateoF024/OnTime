@@ -19,5 +19,15 @@
   "ontime.list.status.running": "§a[EJECUTANDO]",
   "ontime.list.status.stopped": "§7[DETENIDO]",
   "ontime.mode.countup": "ascendente",
-  "ontime.mode.countdown": "descendente"
+  "ontime.mode.countdown": "descendente",
+  "ontime.command.stop.success": "§aContador §f'%s' §adetenido y restablecido",
+  "ontime.command.stop.none": "§cNo hay ningún contador activo para detener",
+  "ontime.command.reset.success": "§aContador §f'%s' §arestablecido a su valor predeterminado",
+  "ontime.command.reset.noactive": "§cNo hay ningún contador activo para restablecer. Usá §f/timer reset <nombre> §cpara restablecer un contador específico",
+  "ontime.command.hide.enabled": "§aVisualización del contador §factivada para %s",
+  "ontime.command.hide.disabled": "§cVisualización del contador §fdesactivada para %s",
+  "ontime.command.hide.self": "vos mismo",
+  "ontime.command.hide.players": "%d jugador(es)",
+  "ontime.command.error.maxtime": "§cEl contador excede el tiempo máximo permitido de §f%s",
+  "ontime.command.error.maxtime.add": "§cAgregar este tiempo excedería el tiempo máximo permitido de §f%s"
 }

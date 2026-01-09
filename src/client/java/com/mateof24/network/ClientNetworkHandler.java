@@ -17,9 +17,16 @@ public class ClientNetworkHandler {
                             payload.targetTicks(),
                             payload.countUp(),
                             payload.running(),
-                            payload.silent()
+                            payload.silent(),
+                            payload.serverTick()
                     );
                 }
+            });
+        });
+
+        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerVisibilityPayload.TYPE, (payload, context) -> {
+            context.client().execute(() -> {
+                ClientTimerState.setVisible(payload.visible());
             });
         });
     }

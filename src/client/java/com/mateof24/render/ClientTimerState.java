@@ -10,22 +10,23 @@ public class ClientTimerState {
     private static long targetTicks = 0;
     private static boolean countUp = false;
     private static boolean running = false;
-    private static long lastUpdateTime = 0;
-    private static long serverTicks = 0;
+    private static long serverTick = 0;
+    private static long clientTickAtSync = 0;
     private static long lastSecond = -1;
     private static long pausedTicks = 0;
     private static boolean wasPaused = false;
     private static boolean silent = false;
+    private static boolean visible = true;
 
-    public static void updateTimer(String name, long current, long target, boolean up, boolean run, boolean sil) {
+    public static void updateTimer(String name, long current, long target, boolean up, boolean run, boolean sil, long servTick) {
         timerName = name;
-        serverTicks = current;
         currentTicks = current;
         targetTicks = target;
         countUp = up;
         running = run;
         silent = sil;
-        lastUpdateTime = System.currentTimeMillis();
+        serverTick = servTick;
+        clientTickAtSync = Minecraft.getInstance().level != null ? Minecraft.getInstance().level.getGameTime() : 0;
         lastSecond = current / 20L;
         pausedTicks = 0;
         wasPaused = false;
@@ -43,12 +44,11 @@ public class ClientTimerState {
         }
 
         if (wasPaused) {
-            lastUpdateTime = System.currentTimeMillis();
-            serverTicks = pausedTicks;
+            clientTickAtSync = mc.level != null ? mc.level.getGameTime() : 0;
             wasPaused = false;
         }
 
-        if (!running) {
+        if (!running || !visible) {
             return;
         }
 
@@ -83,14 +83,14 @@ public class ClientTimerState {
             return currentTicks;
         }
 
-        long timeSinceUpdate = System.currentTimeMillis() - lastUpdateTime;
-        long estimatedTicks = timeSinceUpdate / 50L;
+        long currentClientTick = mc.level != null ? mc.level.getGameTime() : 0;
+        long ticksSinceSync = currentClientTick - clientTickAtSync;
 
         if (countUp) {
-            long interpolated = serverTicks + estimatedTicks;
+            long interpolated = currentTicks + ticksSinceSync;
             return Math.min(interpolated, targetTicks);
         } else {
-            long interpolated = serverTicks - estimatedTicks;
+            long interpolated = currentTicks - ticksSinceSync;
             return Math.max(interpolated, 0);
         }
     }
@@ -109,7 +109,7 @@ public class ClientTimerState {
     }
 
     public static boolean shouldDisplay() {
-        return !timerName.isEmpty();
+        return !timerName.isEmpty() && visible;
     }
 
     public static void clear() {
@@ -118,15 +118,37 @@ public class ClientTimerState {
         targetTicks = 0;
         countUp = false;
         running = false;
-        lastUpdateTime = 0;
-        serverTicks = 0;
+        serverTick = 0;
+        clientTickAtSync = 0;
         lastSecond = -1;
         pausedTicks = 0;
         wasPaused = false;
         silent = false;
+        visible = true;
+    }
+
+    public static float getPercentage() {
+        if (targetTicks == 0) return 100f;
+
+        long ticks = getInterpolatedTicks();
+        float percentage = (ticks * 100f) / targetTicks;
+
+        if (countUp) {
+            return 100f - percentage;
+        } else {
+            return percentage;
+        }
     }
 
     public static String getTimerName() { return timerName; }
     public static boolean isRunning() { return running; }
     public static boolean isSilent() { return silent; }
+
+    public static void setVisible(boolean vis) {
+        visible = vis;
+    }
+
+    public static boolean isVisible() {
+        return visible;
+    }
 }

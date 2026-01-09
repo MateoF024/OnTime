@@ -19,5 +19,15 @@
   "ontime.list.status.running": "§a[RUNNING]",
   "ontime.list.status.stopped": "§7[STOPPED]",
   "ontime.mode.countup": "count-up",
-  "ontime.mode.countdown": "countdown"
+  "ontime.mode.countdown": "countdown",
+  "ontime.command.stop.success": "§aTimer §f'%s' §astopped and reset",
+  "ontime.command.stop.none": "§cNo active timer to stop",
+  "ontime.command.reset.success": "§aTimer §f'%s' §areset to default",
+  "ontime.command.reset.noactive": "§cNo active timer to reset. Use §f/timer reset <name> §cto reset a specific timer",
+  "ontime.command.hide.enabled": "§aTimer display §fenabled for %s",
+  "ontime.command.hide.disabled": "§cTimer display §fdisabled for %s",
+  "ontime.command.hide.self": "yourself",
+  "ontime.command.hide.players": "%d player(s)",
+  "ontime.command.error.maxtime": "§cTimer exceeds maximum allowed time of §f%s",
+  "ontime.command.error.maxtime.add": "§cAdding this time would exceed maximum allowed time of §f%s"
 }

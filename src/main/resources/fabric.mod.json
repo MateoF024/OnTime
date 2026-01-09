@@ -3,7 +3,7 @@
 	"id": "ontime",
 	"version": "${version}",
 	"name": "OnTime",
-    "description": "Create custom timers and execute commands after their time!",
+    "description": "create custom timers with command execution capabilities. Perfect for minigames, events, or automated server tasks!",
 	"authors": [
 		"MateoF24"
 	],
