@@ -16,7 +16,10 @@
 		],
 		"client": [
 			"com.mateof24.OnTimeClient"
-		]
+		],
+      "modmenu": [
+        "com.mateof24.integration.ModMenuIntegration"
+      ]
 	},
 	"mixins": [
 		"ontime.mixins.json",
@@ -26,10 +29,11 @@
 		}
 	],
 	"depends": {
-		"fabricloader": ">=0.18.1",
+		"fabricloader": ">=0.18.0",
 		"minecraft": "~1.21.1",
 		"java": ">=21",
-		"fabric-api": "*"
+		"fabric-api": "*",
+        "cloth-config": ">=15.0.0"
 	},
 	"suggests": {
 		"another-mod": "*"
