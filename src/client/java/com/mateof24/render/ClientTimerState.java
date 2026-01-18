@@ -19,6 +19,8 @@ public class ClientTimerState {
     private static boolean visible = true;
 
     public static void updateTimer(String name, long current, long target, boolean up, boolean run, boolean sil, long servTick) {
+        boolean isFirstUpdate = timerName.isEmpty() || !timerName.equals(name);
+
         timerName = name;
         currentTicks = current;
         targetTicks = target;
@@ -27,7 +29,11 @@ public class ClientTimerState {
         silent = sil;
         serverTick = servTick;
         clientTickAtSync = Minecraft.getInstance().level != null ? Minecraft.getInstance().level.getGameTime() : 0;
-        lastSecond = current / 20L;
+
+        if (isFirstUpdate || !running) {
+            lastSecond = current / 20L;
+        }
+
         pausedTicks = 0;
         wasPaused = false;
     }
@@ -37,13 +43,14 @@ public class ClientTimerState {
 
         if (mc.isPaused()) {
             if (!wasPaused) {
-                pausedTicks = getInterpolatedTicks();
+                pausedTicks = currentTicks;
                 wasPaused = true;
             }
             return;
         }
 
         if (wasPaused) {
+            currentTicks = pausedTicks;
             clientTickAtSync = mc.level != null ? mc.level.getGameTime() : 0;
             wasPaused = false;
         }
@@ -85,6 +92,8 @@ public class ClientTimerState {
 
         long currentClientTick = mc.level != null ? mc.level.getGameTime() : 0;
         long ticksSinceSync = currentClientTick - clientTickAtSync;
+
+        ticksSinceSync = Math.max(0, Math.min(ticksSinceSync, 100));
 
         if (countUp) {
             long interpolated = currentTicks + ticksSinceSync;

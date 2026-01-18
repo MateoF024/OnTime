@@ -1,5 +1,6 @@
 package com.mateof24.config;
 
+import com.mateof24.config.ClientConfig;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
@@ -10,6 +11,7 @@ public class ConfigScreen {
 
     public static Screen createConfigScreen(Screen parent) {
         ModConfig config = ModConfig.getInstance();
+        ClientConfig clientConfig = ClientConfig.getInstance();
 
         ConfigBuilder builder = ConfigBuilder.create()
                 .setParentScreen(parent)
@@ -21,25 +23,25 @@ public class ConfigScreen {
 
         ConfigCategory display = builder.getOrCreateCategory(Component.translatable("ontime.config.category.display"));
 
-        display.addEntry(entryBuilder.startIntField(Component.translatable("ontime.config.timer_x"), config.getTimerX())
+        display.addEntry(entryBuilder.startIntField(Component.translatable("ontime.config.timer_x"), clientConfig.getTimerX())  // ← CAMBIAR
                 .setDefaultValue(-1)
                 .setTooltip(Component.translatable("ontime.config.timer_x.tooltip"))
-                .setSaveConsumer(config::setTimerX)
+                .setSaveConsumer(clientConfig::setTimerX)  // ← CAMBIAR
                 .build());
 
-        display.addEntry(entryBuilder.startIntField(Component.translatable("ontime.config.timer_y"), config.getTimerY())
+        display.addEntry(entryBuilder.startIntField(Component.translatable("ontime.config.timer_y"), clientConfig.getTimerY())  // ← CAMBIAR
                 .setDefaultValue(4)
                 .setMin(0)
                 .setTooltip(Component.translatable("ontime.config.timer_y.tooltip"))
-                .setSaveConsumer(config::setTimerY)
+                .setSaveConsumer(clientConfig::setTimerY)  // ← CAMBIAR
                 .build());
 
-        display.addEntry(entryBuilder.startFloatField(Component.translatable("ontime.config.timer_scale"), config.getTimerScale())
+        display.addEntry(entryBuilder.startFloatField(Component.translatable("ontime.config.timer_scale"), clientConfig.getTimerScale())  // ← CAMBIAR
                 .setDefaultValue(1.0f)
                 .setMin(0.1f)
                 .setMax(5.0f)
                 .setTooltip(Component.translatable("ontime.config.timer_scale.tooltip"))
-                .setSaveConsumer(config::setTimerScale)
+                .setSaveConsumer(clientConfig::setTimerScale)  // ← CAMBIAR
                 .build());
 
         ConfigCategory colors = builder.getOrCreateCategory(Component.translatable("ontime.config.category.colors"));

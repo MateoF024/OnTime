@@ -62,6 +62,8 @@ public class ModConfig {
             }
         } catch (IOException e) {
             OnTime.LOGGER.error("Failed to load config", e);
+        } catch (Exception e) {
+            OnTime.LOGGER.error("Failed to parse config", e);
         }
     }
 
@@ -117,9 +119,6 @@ public class ModConfig {
     private int colorLow = 0xFF0000;
     private int thresholdMid = 30;
     private int thresholdLow = 10;
-    private int timerX = -1;
-    private int timerY = 4;
-    private float timerScale = 1.0f;
 
     public int getColorHigh() { return colorHigh; }
     public int getColorMid() { return colorMid; }
@@ -162,24 +161,6 @@ public class ModConfig {
         }
     }
 
-    public int getTimerX() { return timerX; }
-    public int getTimerY() { return timerY; }
-    public float getTimerScale() { return timerScale; }
-
-    public void setTimerX(int x) {
-        this.timerX = x;
-        save();
-    }
-
-    public void setTimerY(int y) {
-        this.timerY = Math.max(0, y);
-        save();
-    }
-
-    public void setTimerScale(float scale) {
-        this.timerScale = Math.max(0.1f, Math.min(5.0f, scale));
-        save();
-    }
 
     private int parseColor(String colorStr) {
         try {

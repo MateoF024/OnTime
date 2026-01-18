@@ -57,6 +57,18 @@ public class OnTime implements ModInitializer {
             UUID playerUUID = handler.getPlayer().getUUID();
             boolean visible = PlayerPreferences.getTimerVisibility(playerUUID);
             NetworkHandler.syncVisibilityToClient(handler.getPlayer(), visible);
+
+            TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
+                NetworkHandler.syncTimerToClients(
+                        server,
+                        timer.getName(),
+                        timer.getCurrentTicks(),
+                        timer.getTargetTicks(),
+                        timer.isCountUp(),
+                        timer.isRunning(),
+                        timer.isSilent()
+                );
+            });
         });
 
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
