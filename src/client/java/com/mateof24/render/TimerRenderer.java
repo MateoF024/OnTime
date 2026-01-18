@@ -1,7 +1,7 @@
 package com.mateof24.render;
 
+import com.mateof24.config.ClientConfig;
 import com.mateof24.config.ModConfig;
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 
@@ -22,9 +22,8 @@ public class TimerRenderer {
         int textColor = ModConfig.getInstance().getColorForPercentage(percentage);
 
         int screenWidth = mc.getWindow().getGuiScaledWidth();
-        int screenHeight = mc.getWindow().getGuiScaledHeight();
 
-        ModConfig config = ModConfig.getInstance();
+        ClientConfig config = ClientConfig.getInstance();
         int configX = config.getTimerX();
         int configY = config.getTimerY();
         float scale = config.getTimerScale();
@@ -40,14 +39,22 @@ public class TimerRenderer {
 
         int y = configY;
 
-        PoseStack poseStack = graphics.pose();
-        poseStack.pushPose();
-        poseStack.translate(x, y, 0);
-        poseStack.scale(scale, scale, 1.0f);
+        int shadowColor = 0xFF000000;
+        int mainColor = 0xFF000000 | textColor;
 
-        graphics.drawString(mc.font, timeText, 1, 1, 0x000000, false);
-        graphics.drawString(mc.font, timeText, 0, 0, textColor, false);
+        if (scale != 1.0f) {
+            var pose = graphics.pose();
+            pose.pushMatrix();
+            pose.translate(x, y);
+            pose.scale(scale, scale);
 
-        poseStack.popPose();
+            graphics.drawString(mc.font, timeText, 1, 1, shadowColor, false);
+            graphics.drawString(mc.font, timeText, 0, 0, mainColor, false);
+
+            pose.popMatrix();
+        } else {
+            graphics.drawString(mc.font, timeText, x + 1, y + 1, shadowColor, false);
+            graphics.drawString(mc.font, timeText, x, y, mainColor, false);
+        }
     }
 }
