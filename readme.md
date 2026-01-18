@@ -1,6 +1,6 @@
 # OnTime
 
-A Fabric mod for Minecraft 1.21.1 that allows you to create custom timers with on-screen display and execute commands when they complete.
+A Fabric mod for Minecraft 1.21.1-1.21.10 that allows you to create custom timers with on-screen display and execute commands when they complete.
 
 ## Features
 
