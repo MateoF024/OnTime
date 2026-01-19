@@ -41,7 +41,9 @@ public class ClientTimerState {
     public static void tick() {
         Minecraft mc = Minecraft.getInstance();
 
-        if (mc.isPaused()) {
+        boolean isPaused = mc.isPaused();
+
+        if (isPaused) {
             if (!wasPaused) {
                 pausedTicks = currentTicks;
                 wasPaused = true;
@@ -51,7 +53,9 @@ public class ClientTimerState {
 
         if (wasPaused) {
             currentTicks = pausedTicks;
-            clientTickAtSync = mc.level != null ? mc.level.getGameTime() : 0;
+            long currentGameTime = mc.level != null ? mc.level.getGameTime() : 0;
+            long elapsedDuringPause = currentGameTime - clientTickAtSync;
+            clientTickAtSync = currentGameTime - elapsedDuringPause;
             wasPaused = false;
         }
 
@@ -93,7 +97,7 @@ public class ClientTimerState {
         long currentClientTick = mc.level != null ? mc.level.getGameTime() : 0;
         long ticksSinceSync = currentClientTick - clientTickAtSync;
 
-        ticksSinceSync = Math.max(0, Math.min(ticksSinceSync, 100));
+        ticksSinceSync = Math.max(0, Math.min(ticksSinceSync, 40));
 
         if (countUp) {
             long interpolated = currentTicks + ticksSinceSync;
