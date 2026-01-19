@@ -170,15 +170,17 @@ This ensures no time is lost during planned maintenance or crashes.
 
 OnTime includes translations for:
 - English (en_us)
-- Spanish - Argentina (es_ar)
-- Spanish - Spain (es_es)
-- Spanish - Mexico (es_mx)
+- Spanish-Argentina (es_ar)
+- Spanish-Spain (es_es)
+- Spanish-Mexico (es_mx)
 
 ## Technical Details
 
-- **Minecraft Version**: 1.21.1
+- **Minecraft Version**: 1.21.1-1.21.10
 - **Mod Loader**: Fabric
 - **Fabric API**: Required
+- **Mod Menu**: Optional
+- **Cloth Config**: Required
 - **Java Version**: 21+
 - **Environment**: Universal (client + server)
 
