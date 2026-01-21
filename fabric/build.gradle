@@ -1,0 +1,61 @@
+plugins {
+    id 'fabric-loom' version '1.13-SNAPSHOT'
+}
+
+def versionType = project.findProperty('minecraft_version_type') ?: 'v1.21.1'
+
+base {
+    archivesName = "${project.archives_base_name}+fabric+${project.minecraft_version}"
+}
+
+loom {
+    splitEnvironmentSourceSets()
+
+    mods {
+        ontime {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+afterEvaluate {
+    sourceSets {
+        client {
+            java {
+                srcDirs += ["src/${versionType}/java"]
+            }
+        }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+
+    modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+    modApi("me.shedaniel.cloth:cloth-config-fabric:${project.cloth_version}") {
+        exclude(group: "net.fabricmc.fabric-api")
+    }
+    modImplementation("com.terraformersmc:modmenu:${project.modmenu_version}")
+
+    implementation project(path: ':common', configuration: 'namedElements')
+    include project(':common')
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_version_type", versionType
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version
+    }
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}

@@ -1,0 +1,21 @@
+package com.mateof24.platform;
+
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+import java.nio.file.Path;
+
+public interface IPlatformHelper {
+
+    String getPlatformName();
+
+    boolean isModLoaded(String modId);
+
+    Path getConfigDir();
+
+    void sendTimerSyncPacket(MinecraftServer server, String name, long currentTicks,
+                             long targetTicks, boolean countUp, boolean running, boolean silent);
+
+    void sendVisibilityPacket(ServerPlayer player, boolean visible);
+
+    void registerPackets();
+}

@@ -1,0 +1,21 @@
+plugins {
+    id 'java-library'
+    id 'fabric-loom' version '1.13-SNAPSHOT'
+}
+
+base {
+    archivesName = "${project.archives_base_name}-common"
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+
+    compileOnly 'com.google.code.gson:gson:2.10.1'
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
