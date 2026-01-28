@@ -1,0 +1,120 @@
+plugins {
+    id 'java-library'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'org.spongepowered.mixin' version '0.7.+'
+}
+
+base {
+    archivesName = "${project.archives_base_name}+forge+${project.minecraft_version}"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+minecraft {
+    mappings channel: mapping_channel, version: mapping_version
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+
+            mods {
+                ontime {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        client {
+            property 'forge.enabledGameTestNamespaces', 'ontime'
+        }
+
+        server {
+            property 'forge.enabledGameTestNamespaces', 'ontime'
+            args '--nogui'
+        }
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = [
+                    'src/main/java',
+                    'src/client/java',
+                    '../common/src/main/java'
+            ]
+        }
+        resources {
+            srcDirs = [
+                    'src/main/resources',
+                    'src/client/resources'
+            ]
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.minecraftforge.net/' }
+    maven { url = 'https://maven.shedaniel.me/' }
+    maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:1.20.1-47.4.10"
+    implementation fg.deobf("me.shedaniel.cloth:cloth-config-forge:11.1.136")
+    annotationProcessor "org.spongepowered:mixin:0.8.5:processor"
+}
+
+mixin {
+    add sourceSets.main, "mixins.ontime.refmap.json"
+    config "ontime.client.mixins.json"
+    debug.verbose = true
+    debug.export = true
+}
+
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+processResources {
+    from('../common/src/main/resources') {
+        include 'assets/**'
+        exclude 'META-INF/**'
+        exclude 'fabric.mod.json'
+    }
+
+    filesMatching("META-INF/mods.toml") {
+        expand 'version': mod_version
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+jar {
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_name,
+                'Specification-Vendor'    : 'MateoF24',
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : mod_name,
+                'Implementation-Version'  : mod_version,
+                'Implementation-Vendor'   : 'MateoF24',
+                'MixinConfigs'            : 'ontime.client.mixins.json'
+        ])
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

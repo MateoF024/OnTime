@@ -2,6 +2,7 @@
   "required": true,
   "package": "com.mateof24.mixin.client",
   "compatibilityLevel": "JAVA_17",
+  "refmap": "mixins.ontime.refmap.json",
   "client": [
     "BossHealthOverlayMixin"
   ],

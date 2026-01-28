@@ -30,6 +30,10 @@ repositories {
     maven {
         url = 'https://maven.neoforged.net/releases'
     }
+    maven {
+        url = 'https://maven.shedaniel.me/'
+    }
+
 }
 
 neoForge {
@@ -61,18 +65,34 @@ sourceSets {
                     'src/main/java',
                     '../common/src/main/java',
                     'src/client/java',
-                    "src/${versionType}/java"
+                    "src/${versionType}/main/java",
+                    "src/${versionType}/client/java"
             ]
         }
         resources {
             srcDirs = [
                     'src/main/resources',
                     'src/client/resources',
-                    '../common/src/main/resources'
+                    "src/${versionType}/main/resources",
+                    "src/${versionType}/client/resources"
             ]
         }
     }
 }
+
+// Copiar solo los assets de common (sin META-INF)
+processResources {
+    from('../common/src/main/resources') {
+        include 'assets/**'
+        // Excluir cualquier archivo de configuración de mod
+        exclude 'META-INF/**'
+        exclude 'fabric.mod.json'
+        exclude 'pack.mcmeta'
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
 
 dependencies {
     compileOnly 'org.slf4j:slf4j-api:2.0.9'
@@ -101,4 +121,6 @@ tasks.named('jar', Jar).configure {
                 'Implementation-Vendor': 'MateoF24'
         ])
     }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

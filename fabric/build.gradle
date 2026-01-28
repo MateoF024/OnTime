@@ -1,8 +1,20 @@
+
 plugins {
     id 'fabric-loom' version '1.13-SNAPSHOT'
 }
 
-def versionType = project.findProperty('minecraft_version_type') ?: 'v1.21.1'
+def minecraftVer = project.minecraft_version
+def versionType
+
+if (minecraftVer.startsWith("1.20.1")) {
+    versionType = "v1.20.1"
+} else if (minecraftVer.startsWith("1.21.1") || minecraftVer.startsWith("1.21.2") || minecraftVer.startsWith("1.21.3") || minecraftVer.startsWith("1.21.4") || minecraftVer.startsWith("1.21.5")) {
+    versionType = "v1.21.1"
+} else if (minecraftVer.startsWith("1.21.6") || minecraftVer.startsWith("1.21.7") || minecraftVer.startsWith("1.21.8") || minecraftVer.startsWith("1.21.9") || minecraftVer.startsWith("1.21.10")) {
+    versionType = "v1.21.6"
+} else {
+    versionType = "v1.21.1"
+}
 
 base {
     archivesName = "${project.archives_base_name}+fabric+${project.minecraft_version}"
@@ -19,12 +31,36 @@ loom {
     }
 }
 
-afterEvaluate {
-    sourceSets {
-        client {
-            java {
-                srcDirs += ["src/${versionType}/java"]
-            }
+sourceSets {
+    main {
+        java {
+            srcDirs = [
+                    'src/main/java',
+                    '../common/src/main/java',
+                    "src/${versionType}/main/java"
+            ]
+        }
+        resources {
+            srcDirs = [
+                    'src/main/resources',
+                    '../common/src/main/resources',
+                    "src/${versionType}/main/resources"
+            ]
+        }
+    }
+
+    client {
+        java {
+            srcDirs = [
+                    'src/client/java',
+                    "src/${versionType}/client/java"
+            ]
+        }
+        resources {
+            srcDirs = [
+                    'src/client/resources',
+                    "src/${versionType}/client/resources"
+            ]
         }
     }
 }
@@ -46,16 +82,17 @@ dependencies {
 }
 
 processResources {
-    inputs.property "version", project.version
-    inputs.property "minecraft_version_type", versionType
+    inputs.property "version", mod_version
 
     filesMatching("fabric.mod.json") {
-        expand "version": project.version
+        expand "version": mod_version
     }
+}
+
+tasks.withType(Jar) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 java {
     withSourcesJar()
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
 }

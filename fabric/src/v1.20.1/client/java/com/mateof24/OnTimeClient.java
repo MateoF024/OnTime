@@ -1,0 +1,24 @@
+package com.mateof24;
+
+import com.mateof24.config.ClientConfig;
+import com.mateof24.network.ClientNetworkHandler;
+import com.mateof24.render.ClientTimerState;
+import com.mateof24.render.TimerRenderer;
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+
+public class OnTimeClient implements ClientModInitializer {
+    @Override
+    public void onInitializeClient() {
+        ClientConfig.getInstance().load();
+        ClientNetworkHandler.registerClientPackets();
+
+        // En 1.20.1, HudRenderCallback usa un callback diferente
+        HudRenderCallback.EVENT.register((guiGraphics, tickDelta) -> {
+            TimerRenderer.render(guiGraphics, tickDelta);
+        });
+
+        ClientTickEvents.END_CLIENT_TICK.register(client -> ClientTimerState.tick());
+    }
+}
