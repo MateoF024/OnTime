@@ -36,6 +36,31 @@ public class FabricPlatformHelper implements IPlatformHelper {
     }
 
     @Override
+    public void sendSilentPacket(ServerPlayer player, boolean silent) {
+        NetworkHandler.syncSilentToClient(player, silent);
+    }
+
+    @Override
+    public void sendPositionPacket(ServerPlayer player, String presetName) {
+        NetworkHandler.syncPositionToClient(player, presetName);
+    }
+
+    @Override
+    public void sendPositionPacketToAll(MinecraftServer server, String presetName) {
+        NetworkHandler.syncPositionToAllClients(server, presetName);
+    }
+
+    @Override
+    public void sendSoundPacket(ServerPlayer player, String soundId, float volume, float pitch) {
+        NetworkHandler.syncSoundToClient(player, soundId, volume, pitch);
+    }
+
+    @Override
+    public void sendSoundPacketToAll(MinecraftServer server, String soundId, float volume, float pitch) {
+        NetworkHandler.syncSoundToAllClients(server, soundId, volume, pitch);
+    }
+
+    @Override
     public void registerPackets() {
         NetworkHandler.registerPackets();
     }

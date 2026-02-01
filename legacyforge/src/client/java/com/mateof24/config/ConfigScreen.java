@@ -5,6 +5,8 @@ import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import com.mateof24.config.TimerPositionPreset;
+import net.minecraft.client.Minecraft;
 
 public class ConfigScreen {
 
@@ -26,17 +28,53 @@ public class ConfigScreen {
         // Display Category
         ConfigCategory display = builder.getOrCreateCategory(Component.translatable("ontime.config.category.display"));
 
+        display.addEntry(entryBuilder.startSelector(
+                        Component.translatable("ontime.config.position_preset"),
+                        TimerPositionPreset.values(),
+                        clientConfig.getPositionPreset())
+                .setDefaultValue(TimerPositionPreset.BOSSBAR)
+                .setNameProvider(preset -> Component.literal(preset.getDisplayName()))
+                .setTooltip(Component.translatable("ontime.config.position_preset.tooltip"))
+                .setSaveConsumer(preset -> {
+                    Minecraft mc = Minecraft.getInstance();
+                    int screenWidth = mc.getWindow().getGuiScaledWidth();
+                    int screenHeight = mc.getWindow().getGuiScaledHeight();
+
+                    String timeText = "00:00";
+                    int textWidth = (int) (mc.font.width(timeText) * clientConfig.getTimerScale());
+                    int textHeight = (int) (mc.font.lineHeight * clientConfig.getTimerScale());
+
+                    clientConfig.applyPreset(preset, screenWidth, screenHeight, textWidth, textHeight);
+                })
+                .build());
+
         display.addEntry(entryBuilder.startIntField(Component.translatable("ontime.config.timer_x"), clientConfig.getTimerX())
                 .setDefaultValue(-1)
-                .setTooltip(Component.translatable("ontime.config.timer_x.tooltip"))
-                .setSaveConsumer(clientConfig::setTimerX)
+                .setTooltip(Component.translatable(
+                        clientConfig.getPositionPreset() == TimerPositionPreset.CUSTOM
+                                ? "ontime.config.timer_x.tooltip"
+                                : "ontime.config.timer_x.disabled"
+                ))
+                .setSaveConsumer(x -> {
+                    if (clientConfig.getPositionPreset() == TimerPositionPreset.CUSTOM) {
+                        clientConfig.setTimerX(x);
+                    }
+                })
                 .build());
 
         display.addEntry(entryBuilder.startIntField(Component.translatable("ontime.config.timer_y"), clientConfig.getTimerY())
                 .setDefaultValue(4)
                 .setMin(0)
-                .setTooltip(Component.translatable("ontime.config.timer_y.tooltip"))
-                .setSaveConsumer(clientConfig::setTimerY)
+                .setTooltip(Component.translatable(
+                        clientConfig.getPositionPreset() == TimerPositionPreset.CUSTOM
+                                ? "ontime.config.timer_y.tooltip"
+                                : "ontime.config.timer_y.disabled"
+                ))
+                .setSaveConsumer(y -> {
+                    if (clientConfig.getPositionPreset() == TimerPositionPreset.CUSTOM) {
+                        clientConfig.setTimerY(y);
+                    }
+                })
                 .build());
 
         display.addEntry(entryBuilder.startFloatField(Component.translatable("ontime.config.timer_scale"), clientConfig.getTimerScale())
@@ -90,6 +128,38 @@ public class ConfigScreen {
                 .setDefaultValue(2)
                 .setTooltip(Component.translatable("ontime.config.permission_level.tooltip"))
                 .setSaveConsumer(config::setRequiredPermissionLevel)
+                .build());
+
+        server.addEntry(entryBuilder.startBooleanToggle(
+                        Component.translatable("ontime.config.allow_players_hide"),
+                        config.getAllowPlayersUseHide())
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("ontime.config.allow_players_hide.tooltip"))
+                .setSaveConsumer(config::setAllowPlayersUseHide)
+                .build());
+
+        server.addEntry(entryBuilder.startBooleanToggle(
+                        Component.translatable("ontime.config.allow_players_list"),
+                        config.getAllowPlayersUseList())
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("ontime.config.allow_players_list.tooltip"))
+                .setSaveConsumer(config::setAllowPlayersUseList)
+                .build());
+
+        server.addEntry(entryBuilder.startBooleanToggle(
+                        Component.translatable("ontime.config.allow_players_silent"),
+                        config.getAllowPlayersUseSilent())
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("ontime.config.allow_players_silent.tooltip"))
+                .setSaveConsumer(config::setAllowPlayersUseSilent)
+                .build());
+
+        server.addEntry(entryBuilder.startBooleanToggle(
+                        Component.translatable("ontime.config.allow_players_position"),
+                        config.getAllowPlayersChangePosition())
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("ontime.config.allow_players_position.tooltip"))
+                .setSaveConsumer(config::setAllowPlayersChangePosition)
                 .build());
 
         server.addEntry(entryBuilder.startLongField(Component.translatable("ontime.config.max_timer_seconds"),

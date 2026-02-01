@@ -93,6 +93,10 @@ public class OnTime {
             UUID playerUUID = player.getUUID();
             boolean visible = PlayerPreferences.getTimerVisibility(playerUUID);
             Services.PLATFORM.sendVisibilityPacket(player, visible);
+            boolean silent = PlayerPreferences.getTimerSilent(playerUUID);
+            Services.PLATFORM.sendSilentPacket(player, silent);
+            String position = PlayerPreferences.getTimerPosition(playerUUID);
+            Services.PLATFORM.sendPositionPacket(player, position);
 
             TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
                 Services.PLATFORM.sendTimerSyncPacket(

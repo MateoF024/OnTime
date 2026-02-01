@@ -2,6 +2,7 @@ package com.mateof24.render;
 
 import com.mateof24.config.ClientConfig;
 import com.mateof24.config.ModConfig;
+import com.mateof24.config.TimerPositionPreset;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 
@@ -22,22 +23,42 @@ public class TimerRenderer {
         int textColor = ModConfig.getInstance().getColorForPercentage(percentage);
 
         int screenWidth = mc.getWindow().getGuiScaledWidth();
+        int screenHeight = mc.getWindow().getGuiScaledHeight();
 
         ClientConfig config = ClientConfig.getInstance();
-        int configX = config.getTimerX();
-        int configY = config.getTimerY();
+        TimerPositionPreset preset = config.getPositionPreset();
         float scale = config.getTimerScale();
 
         int textWidth = (int) (mc.font.width(timeText) * scale);
+        int textHeight = (int) (mc.font.lineHeight * scale);
 
-        int x;
-        if (configX == -1) {
-            x = (screenWidth - textWidth) / 2;
+        // Calcular posición según el preset
+        int x, y;
+
+        if (preset == TimerPositionPreset.CUSTOM) {
+            // Usar coordenadas guardadas
+            int configX = config.getTimerX();
+            int configY = config.getTimerY();
+
+            if (configX == -1) {
+                x = (screenWidth - textWidth) / 2;
+            } else {
+                x = configX;
+            }
+            y = configY;
         } else {
-            x = configX;
-        }
+            // Calcular según preset
+            int configX = config.getTimerX();
+            int configY = config.getTimerY();
 
-        int y = configY;
+            x = preset.calculateX(screenWidth, textWidth, configX);
+            y = preset.calculateY(screenHeight, textHeight, configY);
+
+            // Si es centrado horizontalmente
+            if (x == -1) {
+                x = (screenWidth - textWidth) / 2;
+            }
+        }
 
         int shadowColor = 0xFF000000;
         int mainColor = 0xFF000000 | textColor;

@@ -35,10 +35,34 @@ public class NetworkHandler {
                 TimerVisibilityPayload::decode,
                 TimerVisibilityPayload::handle,
                 Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+
+        CHANNEL.registerMessage(packetId++, TimerSilentPayload.class,
+                TimerSilentPayload::encode,
+                TimerSilentPayload::decode,
+                TimerSilentPayload::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+
+        CHANNEL.registerMessage(packetId++, TimerPositionPayload.class,
+                TimerPositionPayload::encode,
+                TimerPositionPayload::decode,
+                TimerPositionPayload::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
     }
 
     public static void syncVisibilityToClient(ServerPlayer player, boolean visible) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new TimerVisibilityPayload(visible));
+    }
+
+    public static void syncSilentToClient(ServerPlayer player, boolean silent) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new TimerSilentPayload(silent));
+    }
+
+    public static void syncPositionToClient(ServerPlayer player, String presetName) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new TimerPositionPayload(presetName));
+    }
+
+    public static void syncPositionToAllClients(MinecraftServer server, String presetName) {
+        CHANNEL.send(PacketDistributor.ALL.noArg(), new TimerPositionPayload(presetName));
     }
 
     public static void syncTimerToClients(MinecraftServer server, String name,

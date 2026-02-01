@@ -2,15 +2,15 @@ package com.mateof24.render;
 
 import com.mateof24.config.ClientConfig;
 import com.mateof24.config.ModConfig;
+import com.mateof24.config.TimerPositionPreset;
 import com.mateof24.network.ClientTimerState;
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 
 public class TimerRenderer {
 
-    public static void render(GuiGraphics graphics, DeltaTracker deltaTracker) {
+    public static void render(GuiGraphics graphics, net.minecraft.client.DeltaTracker tickDelta) {
         if (!ClientTimerState.shouldDisplay()) {
             return;
         }
@@ -25,31 +25,61 @@ public class TimerRenderer {
         int textColor = ModConfig.getInstance().getColorForPercentage(percentage);
 
         int screenWidth = mc.getWindow().getGuiScaledWidth();
+        int screenHeight = mc.getWindow().getGuiScaledHeight();
 
         ClientConfig config = ClientConfig.getInstance();
-        int configX = config.getTimerX();
-        int configY = config.getTimerY();
+        TimerPositionPreset preset = config.getPositionPreset();
         float scale = config.getTimerScale();
 
         int textWidth = (int) (mc.font.width(timeText) * scale);
+        int textHeight = (int) (mc.font.lineHeight * scale);
 
-        int x;
-        if (configX == -1) {
-            x = (screenWidth - textWidth) / 2;
+        // Calcular posición según el preset
+        int x, y;
+
+        if (preset == TimerPositionPreset.CUSTOM) {
+            // Usar coordenadas guardadas
+            int configX = config.getTimerX();
+            int configY = config.getTimerY();
+
+            if (configX == -1) {
+                x = (screenWidth - textWidth) / 2;
+            } else {
+                x = configX;
+            }
+            y = configY;
         } else {
-            x = configX;
+            // Calcular según preset
+            int configX = config.getTimerX();
+            int configY = config.getTimerY();
+
+            x = preset.calculateX(screenWidth, textWidth, configX);
+            y = preset.calculateY(screenHeight, textHeight, configY);
+
+            // Si es centrado horizontalmente
+            if (x == -1) {
+                x = (screenWidth - textWidth) / 2;
+            }
         }
 
-        int y = configY;
+        int shadowColor = 0xFF000000;
+        int mainColor = 0xFF000000 | textColor;
 
-        PoseStack poseStack = graphics.pose();
-        poseStack.pushPose();
-        poseStack.translate(x, y, 0);
-        poseStack.scale(scale, scale, 1.0f);
+        if (scale != 1.0f) {
+            var pose = graphics.pose();
 
-        graphics.drawString(mc.font, timeText, 1, 1, 0x000000, false);
-        graphics.drawString(mc.font, timeText, 0, 0, textColor, false);
+            PoseStack poseStack = graphics.pose();
+            poseStack.pushPose();
+            poseStack.translate(x, y, 0);
+            poseStack.scale(scale, scale, 1.0f);
 
-        poseStack.popPose();
+            graphics.drawString(mc.font, timeText, 1, 1, shadowColor, false);
+            graphics.drawString(mc.font, timeText, 0, 0, mainColor, false);
+
+            poseStack.popPose();
+        } else {
+            graphics.drawString(mc.font, timeText, x + 1, y + 1, shadowColor, false);
+            graphics.drawString(mc.font, timeText, x, y, mainColor, false);
+        }
     }
 }

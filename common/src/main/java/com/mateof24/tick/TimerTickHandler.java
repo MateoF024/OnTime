@@ -64,6 +64,9 @@ public class TimerTickHandler {
             return;
         }
 
+        // Reemplazar placeholders
+        String processedCommand = com.mateof24.command.PlaceholderSystem.replacePlaceholders(command, timer);
+
         try {
             ServerLevel overworld = server.getLevel(ServerLevel.OVERWORLD);
             if (overworld == null) return;
@@ -80,9 +83,9 @@ public class TimerTickHandler {
                     null
             );
 
-            server.getCommands().performPrefixedCommand(source, command);
+            server.getCommands().performPrefixedCommand(source, processedCommand);
         } catch (Exception e) {
-            com.mateof24.OnTimeConstants.LOGGER.error("Failed to execute timer command: " + command, e);
+            com.mateof24.OnTimeConstants.LOGGER.error("Failed to execute timer command: " + processedCommand, e);
         }
     }
 }

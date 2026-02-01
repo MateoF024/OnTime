@@ -8,6 +8,8 @@ base {
     archivesName = "${project.archives_base_name}+forge+${project.minecraft_version}"
 }
 
+def helpSystemVer = project.hasProperty('helpsystem_version') ? project.helpsystem_version : 'v1'
+
 version = project.mod_version
 group = project.maven_group
 
@@ -46,7 +48,8 @@ sourceSets {
             srcDirs = [
                     'src/main/java',
                     'src/client/java',
-                    '../common/src/main/java'
+                    '../common/src/main/java',
+                    "../common/src/${helpSystemVer}/java"
             ]
         }
         resources {

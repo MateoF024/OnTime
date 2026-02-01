@@ -29,5 +29,30 @@ public class ClientNetworkHandler {
                 ClientTimerState.setVisible(payload.visible());
             });
         });
+
+        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerSilentPayload.TYPE, (payload, context) -> {
+            context.client().execute(() -> {
+                ClientTimerState.setPlayerSilent(payload.silent());
+            });
+        });
+
+        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerPositionPayload.TYPE, (payload, context) -> {
+            context.client().execute(() -> {
+                com.mateof24.config.ClientConfig config = com.mateof24.config.ClientConfig.getInstance();
+                net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+
+                com.mateof24.config.TimerPositionPreset preset =
+                        com.mateof24.config.TimerPositionPreset.fromString(payload.presetName());
+
+                int screenWidth = mc.getWindow().getGuiScaledWidth();
+                int screenHeight = mc.getWindow().getGuiScaledHeight();
+
+                String sampleText = "00:00:00";
+                int textWidth = (int) (mc.font.width(sampleText) * config.getTimerScale());
+                int textHeight = (int) (mc.font.lineHeight * config.getTimerScale());
+
+                config.applyPreset(preset, screenWidth, screenHeight, textWidth, textHeight);
+            });
+        });
     }
 }

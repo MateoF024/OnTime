@@ -17,5 +17,15 @@ public interface IPlatformHelper {
 
     void sendVisibilityPacket(ServerPlayer player, boolean visible);
 
+    void sendSilentPacket(ServerPlayer player, boolean silent);
+
+    void sendPositionPacket(ServerPlayer player, String presetName);
+
+    void sendPositionPacketToAll(MinecraftServer server, String presetName);
+
+    void sendSoundPacket(ServerPlayer player, String soundId, float volume, float pitch);
+
+    void sendSoundPacketToAll(MinecraftServer server, String soundId, float volume, float pitch);
+
     void registerPackets();
 }

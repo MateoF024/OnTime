@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.mateof24.OnTimeConstants;
 import net.minecraftforge.fml.loading.FMLPaths;
+import com.mateof24.config.TimerPositionPreset;
 
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -22,6 +23,7 @@ public class ClientConfig {
     private int timerX = -1;
     private int timerY = 4;
     private float timerScale = 1.0f;
+    private TimerPositionPreset positionPreset = TimerPositionPreset.BOSSBAR;
 
     private ClientConfig() {}
 
@@ -53,6 +55,10 @@ public class ClientConfig {
                     timerScale = root.get("timerScale").getAsFloat();
                     timerScale = Math.max(0.1f, Math.min(5.0f, timerScale));
                 }
+                if (root.has("positionPreset")) {
+                    String presetName = root.get("positionPreset").getAsString();
+                    positionPreset = TimerPositionPreset.fromString(presetName);
+                }
             }
         } catch (Exception e) {
             OnTimeConstants.LOGGER.error("Failed to load client config", e);
@@ -67,6 +73,7 @@ public class ClientConfig {
             root.addProperty("timerX", timerX);
             root.addProperty("timerY", timerY);
             root.addProperty("timerScale", timerScale);
+            root.addProperty("positionPreset", positionPreset.name());
 
             try (FileWriter writer = new FileWriter(CONFIG_FILE.toFile())) {
                 GSON.toJson(root, writer);
@@ -79,6 +86,29 @@ public class ClientConfig {
     public int getTimerX() { return timerX; }
     public int getTimerY() { return timerY; }
     public float getTimerScale() { return timerScale; }
+    public TimerPositionPreset getPositionPreset() {
+        return positionPreset;
+    }
+
+    public void setPositionPreset(TimerPositionPreset preset) {
+        this.positionPreset = preset;
+        save();
+    }
+
+    public void applyPreset(TimerPositionPreset preset, int screenWidth, int screenHeight,
+                            int timerWidth, int timerHeight) {
+        this.positionPreset = preset;
+        this.timerX = preset.calculateX(screenWidth, timerWidth, this.timerX);
+        this.timerY = preset.calculateY(screenHeight, timerHeight, this.timerY);
+        save();
+    }
+
+    public void setCustomPosition(int x, int y) {
+        this.positionPreset = TimerPositionPreset.CUSTOM;
+        this.timerX = x;
+        this.timerY = Math.max(0, y);
+        save();
+    }
 
     public void setTimerX(int x) {
         this.timerX = x;

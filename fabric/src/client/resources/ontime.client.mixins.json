@@ -1,7 +1,7 @@
 {
   "required": true,
   "package": "com.mateof24.mixin.client",
-  "compatibilityLevel": "JAVA_17",
+  "compatibilityLevel": "JAVA_21",
   "client": [
     "BossHealthOverlayMixin"
   ],

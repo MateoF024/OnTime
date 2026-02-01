@@ -38,6 +38,15 @@ public class ModConfig {
                     requiredPermissionLevel = root.get("requiredPermissionLevel").getAsInt();
                     requiredPermissionLevel = Math.max(0, Math.min(4, requiredPermissionLevel));
                 }
+                if (root.has("allowPlayersUseHide")) {
+                    allowPlayersUseHide = root.get("allowPlayersUseHide").getAsBoolean();
+                }
+                if (root.has("allowPlayersUseList")) {
+                    allowPlayersUseList = root.get("allowPlayersUseList").getAsBoolean();
+                }
+                if (root.has("allowPlayersUseSilent")) {
+                    allowPlayersUseSilent = root.get("allowPlayersUseSilent").getAsBoolean();
+                }
                 if (root.has("maxTimerSeconds")) {
                     maxTimerSeconds = root.get("maxTimerSeconds").getAsLong();
                     maxTimerSeconds = Math.max(1, maxTimerSeconds);
@@ -59,6 +68,9 @@ public class ModConfig {
                     thresholdLow = root.get("thresholdLow").getAsInt();
                     thresholdLow = Math.max(0, Math.min(100, thresholdLow));
                 }
+                if (root.has("allowPlayersChangePosition")) {
+                    allowPlayersChangePosition = root.get("allowPlayersChangePosition").getAsBoolean();
+                }
             }
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to load config", e);
@@ -73,12 +85,18 @@ public class ModConfig {
             JsonObject root = new JsonObject();
 
             root.addProperty("requiredPermissionLevel", requiredPermissionLevel);
+            root.addProperty("allowPlayersUseHide", allowPlayersUseHide);
+            root.addProperty("allowPlayersUseList", allowPlayersUseList);
+            root.addProperty("allowPlayersUseSilent", allowPlayersUseSilent);
+            root.addProperty("allowPlayersChangePosition", allowPlayersChangePosition);
             root.addProperty("maxTimerSeconds", maxTimerSeconds);
             root.addProperty("colorHigh", String.format("#%06X", colorHigh));
             root.addProperty("colorMid", String.format("#%06X", colorMid));
             root.addProperty("colorLow", String.format("#%06X", colorLow));
             root.addProperty("thresholdMid", thresholdMid);
             root.addProperty("thresholdLow", thresholdLow);
+
+
 
             try (FileWriter writer = new FileWriter(CONFIG_FILE.toFile())) {
                 GSON.toJson(root, writer);
@@ -89,6 +107,46 @@ public class ModConfig {
     }
 
     private int requiredPermissionLevel = 2;
+    private boolean allowPlayersUseHide = true;
+    private boolean allowPlayersUseList = true;
+    private boolean allowPlayersUseSilent = true;
+    private boolean allowPlayersChangePosition = true;
+
+    public boolean getAllowPlayersUseHide() {
+        return allowPlayersUseHide;
+    }
+
+    public void setAllowPlayersUseHide(boolean allow) {
+        this.allowPlayersUseHide = allow;
+        save();
+    }
+
+    public boolean getAllowPlayersUseList() {
+        return allowPlayersUseList;
+    }
+
+    public void setAllowPlayersUseList(boolean allow) {
+        this.allowPlayersUseList = allow;
+        save();
+    }
+
+    public boolean getAllowPlayersUseSilent() {
+        return allowPlayersUseSilent;
+    }
+
+    public void setAllowPlayersUseSilent(boolean allow) {
+        this.allowPlayersUseSilent = allow;
+        save();
+    }
+
+    public boolean getAllowPlayersChangePosition() {
+        return allowPlayersChangePosition;
+    }
+
+    public void setAllowPlayersChangePosition(boolean allow) {
+        this.allowPlayersChangePosition = allow;
+        save();
+    }
 
     public int getRequiredPermissionLevel() {
         return requiredPermissionLevel;

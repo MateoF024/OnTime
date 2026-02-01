@@ -17,6 +17,7 @@ public class ClientTimerState {
     private static boolean wasPaused = false;
     private static boolean silent = false;
     private static boolean visible = true;
+    private static boolean playerSilent = false;
 
     public static void updateTimer(String name, long current, long target, boolean up, boolean run, boolean sil, long servTick) {
         boolean isFirstUpdate = timerName.isEmpty() || !timerName.equals(name);
@@ -65,7 +66,7 @@ public class ClientTimerState {
 
         long currentSecond = getInterpolatedTicks() / 20L;
 
-        if (!silent && currentSecond != lastSecond && lastSecond != -1) {
+        if (!silent && !playerSilent && currentSecond != lastSecond && lastSecond != -1) {
             if (mc.player != null && mc.level != null) {
                 mc.level.playLocalSound(
                         mc.player.getX(),
@@ -138,6 +139,7 @@ public class ClientTimerState {
         wasPaused = false;
         silent = false;
         visible = true;
+        playerSilent = false;
     }
 
     public static float getPercentage() {
@@ -165,5 +167,13 @@ public class ClientTimerState {
 
     public static boolean isVisible() {
         return visible;
+    }
+
+    public static void setPlayerSilent(boolean sil) {
+        playerSilent = sil;
+    }
+
+    public static boolean isPlayerSilent() {
+        return playerSilent;
     }
 }

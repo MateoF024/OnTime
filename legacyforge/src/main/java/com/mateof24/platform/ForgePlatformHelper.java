@@ -37,6 +37,21 @@ public class ForgePlatformHelper implements IPlatformHelper {
     }
 
     @Override
+    public void sendSilentPacket(ServerPlayer player, boolean silent) {
+        NetworkHandler.syncSilentToClient(player, silent);
+    }
+
+    @Override
+    public void sendPositionPacket(ServerPlayer player, String presetName) {
+        NetworkHandler.syncPositionToClient(player, presetName);
+    }
+
+    @Override
+    public void sendPositionPacketToAll(MinecraftServer server, String presetName) {
+        NetworkHandler.syncPositionToAllClients(server, presetName);
+    }
+
+    @Override
     public void registerPackets() {
         NetworkHandler.registerPackets();
     }

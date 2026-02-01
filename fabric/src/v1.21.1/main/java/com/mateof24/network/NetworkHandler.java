@@ -10,16 +10,50 @@ import net.minecraft.resources.ResourceLocation;
 
 public class NetworkHandler {
     public static final ResourceLocation TIMER_SYNC_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_sync");
-    public static final ResourceLocation TIMER_VISIBILITY_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_visibility");
+    public static final ResourceLocation TIMER_VISIBILITY_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID,"timer_visibility");
+    public static final ResourceLocation TIMER_SILENT_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_silent");
+    public static final ResourceLocation TIMER_POSITION_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_position");
+    public static final ResourceLocation TIMER_SOUND_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_sound");
 
     public static void registerPackets() {
         PayloadTypeRegistry.playS2C().register(TimerSyncPayload.TYPE, TimerSyncPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(TimerVisibilityPayload.TYPE, TimerVisibilityPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TimerSilentPayload.TYPE, TimerSilentPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TimerPositionPayload.TYPE, TimerPositionPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TimerSoundPayload.TYPE, TimerSoundPayload.CODEC);
     }
 
     public static void syncVisibilityToClient(net.minecraft.server.level.ServerPlayer player, boolean visible) {
         TimerVisibilityPayload payload = new TimerVisibilityPayload(visible);
         ServerPlayNetworking.send(player, payload);
+    }
+    public static void syncSilentToClient(net.minecraft.server.level.ServerPlayer player, boolean silent) {
+        TimerSilentPayload payload = new TimerSilentPayload(silent);
+        ServerPlayNetworking.send(player, payload);
+    }
+
+    public static void syncPositionToClient(net.minecraft.server.level.ServerPlayer player, String presetName) {
+        TimerPositionPayload payload = new TimerPositionPayload(presetName);
+        ServerPlayNetworking.send(player, payload);
+    }
+
+    public static void syncPositionToAllClients(net.minecraft.server.MinecraftServer server, String presetName) {
+        TimerPositionPayload payload = new TimerPositionPayload(presetName);
+        for (var player : server.getPlayerList().getPlayers()) {
+            ServerPlayNetworking.send(player, payload);
+        }
+    }
+
+    public static void syncSoundToClient(net.minecraft.server.level.ServerPlayer player, String soundId, float volume, float pitch) {
+        TimerSoundPayload payload = new TimerSoundPayload(soundId, volume, pitch);
+        ServerPlayNetworking.send(player, payload);
+    }
+
+    public static void syncSoundToAllClients(net.minecraft.server.MinecraftServer server, String soundId, float volume, float pitch) {
+        TimerSoundPayload payload = new TimerSoundPayload(soundId, volume, pitch);
+        for (var player : server.getPlayerList().getPlayers()) {
+            ServerPlayNetworking.send(player, payload);
+        }
     }
 
     public record TimerVisibilityPayload(boolean visible) implements CustomPacketPayload {
@@ -39,6 +73,85 @@ public class NetworkHandler {
         public static TimerVisibilityPayload read(FriendlyByteBuf buf) {
             boolean visible = buf.readBoolean();
             return new TimerVisibilityPayload(visible);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record TimerSilentPayload(boolean silent) implements CustomPacketPayload {
+
+        public static final CustomPacketPayload.Type<TimerSilentPayload> TYPE =
+                new CustomPacketPayload.Type<>(TIMER_SILENT_ID);
+
+        public static final StreamCodec<FriendlyByteBuf, TimerSilentPayload> CODEC = StreamCodec.of(
+                TimerSilentPayload::write,
+                TimerSilentPayload::read
+        );
+
+        public static void write(FriendlyByteBuf buf, TimerSilentPayload payload) {
+            buf.writeBoolean(payload.silent());
+        }
+
+        public static TimerSilentPayload read(FriendlyByteBuf buf) {
+            boolean silent = buf.readBoolean();
+            return new TimerSilentPayload(silent);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record TimerPositionPayload(String presetName) implements CustomPacketPayload {
+
+        public static final CustomPacketPayload.Type<TimerPositionPayload> TYPE =
+                new CustomPacketPayload.Type<>(TIMER_POSITION_ID);
+
+        public static final StreamCodec<FriendlyByteBuf, TimerPositionPayload> CODEC = StreamCodec.of(
+                TimerPositionPayload::write,
+                TimerPositionPayload::read
+        );
+
+        public static void write(FriendlyByteBuf buf, TimerPositionPayload payload) {
+            buf.writeUtf(payload.presetName());
+        }
+
+        public static TimerPositionPayload read(FriendlyByteBuf buf) {
+            String presetName = buf.readUtf();
+            return new TimerPositionPayload(presetName);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record TimerSoundPayload(String soundId, float volume, float pitch) implements CustomPacketPayload {
+
+        public static final CustomPacketPayload.Type<TimerSoundPayload> TYPE =
+                new CustomPacketPayload.Type<>(TIMER_SOUND_ID);
+
+        public static final StreamCodec<FriendlyByteBuf, TimerSoundPayload> CODEC = StreamCodec.of(
+                TimerSoundPayload::write,
+                TimerSoundPayload::read
+        );
+
+        public static void write(FriendlyByteBuf buf, TimerSoundPayload payload) {
+            buf.writeUtf(payload.soundId());
+            buf.writeFloat(payload.volume());
+            buf.writeFloat(payload.pitch());
+        }
+
+        public static TimerSoundPayload read(FriendlyByteBuf buf) {
+            String soundId = buf.readUtf();
+            float volume = buf.readFloat();
+            float pitch = buf.readFloat();
+            return new TimerSoundPayload(soundId, volume, pitch);
         }
 
         @Override

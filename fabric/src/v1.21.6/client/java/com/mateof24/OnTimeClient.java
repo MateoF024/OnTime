@@ -11,7 +11,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 public class OnTimeClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
-        ClientConfig.getInstance().load();  // ← CAMBIAR A ClientConfig
+        ClientConfig.getInstance().load();
         ClientNetworkHandler.registerClientPackets();
         HudRenderCallback.EVENT.register(TimerRenderer::render);
         ClientTickEvents.END_CLIENT_TICK.register(client -> ClientTimerState.tick());

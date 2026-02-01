@@ -7,6 +7,19 @@ base {
     archivesName = "${project.archives_base_name}-common"
 }
 
+def helpSystemVer = project.hasProperty('helpsystem_version') ? project.helpsystem_version : 'v1'
+
+sourceSets {
+    main {
+        java {
+            srcDirs = [
+                    'src/main/java',
+                    "src/${helpSystemVer}/java"  // ← Agregar HelpSystem versionado
+            ]
+        }
+    }
+}
+
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings loom.officialMojangMappings()

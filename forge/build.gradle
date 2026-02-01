@@ -15,7 +15,7 @@ if (minecraftVer.startsWith("1.21.1") || minecraftVer.startsWith("1.21.2") ||
         minecraftVer.startsWith("1.21.10")) {
     versionType = "v1.21.6"
 } else {
-    versionType = "v1.21.1"
+    versionType = "v1.21.6" // default a la versión más nueva
 }
 
 base {
@@ -33,7 +33,6 @@ repositories {
     maven {
         url = 'https://maven.shedaniel.me/'
     }
-
 }
 
 neoForge {
@@ -58,12 +57,16 @@ neoForge {
     }
 }
 
+// Leer la versión de HelpSystem desde gradle.properties
+def helpSystemVer = project.hasProperty('helpsystem_version') ? project.helpsystem_version : 'v2'
+
 sourceSets {
     main {
         java {
             srcDirs = [
                     'src/main/java',
                     '../common/src/main/java',
+                    "../common/src/${helpSystemVer}/java",  // ← AGREGAR ESTO
                     'src/client/java',
                     "src/${versionType}/main/java",
                     "src/${versionType}/client/java"
@@ -80,11 +83,9 @@ sourceSets {
     }
 }
 
-// Copiar solo los assets de common (sin META-INF)
 processResources {
     from('../common/src/main/resources') {
         include 'assets/**'
-        // Excluir cualquier archivo de configuración de mod
         exclude 'META-INF/**'
         exclude 'fabric.mod.json'
         exclude 'pack.mcmeta'
@@ -92,7 +93,6 @@ processResources {
 
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
-
 
 dependencies {
     compileOnly 'org.slf4j:slf4j-api:2.0.9'
