@@ -11,10 +11,7 @@ public class Timer {
     private String command;
     private final long initialTicks;
     private boolean silent;
-    private boolean wasRunningBeforeShutdown;
-    private String soundId;
-    private float soundVolume;
-    private float soundPitch;
+    private boolean wasRunningBeforeShutdown;;
 
     public Timer(String name, int hours, int minutes, int seconds, boolean countUp) {
         this.name = name;
@@ -26,9 +23,6 @@ public class Timer {
         this.command = com.mateof24.command.PlaceholderSystem.DEFAULT_COMMAND;
         this.silent = false;
         this.wasRunningBeforeShutdown = false;
-        this.soundId = "minecraft:block.note_block.hat";
-        this.soundVolume = 0.75F;
-        this.soundPitch = 2.0F;
     }
 
     public boolean tick() {
@@ -93,9 +87,6 @@ public class Timer {
         json.addProperty("command", command != null ? command : "");
         json.addProperty("silent", silent);
         json.addProperty("wasRunningBeforeShutdown", wasRunningBeforeShutdown);
-        json.addProperty("soundId", soundId);
-        json.addProperty("soundVolume", soundVolume);
-        json.addProperty("soundPitch", soundPitch);
         return json;
     }
 
@@ -131,24 +122,6 @@ public class Timer {
             timer.wasRunningBeforeShutdown = false;
         }
 
-        if (json.has("soundId")) {
-            timer.soundId = json.get("soundId").getAsString();
-        } else {
-            timer.soundId = "minecraft:block.note_block.hat";
-        }
-
-        if (json.has("soundVolume")) {
-            timer.soundVolume = json.get("soundVolume").getAsFloat();
-        } else {
-            timer.soundVolume = 0.75F;
-        }
-
-        if (json.has("soundPitch")) {
-            timer.soundPitch = json.get("soundPitch").getAsFloat();
-        } else {
-            timer.soundPitch = 2.0F;
-        }
-
         return timer;
     }
 
@@ -168,28 +141,4 @@ public class Timer {
     public void setSilent(boolean silent) { this.silent = silent; }
     public boolean wasRunningBeforeShutdown() { return wasRunningBeforeShutdown; }
     public void setWasRunningBeforeShutdown(boolean was) { this.wasRunningBeforeShutdown = was; }
-
-    public String getSoundId() {
-        return soundId;
-    }
-
-    public void setSoundId(String soundId) {
-        this.soundId = soundId != null ? soundId : "minecraft:block.note_block.hat";
-    }
-
-    public float getSoundVolume() {
-        return soundVolume;
-    }
-
-    public void setSoundVolume(float volume) {
-        this.soundVolume = Math.max(0.0F, Math.min(1.0F, volume));
-    }
-
-    public float getSoundPitch() {
-        return soundPitch;
-    }
-
-    public void setSoundPitch(float pitch) {
-        this.soundPitch = Math.max(0.5F, Math.min(2.0F, pitch));
-    }
 }

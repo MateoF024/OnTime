@@ -53,7 +53,6 @@ public class TimerManager {
     }
 
     public boolean startTimer(String name) {
-        // Recargar TODO desde disco (no solo comandos)
         reloadFromDisk();
 
         Timer timer = timers.get(name);
@@ -143,10 +142,6 @@ public class TimerManager {
         validateActiveTimer();
     }
 
-    /**
-     * Recarga los datos de los timers desde disco (comandos, sonidos, etc.)
-     * Preserva el estado de running y currentTicks
-     */
     public void reloadCommandsFromDisk() {
         TimerStorage.TimerLoadResult result = TimerStorage.loadTimers();
         Map<String, Timer> diskTimers = result.getTimers();
@@ -157,23 +152,12 @@ public class TimerManager {
             Timer memTimer = timers.get(name);
 
             if (memTimer != null) {
-                // Actualizar comando
                 memTimer.setCommand(diskTimer.getCommand());
-
-                // Actualizar configuración de sonido
-                memTimer.setSoundId(diskTimer.getSoundId());
-                memTimer.setSoundVolume(diskTimer.getSoundVolume());
-                memTimer.setSoundPitch(diskTimer.getSoundPitch());
-
-                // Actualizar otras configuraciones
                 memTimer.setSilent(diskTimer.isSilent());
             }
         }
     }
 
-    /**
-     * Recarga TODOS los datos de los timers desde disco, preservando el estado de running
-     */
     public void reloadFromDisk() {
         TimerStorage.TimerLoadResult result = TimerStorage.loadTimers();
         Map<String, Timer> diskTimers = result.getTimers();
@@ -184,21 +168,14 @@ public class TimerManager {
             Timer memTimer = timers.get(name);
 
             if (memTimer != null) {
-                // Preservar el estado de running actual
                 boolean wasRunning = memTimer.isRunning();
-
-                // Reemplazar el timer en memoria con el del disco
                 timers.put(name, diskTimer);
-
-                // Restaurar el estado de running
                 diskTimer.setRunning(wasRunning);
 
-                // Actualizar activeTimer si era este
                 if (activeTimer == memTimer) {
                     activeTimer = diskTimer;
                 }
             } else {
-                // Timer nuevo que no existía en memoria
                 timers.put(name, diskTimer);
             }
         }

@@ -68,9 +68,18 @@
   "ontime.config.timer_y.disabled": "Y coordinate is controlled by the selected preset. Change to 'Custom' to edit manually",
   "ontime.config.allow_players_position": "Allow Players to Change Position",
   "ontime.config.allow_players_position.tooltip": "If enabled, all players can use /timer position. If disabled, only operators can change timer position",
+  "ontime.config.allow_players_sound": "Allow Players to Change Sound",
+  "ontime.config.allow_players_sound.tooltip": "If enabled, all players can use /timer sound. If disabled, only operators can change timer sound",
+  "ontime.config.timer_sound_id": "Timer Sound ID",
+  "ontime.config.timer_sound_id.tooltip": "Sound ID to play each second. Format: namespace:sound.path (e.g., minecraft:block.note_block.hat)",
+  "ontime.config.timer_sound_volume": "Timer Sound Volume",
+  "ontime.config.timer_sound_volume.tooltip": "Volume of the timer sound (0.0 - 1.0)",
+  "ontime.config.timer_sound_pitch": "Timer Sound Pitch",
+  "ontime.config.timer_sound_pitch.tooltip": "Pitch of the timer sound (0.5 - 2.0)",
   "ontime.command.position.success": "§aTimer position set to: §f%s",
   "ontime.command.position.success_targets": "§aTimer position set to §f%s §afor §f%d §aplayer(s)",
   "ontime.command.position.invalid": "§cInvalid preset: §f%s§c. Use tab completion to see available presets",
+  "ontime.command.sound.success": "§aTimer sound set to: §f%s §a(Volume: §f%.2f§a, Pitch: §f%.2f§a)",
   "ontime.command.validation.empty": "§cCommand cannot be empty",
   "ontime.command.validation.no_slash": "§cDo not include '/' at the beginning of the command",
   "ontime.command.validation.invalid_format": "§cInvalid command format",
@@ -96,7 +105,5 @@
   "ontime.help.list.desc": "List all timers and their status",
   "ontime.help.help.desc": "Show this help menu",
   "ontime.help.position.desc": "Set timer display position preset",
-  "ontime.sound.custom": "Custom sound configured: %s",
-  "ontime.sound.volume": "Volume: %.2f",
-  "ontime.sound.pitch": "Pitch: %.2f"
+  "ontime.help.sound.desc": "Configure timer tick sound globally"
 }

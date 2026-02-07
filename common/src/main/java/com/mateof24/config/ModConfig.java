@@ -71,6 +71,20 @@ public class ModConfig {
                 if (root.has("allowPlayersChangePosition")) {
                     allowPlayersChangePosition = root.get("allowPlayersChangePosition").getAsBoolean();
                 }
+                if (root.has("allowPlayersChangeSound")) {
+                    allowPlayersChangeSound = root.get("allowPlayersChangeSound").getAsBoolean();
+                }
+                if (root.has("timerSoundId")) {
+                    timerSoundId = root.get("timerSoundId").getAsString();
+                }
+                if (root.has("timerSoundVolume")) {
+                    timerSoundVolume = root.get("timerSoundVolume").getAsFloat();
+                    timerSoundVolume = Math.max(0.0f, Math.min(1.0f, timerSoundVolume));
+                }
+                if (root.has("timerSoundPitch")) {
+                    timerSoundPitch = root.get("timerSoundPitch").getAsFloat();
+                    timerSoundPitch = Math.max(0.5f, Math.min(2.0f, timerSoundPitch));
+                }
             }
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to load config", e);
@@ -89,14 +103,16 @@ public class ModConfig {
             root.addProperty("allowPlayersUseList", allowPlayersUseList);
             root.addProperty("allowPlayersUseSilent", allowPlayersUseSilent);
             root.addProperty("allowPlayersChangePosition", allowPlayersChangePosition);
+            root.addProperty("allowPlayersChangeSound", allowPlayersChangeSound);
             root.addProperty("maxTimerSeconds", maxTimerSeconds);
             root.addProperty("colorHigh", String.format("#%06X", colorHigh));
             root.addProperty("colorMid", String.format("#%06X", colorMid));
             root.addProperty("colorLow", String.format("#%06X", colorLow));
             root.addProperty("thresholdMid", thresholdMid);
             root.addProperty("thresholdLow", thresholdLow);
-
-
+            root.addProperty("timerSoundId", timerSoundId);
+            root.addProperty("timerSoundVolume", timerSoundVolume);
+            root.addProperty("timerSoundPitch", timerSoundPitch);
 
             try (FileWriter writer = new FileWriter(CONFIG_FILE.toFile())) {
                 GSON.toJson(root, writer);
@@ -107,10 +123,14 @@ public class ModConfig {
     }
 
     private int requiredPermissionLevel = 2;
-    private boolean allowPlayersUseHide = true;
-    private boolean allowPlayersUseList = true;
-    private boolean allowPlayersUseSilent = true;
-    private boolean allowPlayersChangePosition = true;
+    private boolean allowPlayersUseHide = false;
+    private boolean allowPlayersUseList = false;
+    private boolean allowPlayersUseSilent = false;
+    private boolean allowPlayersChangePosition = false;
+    private boolean allowPlayersChangeSound = false;
+    private String timerSoundId = "minecraft:block.note_block.hat";
+    private float timerSoundVolume = 0.75f;
+    private float timerSoundPitch = 2.0f;
 
     public boolean getAllowPlayersUseHide() {
         return allowPlayersUseHide;
@@ -145,6 +165,15 @@ public class ModConfig {
 
     public void setAllowPlayersChangePosition(boolean allow) {
         this.allowPlayersChangePosition = allow;
+        save();
+    }
+
+    public boolean getAllowPlayersChangeSound() {
+        return allowPlayersChangeSound;
+    }
+
+    public void setAllowPlayersChangeSound(boolean allow) {
+        this.allowPlayersChangeSound = allow;
         save();
     }
 
@@ -183,6 +212,7 @@ public class ModConfig {
     public int getColorLow() { return colorLow; }
     public int getThresholdMid() { return thresholdMid; }
     public int getThresholdLow() { return thresholdLow; }
+
     public int getColorForPercentage(float percentage) {
         if (percentage >= thresholdMid) {
             return colorHigh;
@@ -192,6 +222,7 @@ public class ModConfig {
             return colorLow;
         }
     }
+
     private int parseColor(String colorStr) {
         try {
             if (colorStr.startsWith("#")) {
@@ -229,4 +260,30 @@ public class ModConfig {
         save();
     }
 
+    public String getTimerSoundId() {
+        return timerSoundId;
+    }
+
+    public void setTimerSoundId(String soundId) {
+        this.timerSoundId = soundId != null ? soundId : "minecraft:block.note_block.hat";
+        save();
+    }
+
+    public float getTimerSoundVolume() {
+        return timerSoundVolume;
+    }
+
+    public void setTimerSoundVolume(float volume) {
+        this.timerSoundVolume = Math.max(0.0f, Math.min(1.0f, volume));
+        save();
+    }
+
+    public float getTimerSoundPitch() {
+        return timerSoundPitch;
+    }
+
+    public void setTimerSoundPitch(float pitch) {
+        this.timerSoundPitch = Math.max(0.5f, Math.min(2.0f, pitch));
+        save();
+    }
 }

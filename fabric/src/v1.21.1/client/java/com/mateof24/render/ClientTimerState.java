@@ -1,7 +1,9 @@
 package com.mateof24.render;
 
+import com.mateof24.config.ModConfig;
 import net.minecraft.client.Minecraft;
-import net.minecraft.sounds.SoundEvents;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 
 public class ClientTimerState {
@@ -18,9 +20,6 @@ public class ClientTimerState {
     private static boolean silent = false;
     private static boolean visible = true;
     private static boolean playerSilent = false;
-    private static String currentSoundId = "minecraft:block.note_block.hat";
-    private static float currentSoundVolume = 0.75F;
-    private static float currentSoundPitch = 2.0F;
 
     public static void updateTimer(String name, long current, long target, boolean up, boolean run, boolean sil, long servTick) {
         boolean isFirstUpdate = timerName.isEmpty() || !timerName.equals(name);
@@ -71,40 +70,43 @@ public class ClientTimerState {
 
         if (!silent && !playerSilent && currentSecond != lastSecond && lastSecond != -1) {
             if (mc.player != null && mc.level != null) {
-                try {
-                    net.minecraft.resources.ResourceLocation soundLocation =
-                            net.minecraft.resources.ResourceLocation.parse(currentSoundId);
-
-                    net.minecraft.sounds.SoundEvent soundEvent =
-                            net.minecraft.sounds.SoundEvent.createVariableRangeEvent(soundLocation);
-
-                    mc.level.playLocalSound(
-                            mc.player.getX(),
-                            mc.player.getY(),
-                            mc.player.getZ(),
-                            soundEvent,
-                            SoundSource.MASTER,
-                            currentSoundVolume,
-                            currentSoundPitch,
-                            false
-                    );
-                } catch (Exception e) {
-                    // Fallback al sonido predeterminado si hay error
-                    mc.level.playLocalSound(
-                            mc.player.getX(),
-                            mc.player.getY(),
-                            mc.player.getZ(),
-                            SoundEvents.NOTE_BLOCK_BELL.value(),
-                            SoundSource.MASTER,
-                            0.75F,
-                            2.0F,
-                            false
-                    );
-                }
+                playTimerSound();
             }
         }
 
         lastSecond = currentSecond;
+    }
+
+    private static void playTimerSound() {
+        Minecraft mc = Minecraft.getInstance();
+        ModConfig config = ModConfig.getInstance();
+
+        try {
+            ResourceLocation soundLocation = ResourceLocation.parse(config.getTimerSoundId());
+            SoundEvent soundEvent = SoundEvent.createVariableRangeEvent(soundLocation);
+
+            mc.level.playLocalSound(
+                    mc.player.getX(),
+                    mc.player.getY(),
+                    mc.player.getZ(),
+                    soundEvent,
+                    SoundSource.MASTER,
+                    config.getTimerSoundVolume(),
+                    config.getTimerSoundPitch(),
+                    false
+            );
+        } catch (Exception e) {
+            mc.level.playLocalSound(
+                    mc.player.getX(),
+                    mc.player.getY(),
+                    mc.player.getZ(),
+                    net.minecraft.sounds.SoundEvents.NOTE_BLOCK_HAT.value(),
+                    SoundSource.MASTER,
+                    0.75F,
+                    2.0F,
+                    false
+            );
+        }
     }
 
     public static long getInterpolatedTicks() {
@@ -163,9 +165,6 @@ public class ClientTimerState {
         silent = false;
         visible = true;
         playerSilent = false;
-        currentSoundId = "minecraft:block.note_block.hat";
-        currentSoundVolume = 0.75F;
-        currentSoundPitch = 2.0F;
     }
 
     public static float getPercentage() {
@@ -182,30 +181,10 @@ public class ClientTimerState {
     }
 
     public static String getTimerName() { return timerName; }
-
     public static boolean isRunning() { return running; }
-
     public static boolean isSilent() { return silent; }
-
-    public static void setVisible(boolean vis) {
-        visible = vis;
-    }
-
-    public static boolean isVisible() {
-        return visible;
-    }
-
-    public static void setPlayerSilent(boolean sil) {
-        playerSilent = sil;
-    }
-
-    public static boolean isPlayerSilent() {
-        return playerSilent;
-    }
-
-    public static void updateSound(String soundId, float volume, float pitch) {
-        currentSoundId = soundId;
-        currentSoundVolume = volume;
-        currentSoundPitch = pitch;
-    }
+    public static void setVisible(boolean vis) { visible = vis; }
+    public static boolean isVisible() { return visible; }
+    public static void setPlayerSilent(boolean sil) { playerSilent = sil; }
+    public static boolean isPlayerSilent() { return playerSilent; }
 }

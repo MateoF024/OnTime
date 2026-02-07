@@ -13,20 +13,19 @@ public class NetworkHandler {
     public static final ResourceLocation TIMER_VISIBILITY_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID,"timer_visibility");
     public static final ResourceLocation TIMER_SILENT_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_silent");
     public static final ResourceLocation TIMER_POSITION_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_position");
-    public static final ResourceLocation TIMER_SOUND_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_sound");
 
     public static void registerPackets() {
         PayloadTypeRegistry.playS2C().register(TimerSyncPayload.TYPE, TimerSyncPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(TimerVisibilityPayload.TYPE, TimerVisibilityPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(TimerSilentPayload.TYPE, TimerSilentPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(TimerPositionPayload.TYPE, TimerPositionPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(TimerSoundPayload.TYPE, TimerSoundPayload.CODEC);
     }
 
     public static void syncVisibilityToClient(net.minecraft.server.level.ServerPlayer player, boolean visible) {
         TimerVisibilityPayload payload = new TimerVisibilityPayload(visible);
         ServerPlayNetworking.send(player, payload);
     }
+
     public static void syncSilentToClient(net.minecraft.server.level.ServerPlayer player, boolean silent) {
         TimerSilentPayload payload = new TimerSilentPayload(silent);
         ServerPlayNetworking.send(player, payload);
@@ -39,18 +38,6 @@ public class NetworkHandler {
 
     public static void syncPositionToAllClients(net.minecraft.server.MinecraftServer server, String presetName) {
         TimerPositionPayload payload = new TimerPositionPayload(presetName);
-        for (var player : server.getPlayerList().getPlayers()) {
-            ServerPlayNetworking.send(player, payload);
-        }
-    }
-
-    public static void syncSoundToClient(net.minecraft.server.level.ServerPlayer player, String soundId, float volume, float pitch) {
-        TimerSoundPayload payload = new TimerSoundPayload(soundId, volume, pitch);
-        ServerPlayNetworking.send(player, payload);
-    }
-
-    public static void syncSoundToAllClients(net.minecraft.server.MinecraftServer server, String soundId, float volume, float pitch) {
-        TimerSoundPayload payload = new TimerSoundPayload(soundId, volume, pitch);
         for (var player : server.getPlayerList().getPlayers()) {
             ServerPlayNetworking.send(player, payload);
         }
@@ -131,35 +118,6 @@ public class NetworkHandler {
         }
     }
 
-    public record TimerSoundPayload(String soundId, float volume, float pitch) implements CustomPacketPayload {
-
-        public static final CustomPacketPayload.Type<TimerSoundPayload> TYPE =
-                new CustomPacketPayload.Type<>(TIMER_SOUND_ID);
-
-        public static final StreamCodec<FriendlyByteBuf, TimerSoundPayload> CODEC = StreamCodec.of(
-                TimerSoundPayload::write,
-                TimerSoundPayload::read
-        );
-
-        public static void write(FriendlyByteBuf buf, TimerSoundPayload payload) {
-            buf.writeUtf(payload.soundId());
-            buf.writeFloat(payload.volume());
-            buf.writeFloat(payload.pitch());
-        }
-
-        public static TimerSoundPayload read(FriendlyByteBuf buf) {
-            String soundId = buf.readUtf();
-            float volume = buf.readFloat();
-            float pitch = buf.readFloat();
-            return new TimerSoundPayload(soundId, volume, pitch);
-        }
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
     public static void syncTimerToClients(net.minecraft.server.MinecraftServer server, String name,
                                           long currentTicks, long targetTicks, boolean countUp, boolean running, boolean silent) {
         TimerSyncPayload payload = new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent, server.getTickCount());
@@ -179,8 +137,6 @@ public class NetworkHandler {
                 TimerSyncPayload::write,
                 TimerSyncPayload::read
         );
-
-
 
         public static void write(FriendlyByteBuf buf, TimerSyncPayload payload) {
             buf.writeUtf(payload.name());

@@ -47,18 +47,11 @@ public class ClientNetworkHandler {
                 int screenWidth = mc.getWindow().getGuiScaledWidth();
                 int screenHeight = mc.getWindow().getGuiScaledHeight();
 
-                // Calcular tamaño aproximado del timer
                 String sampleText = "00:00:00";
                 int textWidth = (int) (mc.font.width(sampleText) * config.getTimerScale());
                 int textHeight = (int) (mc.font.lineHeight * config.getTimerScale());
 
                 config.applyPreset(preset, screenWidth, screenHeight, textWidth, textHeight);
-            });
-        });
-
-        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerSoundPayload.TYPE, (payload, context) -> {
-            context.client().execute(() -> {
-                ClientTimerState.updateSound(payload.soundId(), payload.volume(), payload.pitch());
             });
         });
     }

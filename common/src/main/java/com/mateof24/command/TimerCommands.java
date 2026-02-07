@@ -11,7 +11,6 @@ import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
-import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
@@ -19,7 +18,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.commands.arguments.EntityArgument;
-import com.mateof24.command.HelpSystem;
+import com.mojang.brigadier.arguments.FloatArgumentType;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.core.registries.BuiltInRegistries;
 
 public class TimerCommands {
 
@@ -201,6 +203,32 @@ public class TimerCommands {
                                 .executes(TimerCommands::setPositionSelf)
                                 .then(Commands.argument("targets", EntityArgument.players())
                                         .executes(TimerCommands::setPositionTargets)
+                                )
+                        )
+                )
+                .then(Commands.literal("sound")
+                        .requires(source -> {
+                            if (ModConfig.getInstance().getAllowPlayersChangeSound()) {
+                                return true;
+                            }
+                            return source.hasPermission(ModConfig.getInstance().getRequiredPermissionLevel());
+                        })
+                        .then(Commands.argument("soundId", ResourceLocationArgument.id())
+                                .suggests((context, builder) ->
+                                        SharedSuggestionProvider.suggestResource(
+                                                BuiltInRegistries.SOUND_EVENT.keySet(), builder))
+                                .executes(ctx -> setSoundDefault(ctx,
+                                        ResourceLocationArgument.getId(ctx, "soundId").toString()))
+                                .then(Commands.argument("volume", FloatArgumentType.floatArg(0.0f, 1.0f))
+                                        .executes(ctx -> setSoundWithVolume(ctx,
+                                                ResourceLocationArgument.getId(ctx, "soundId").toString(),
+                                                FloatArgumentType.getFloat(ctx, "volume")))
+                                        .then(Commands.argument("pitch", FloatArgumentType.floatArg(0.5f, 2.0f))
+                                                .executes(ctx -> setSoundFull(ctx,
+                                                        ResourceLocationArgument.getId(ctx, "soundId").toString(),
+                                                        FloatArgumentType.getFloat(ctx, "volume"),
+                                                        FloatArgumentType.getFloat(ctx, "pitch")))
+                                        )
                                 )
                         )
                 )
@@ -795,4 +823,30 @@ public class TimerCommands {
             return 0;
         }
     }
+
+    private static int setSoundDefault(CommandContext<CommandSourceStack> ctx, String soundId) {
+        return setSound(ctx, soundId, 0.75f, 2.0f);
+    }
+
+    private static int setSoundWithVolume(CommandContext<CommandSourceStack> ctx, String soundId, float volume) {
+        return setSound(ctx, soundId, volume, 2.0f);
+    }
+
+    private static int setSoundFull(CommandContext<CommandSourceStack> ctx, String soundId, float volume, float pitch) {
+        return setSound(ctx, soundId, volume, pitch);
+    }
+
+    private static int setSound(CommandContext<CommandSourceStack> ctx, String soundId, float volume, float pitch) {
+        ModConfig config = ModConfig.getInstance();
+
+        config.setTimerSoundId(soundId);
+        config.setTimerSoundVolume(volume);
+        config.setTimerSoundPitch(pitch);
+
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.sound.success", soundId, volume, pitch), true);
+
+        return 1;
+    }
+
 }

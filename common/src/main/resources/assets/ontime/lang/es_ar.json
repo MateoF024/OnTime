@@ -68,9 +68,18 @@
   "ontime.config.timer_y.disabled": "La coordenada Y está controlada por el preset seleccionado. Cambia a 'Custom' para editar manualmente",
   "ontime.config.allow_players_position": "Permitir a Jugadores Cambiar Posición",
   "ontime.config.allow_players_position.tooltip": "Si está activado, todos los jugadores pueden usar /timer position. Si está desactivado, solo los operadores pueden cambiar la posición del contador",
+  "ontime.config.allow_players_sound": "Permitir a Jugadores Cambiar Sonido",
+  "ontime.config.allow_players_sound.tooltip": "Si está activado, todos los jugadores pueden usar /timer sound. Si está desactivado, solo los operadores pueden cambiar el sonido del contador",
+  "ontime.config.timer_sound_id": "ID de Sonido del Contador",
+  "ontime.config.timer_sound_id.tooltip": "ID del sonido a reproducir cada segundo. Formato: espacio:ruta.sonido (ej: minecraft:block.note_block.hat)",
+  "ontime.config.timer_sound_volume": "Volumen del Sonido del Contador",
+  "ontime.config.timer_sound_volume.tooltip": "Volumen del sonido del contador (0.0 - 1.0)",
+  "ontime.config.timer_sound_pitch": "Tono del Sonido del Contador",
+  "ontime.config.timer_sound_pitch.tooltip": "Tono del sonido del contador (0.5 - 2.0)",
   "ontime.command.position.success": "§aPosición del contador establecida en: §f%s",
   "ontime.command.position.success_targets": "§aPosición del contador establecida en §f%s §apara §f%d §ajugador(es)",
   "ontime.command.position.invalid": "§cPreset inválido: §f%s§c. Usa tab para ver los presets disponibles",
+  "ontime.command.sound.success": "§aSonido del contador establecido en: §f%s §a(Volumen: §f%.2f§a, Tono: §f%.2f§a)",
   "ontime.command.validation.empty": "§cEl comando no puede estar vacío",
   "ontime.command.validation.no_slash": "§cNo incluyas '/' al inicio del comando",
   "ontime.command.validation.invalid_format": "§cFormato de comando inválido",
@@ -96,7 +105,5 @@
   "ontime.help.list.desc": "Listar todos los contadores y su estado",
   "ontime.help.help.desc": "Mostrar este menú de ayuda",
   "ontime.help.position.desc": "Establecer preset de posición del contador",
-  "ontime.sound.custom": "Sonido personalizado configurado: %s",
-  "ontime.sound.volume": "Volumen: %.2f",
-  "ontime.sound.pitch": "Tono: %.2f"
+  "ontime.help.sound.desc": "Configurar sonido de tick del contador globalmente"
 }

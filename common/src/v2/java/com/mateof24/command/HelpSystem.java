@@ -143,6 +143,16 @@ public class HelpSystem {
                 "/timer help 2",
                 "/timer help create"
         ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "sound",
+                "ontime.help.sound.desc",
+                "/timer sound <soundId> [volume] [pitch]",
+                "/timer sound block.note_block.hat",
+                "/timer sound entity.experience_orb.pickup 0.5",
+                "/timer sound ui.button.click 0.8 1.5"
+        ));
+
     }
 
     /**

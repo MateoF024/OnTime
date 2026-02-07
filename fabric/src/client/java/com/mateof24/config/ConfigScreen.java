@@ -36,7 +36,7 @@ public class ConfigScreen {
                     int screenWidth = mc.getWindow().getGuiScaledWidth();
                     int screenHeight = mc.getWindow().getGuiScaledHeight();
 
-                    String timeText = "00:00"; // Texto de ejemplo para calcular tamaño
+                    String timeText = "00:00";
                     int textWidth = (int) (mc.font.width(timeText) * clientConfig.getTimerScale());
                     int textHeight = (int) (mc.font.lineHeight * clientConfig.getTimerScale());
 
@@ -73,12 +73,12 @@ public class ConfigScreen {
                 })
                 .build());
 
-        display.addEntry(entryBuilder.startFloatField(Component.translatable("ontime.config.timer_scale"), clientConfig.getTimerScale())  // ← CAMBIAR
+        display.addEntry(entryBuilder.startFloatField(Component.translatable("ontime.config.timer_scale"), clientConfig.getTimerScale())
                 .setDefaultValue(1.0f)
                 .setMin(0.1f)
                 .setMax(5.0f)
                 .setTooltip(Component.translatable("ontime.config.timer_scale.tooltip"))
-                .setSaveConsumer(clientConfig::setTimerScale)  // ← CAMBIAR
+                .setSaveConsumer(clientConfig::setTimerScale)
                 .build());
 
         ConfigCategory colors = builder.getOrCreateCategory(Component.translatable("ontime.config.category.colors"));
@@ -159,12 +159,48 @@ public class ConfigScreen {
                 .setSaveConsumer(config::setAllowPlayersChangePosition)
                 .build());
 
+        server.addEntry(entryBuilder.startBooleanToggle(
+                        Component.translatable("ontime.config.allow_players_sound"),
+                        config.getAllowPlayersChangeSound())
+                .setDefaultValue(false)
+                .setTooltip(Component.translatable("ontime.config.allow_players_sound.tooltip"))
+                .setSaveConsumer(config::setAllowPlayersChangeSound)
+                .build());
+
         server.addEntry(entryBuilder.startLongField(Component.translatable("ontime.config.max_timer_seconds"),
                         config.getMaxTimerSeconds())
                 .setDefaultValue(86400L)
                 .setMin(1L)
                 .setTooltip(Component.translatable("ontime.config.max_timer_seconds.tooltip"))
                 .setSaveConsumer(config::setMaxTimerSeconds)
+                .build());
+
+        server.addEntry(entryBuilder.startStrField(
+                        Component.translatable("ontime.config.timer_sound_id"),
+                        config.getTimerSoundId())
+                .setDefaultValue("minecraft:block.note_block.hat")
+                .setTooltip(Component.translatable("ontime.config.timer_sound_id.tooltip"))
+                .setSaveConsumer(config::setTimerSoundId)
+                .build());
+
+        server.addEntry(entryBuilder.startFloatField(
+                        Component.translatable("ontime.config.timer_sound_volume"),
+                        config.getTimerSoundVolume())
+                .setDefaultValue(0.75f)
+                .setMin(0.0f)
+                .setMax(1.0f)
+                .setTooltip(Component.translatable("ontime.config.timer_sound_volume.tooltip"))
+                .setSaveConsumer(config::setTimerSoundVolume)
+                .build());
+
+        server.addEntry(entryBuilder.startFloatField(
+                        Component.translatable("ontime.config.timer_sound_pitch"),
+                        config.getTimerSoundPitch())
+                .setDefaultValue(2.0f)
+                .setMin(0.5f)
+                .setMax(2.0f)
+                .setTooltip(Component.translatable("ontime.config.timer_sound_pitch.tooltip"))
+                .setSaveConsumer(config::setTimerSoundPitch)
                 .build());
 
         return builder.build();

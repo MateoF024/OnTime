@@ -63,15 +63,6 @@ public class OnTime implements ModInitializer {
             Services.PLATFORM.sendPositionPacket(handler.getPlayer(), position);
 
             TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
-                Services.PLATFORM.sendSoundPacket(
-                        handler.getPlayer(),
-                        timer.getSoundId(),
-                        timer.getSoundVolume(),
-                        timer.getSoundPitch()
-                );
-            });
-
-            TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
                 Services.PLATFORM.sendTimerSyncPacket(
                         server,
                         timer.getName(),

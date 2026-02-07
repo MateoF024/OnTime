@@ -23,9 +23,5 @@ public interface IPlatformHelper {
 
     void sendPositionPacketToAll(MinecraftServer server, String presetName);
 
-    void sendSoundPacket(ServerPlayer player, String soundId, float volume, float pitch);
-
-    void sendSoundPacketToAll(MinecraftServer server, String soundId, float volume, float pitch);
-
     void registerPackets();
 }
