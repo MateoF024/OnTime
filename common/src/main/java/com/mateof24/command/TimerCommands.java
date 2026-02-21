@@ -54,7 +54,7 @@ public class TimerCommands {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("timer")
-                .requires(source -> source.hasPermission(ModConfig.getInstance().getRequiredPermissionLevel()))
+
                 .then(Commands.literal("create")
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .then(Commands.argument("hours", IntegerArgumentType.integer(0))
@@ -118,39 +118,24 @@ public class TimerCommands {
                         )
                 )
                 .then(Commands.literal("list")
-                        .requires(source -> {
-                            // Si allowPlayersUseList es true, todos pueden usar
-                            // Si es false, solo usuarios con permiso pueden usar
-                            if (ModConfig.getInstance().getAllowPlayersUseList()) {
-                                return true;
-                            }
-                            return source.hasPermission(ModConfig.getInstance().getRequiredPermissionLevel());
-                        })
+                        .requires(source ->
+                                ModConfig.getInstance().getAllowPlayersUseList() || source.hasPermission(4)
+                        )
                         .executes(TimerCommands::listTimers)
                 )
                 .then(Commands.literal("silent")
-                        .requires(source -> {
-                            // Si allowPlayersUseSilent es true, todos pueden usar
-                            // Si es false, solo usuarios con permiso pueden usar
-                            if (ModConfig.getInstance().getAllowPlayersUseSilent()) {
-                                return true;
-                            }
-                            return source.hasPermission(ModConfig.getInstance().getRequiredPermissionLevel());
-                        })
+                        .requires(source ->
+                                ModConfig.getInstance().getAllowPlayersChangeSilent() || source.hasPermission(4)
+                        )
                         .executes(TimerCommands::toggleSilentSelf)
                         .then(Commands.argument("targets", EntityArgument.players())
                                 .executes(TimerCommands::toggleSilentTargets)
                         )
                 )
                 .then(Commands.literal("hide")
-                        .requires(source -> {
-                            // Si allowPlayersUseHide es true, todos pueden usar
-                            // Si es false, solo usuarios con permiso pueden usar
-                            if (ModConfig.getInstance().getAllowPlayersUseHide()) {
-                                return true;
-                            }
-                            return source.hasPermission(ModConfig.getInstance().getRequiredPermissionLevel());
-                        })
+                        .requires(source ->
+                                ModConfig.getInstance().getAllowPlayersChangeHide() || source.hasPermission(4)
+                        )
                         .executes(TimerCommands::toggleHideSelf)
                         .then(Commands.argument("targets", net.minecraft.commands.arguments.EntityArgument.players())
                                 .executes(TimerCommands::toggleHideTargets)
@@ -184,12 +169,9 @@ public class TimerCommands {
                         )
                 )
                 .then(Commands.literal("position")
-                        .requires(source -> {
-                            if (ModConfig.getInstance().getAllowPlayersChangePosition()) {
-                                return true;
-                            }
-                            return source.hasPermission(ModConfig.getInstance().getRequiredPermissionLevel());
-                        })
+                        .requires(source ->
+                                ModConfig.getInstance().getAllowPlayersChangePosition() || source.hasPermission(4)
+                        )
                         .then(Commands.argument("preset", StringArgumentType.word())
                                 .suggests((context, builder) -> {
                                     for (TimerPositionPreset preset : TimerPositionPreset.values()) {
@@ -207,12 +189,9 @@ public class TimerCommands {
                         )
                 )
                 .then(Commands.literal("sound")
-                        .requires(source -> {
-                            if (ModConfig.getInstance().getAllowPlayersChangeSound()) {
-                                return true;
-                            }
-                            return source.hasPermission(ModConfig.getInstance().getRequiredPermissionLevel());
-                        })
+                        .requires(source ->
+                                ModConfig.getInstance().getAllowPlayersChangeSound() || source.hasPermission(4)
+                        )
                         .then(Commands.argument("soundId", ResourceLocationArgument.id())
                                 .suggests((context, builder) ->
                                         SharedSuggestionProvider.suggestResource(
@@ -848,5 +827,4 @@ public class TimerCommands {
 
         return 1;
     }
-
 }

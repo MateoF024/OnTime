@@ -82,7 +82,7 @@ public class ClientTimerState {
         ModConfig config = ModConfig.getInstance();
 
         try {
-            ResourceLocation soundLocation = ResourceLocation.parse(config.getTimerSoundId());
+            ResourceLocation soundLocation = ResourceLocation.tryParse(config.getTimerSoundId());
             SoundEvent soundEvent = SoundEvent.createVariableRangeEvent(soundLocation);
 
             mc.level.playLocalSound(

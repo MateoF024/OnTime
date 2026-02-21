@@ -1,7 +1,9 @@
 package com.mateof24.render;
 
+import com.mateof24.config.ModConfig;
 import net.minecraft.client.Minecraft;
-import net.minecraft.sounds.SoundEvents;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 
 public class ClientTimerState {
@@ -68,20 +70,43 @@ public class ClientTimerState {
 
         if (!silent && !playerSilent && currentSecond != lastSecond && lastSecond != -1) {
             if (mc.player != null && mc.level != null) {
-                mc.level.playLocalSound(
-                        mc.player.getX(),
-                        mc.player.getY(),
-                        mc.player.getZ(),
-                        SoundEvents.NOTE_BLOCK_HAT.value(),
-                        SoundSource.MASTER,
-                        0.75F,
-                        2.0F,
-                        false
-                );
+                playTimerSound();
             }
         }
 
         lastSecond = currentSecond;
+    }
+
+    private static void playTimerSound() {
+        Minecraft mc = Minecraft.getInstance();
+        ModConfig config = ModConfig.getInstance();
+
+        try {
+            ResourceLocation soundLocation = ResourceLocation.tryParse(config.getTimerSoundId());
+            SoundEvent soundEvent = SoundEvent.createVariableRangeEvent(soundLocation);
+
+            mc.level.playLocalSound(
+                    mc.player.getX(),
+                    mc.player.getY(),
+                    mc.player.getZ(),
+                    soundEvent,
+                    SoundSource.MASTER,
+                    config.getTimerSoundVolume(),
+                    config.getTimerSoundPitch(),
+                    false
+            );
+        } catch (Exception e) {
+            mc.level.playLocalSound(
+                    mc.player.getX(),
+                    mc.player.getY(),
+                    mc.player.getZ(),
+                    net.minecraft.sounds.SoundEvents.NOTE_BLOCK_HAT.value(),
+                    SoundSource.MASTER,
+                    0.75F,
+                    2.0F,
+                    false
+            );
+        }
     }
 
     public static long getInterpolatedTicks() {
@@ -156,24 +181,10 @@ public class ClientTimerState {
     }
 
     public static String getTimerName() { return timerName; }
-
     public static boolean isRunning() { return running; }
-
     public static boolean isSilent() { return silent; }
-
-    public static void setVisible(boolean vis) {
-        visible = vis;
-    }
-
-    public static boolean isVisible() {
-        return visible;
-    }
-
-    public static void setPlayerSilent(boolean sil) {
-        playerSilent = sil;
-    }
-
-    public static boolean isPlayerSilent() {
-        return playerSilent;
-    }
+    public static void setVisible(boolean vis) { visible = vis; }
+    public static boolean isVisible() { return visible; }
+    public static void setPlayerSilent(boolean sil) { playerSilent = sil; }
+    public static boolean isPlayerSilent() { return playerSilent; }
 }

@@ -19,6 +19,7 @@ public class PlayerPreferences {
     private static final Map<UUID, Boolean> timerVisibility = new HashMap<>();
     private static final Map<UUID, Boolean> timerSilent = new HashMap<>();
     private static final Map<UUID, String> timerPosition = new HashMap<>();
+    private static final Map<UUID, Float> timerScale = new HashMap<>();
 
     public static void setTimerVisibility(UUID playerUUID, boolean visible) {
         timerVisibility.put(playerUUID, visible);
@@ -64,9 +65,7 @@ public class PlayerPreferences {
             for (Map.Entry<UUID, String> entry : timerPosition.entrySet()) {
                 position.addProperty(entry.getKey().toString(), entry.getValue());
             }
-
             root.add("timerPosition", position);
-
             root.add("timerVisibility", visibility);
             root.add("timerSilent", silent);
             try (FileWriter writer = new FileWriter(PREFS_FILE.toFile())) {

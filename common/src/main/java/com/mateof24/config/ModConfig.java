@@ -34,10 +34,6 @@ public class ModConfig {
         try (FileReader reader = new FileReader(CONFIG_FILE.toFile())) {
             JsonObject root = GSON.fromJson(reader, JsonObject.class);
             if (root != null) {
-                if (root.has("requiredPermissionLevel")) {
-                    requiredPermissionLevel = root.get("requiredPermissionLevel").getAsInt();
-                    requiredPermissionLevel = Math.max(0, Math.min(4, requiredPermissionLevel));
-                }
                 if (root.has("allowPlayersUseHide")) {
                     allowPlayersUseHide = root.get("allowPlayersUseHide").getAsBoolean();
                 }
@@ -46,6 +42,12 @@ public class ModConfig {
                 }
                 if (root.has("allowPlayersUseSilent")) {
                     allowPlayersUseSilent = root.get("allowPlayersUseSilent").getAsBoolean();
+                }
+                if (root.has("allowPlayersChangePosition")) {
+                    allowPlayersChangePosition = root.get("allowPlayersChangePosition").getAsBoolean();
+                }
+                if (root.has("allowPlayersChangeSound")) {
+                    allowPlayersChangeSound = root.get("allowPlayersChangeSound").getAsBoolean();
                 }
                 if (root.has("maxTimerSeconds")) {
                     maxTimerSeconds = root.get("maxTimerSeconds").getAsLong();
@@ -67,12 +69,6 @@ public class ModConfig {
                 if (root.has("thresholdLow")) {
                     thresholdLow = root.get("thresholdLow").getAsInt();
                     thresholdLow = Math.max(0, Math.min(100, thresholdLow));
-                }
-                if (root.has("allowPlayersChangePosition")) {
-                    allowPlayersChangePosition = root.get("allowPlayersChangePosition").getAsBoolean();
-                }
-                if (root.has("allowPlayersChangeSound")) {
-                    allowPlayersChangeSound = root.get("allowPlayersChangeSound").getAsBoolean();
                 }
                 if (root.has("timerSoundId")) {
                     timerSoundId = root.get("timerSoundId").getAsString();
@@ -98,7 +94,6 @@ public class ModConfig {
             Files.createDirectories(CONFIG_DIR);
             JsonObject root = new JsonObject();
 
-            root.addProperty("requiredPermissionLevel", requiredPermissionLevel);
             root.addProperty("allowPlayersUseHide", allowPlayersUseHide);
             root.addProperty("allowPlayersUseList", allowPlayersUseList);
             root.addProperty("allowPlayersUseSilent", allowPlayersUseSilent);
@@ -122,21 +117,26 @@ public class ModConfig {
         }
     }
 
-    private int requiredPermissionLevel = 2;
     private boolean allowPlayersUseHide = false;
     private boolean allowPlayersUseList = false;
     private boolean allowPlayersUseSilent = false;
     private boolean allowPlayersChangePosition = false;
     private boolean allowPlayersChangeSound = false;
-    private String timerSoundId = "minecraft:block.note_block.hat";
-    private float timerSoundVolume = 0.75f;
-    private float timerSoundPitch = 2.0f;
 
     public boolean getAllowPlayersUseHide() {
         return allowPlayersUseHide;
     }
 
     public void setAllowPlayersUseHide(boolean allow) {
+        this.allowPlayersUseHide = allow;
+        save();
+    }
+
+    public boolean getAllowPlayersChangeHide() {
+        return allowPlayersUseHide;
+    }
+
+    public void setAllowPlayersChangeHide(boolean allow) {
         this.allowPlayersUseHide = allow;
         save();
     }
@@ -159,6 +159,15 @@ public class ModConfig {
         save();
     }
 
+    public boolean getAllowPlayersChangeSilent() {
+        return allowPlayersUseSilent;
+    }
+
+    public void setAllowPlayersChangeSilent(boolean allow) {
+        this.allowPlayersUseSilent = allow;
+        save();
+    }
+
     public boolean getAllowPlayersChangePosition() {
         return allowPlayersChangePosition;
     }
@@ -174,15 +183,6 @@ public class ModConfig {
 
     public void setAllowPlayersChangeSound(boolean allow) {
         this.allowPlayersChangeSound = allow;
-        save();
-    }
-
-    public int getRequiredPermissionLevel() {
-        return requiredPermissionLevel;
-    }
-
-    public void setRequiredPermissionLevel(int level) {
-        this.requiredPermissionLevel = Math.max(0, Math.min(4, level));
         save();
     }
 
@@ -207,11 +207,25 @@ public class ModConfig {
     private int thresholdMid = 30;
     private int thresholdLow = 10;
 
-    public int getColorHigh() { return colorHigh; }
-    public int getColorMid() { return colorMid; }
-    public int getColorLow() { return colorLow; }
-    public int getThresholdMid() { return thresholdMid; }
-    public int getThresholdLow() { return thresholdLow; }
+    public int getColorHigh() {
+        return colorHigh;
+    }
+
+    public int getColorMid() {
+        return colorMid;
+    }
+
+    public int getColorLow() {
+        return colorLow;
+    }
+
+    public int getThresholdMid() {
+        return thresholdMid;
+    }
+
+    public int getThresholdLow() {
+        return thresholdLow;
+    }
 
     public int getColorForPercentage(float percentage) {
         if (percentage >= thresholdMid) {
@@ -259,6 +273,10 @@ public class ModConfig {
         this.thresholdLow = Math.max(0, Math.min(100, threshold));
         save();
     }
+
+    private String timerSoundId = "minecraft:block.note_block.hat";
+    private float timerSoundVolume = 0.75f;
+    private float timerSoundPitch = 2.0f;
 
     public String getTimerSoundId() {
         return timerSoundId;

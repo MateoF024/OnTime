@@ -67,15 +67,5 @@ public class ClientNetworkHandler {
             });
         });
 
-        // Registro de paquete de sonido
-        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TIMER_SOUND_ID, (client, handler, buf, responseSender) -> {
-            String soundId = buf.readUtf();
-            float volume = buf.readFloat();
-            float pitch = buf.readFloat();
-
-            client.execute(() -> {
-                ClientTimerState.updateSound(soundId, volume, pitch);
-            });
-        });
     }
 }
