@@ -65,7 +65,6 @@ public class TimerRenderer {
         int mainColor = 0xFF000000 | textColor;
 
         if (scale != 1.0f) {
-            var pose = graphics.pose();
 
             PoseStack poseStack = graphics.pose();
             poseStack.pushPose();

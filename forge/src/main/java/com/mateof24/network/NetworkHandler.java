@@ -23,13 +23,13 @@ public class NetworkHandler {
                 TimerVisibilityPayload.STREAM_CODEC,
                 NetworkHandler::handleVisibility
         );
-/***
+
         registrar.playToClient(
                 TimerSilentPayload.TYPE,
                 TimerSilentPayload.STREAM_CODEC,
                 NetworkHandler::handleSilent
         );
-***/
+
         registrar.playToClient(
                 TimerPositionPayload.TYPE,
                 TimerPositionPayload.STREAM_CODEC,
@@ -56,18 +56,12 @@ public class NetworkHandler {
     }
 
     private static void handleVisibility(TimerVisibilityPayload payload, IPayloadContext context) {
-        context.enqueueWork(() -> {
-            ClientTimerState.setVisible(payload.visible());
-        });
+        context.enqueueWork(() -> ClientTimerState.setVisible(payload.visible()));
     }
 
-/***
     private static void handleSilent(TimerSilentPayload payload, IPayloadContext context) {
-        context.enqueueWork(() -> {
-            ClientTimerState.setPlayerSilent(payload.silent());
-        });
+        context.enqueueWork(() -> ClientTimerState.setPlayerSilent(payload.silent()));
     }
-***/
 
     private static void handlePosition(TimerPositionPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
@@ -94,29 +88,32 @@ public class NetworkHandler {
         TimerSyncPayload payload = new TimerSyncPayload(
                 name, currentTicks, targetTicks, countUp, running, silent, server.getTickCount()
         );
-
         PacketDistributor.sendToAllPlayers(payload);
+    }
+
+    public static void syncTimerToClient(ServerPlayer player, String name,
+                                         long currentTicks, long targetTicks,
+                                         boolean countUp, boolean running, boolean silent,
+                                         long serverTick) {
+        TimerSyncPayload payload = new TimerSyncPayload(
+                name, currentTicks, targetTicks, countUp, running, silent, serverTick
+        );
+        PacketDistributor.sendToPlayer(player, payload);
     }
 
     public static void syncVisibilityToClient(ServerPlayer player, boolean visible) {
-        TimerVisibilityPayload payload = new TimerVisibilityPayload(visible);
-        PacketDistributor.sendToPlayer(player, payload);
+        PacketDistributor.sendToPlayer(player, new TimerVisibilityPayload(visible));
     }
 
-/***
     public static void syncSilentToClient(ServerPlayer player, boolean silent) {
-        TimerSilentPayload payload = new TimerSilentPayload(silent);
-        PacketDistributor.sendToPlayer(player, payload);
+        PacketDistributor.sendToPlayer(player, new TimerSilentPayload(silent));
     }
-***/
 
     public static void syncPositionToClient(ServerPlayer player, String presetName) {
-        TimerPositionPayload payload = new TimerPositionPayload(presetName);
-        PacketDistributor.sendToPlayer(player, payload);
+        PacketDistributor.sendToPlayer(player, new TimerPositionPayload(presetName));
     }
 
     public static void syncPositionToAllClients(net.minecraft.server.MinecraftServer server, String presetName) {
-        TimerPositionPayload payload = new TimerPositionPayload(presetName);
-        PacketDistributor.sendToAllPlayers(payload);
+        PacketDistributor.sendToAllPlayers(new TimerPositionPayload(presetName));
     }
 }

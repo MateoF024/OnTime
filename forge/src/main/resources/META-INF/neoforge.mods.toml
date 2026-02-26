@@ -4,7 +4,7 @@ license="CC0-1.0"
 
 [[mods]]
 modId="ontime"
-version="1.2.1"
+version="${version}"
 displayName="OnTime"
 description="Create custom timers with command execution capabilities.\n Perfect for minigames, events, or automated server tasks."
 authors="MateoF24"

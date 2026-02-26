@@ -50,7 +50,7 @@ public class ClientNetworkHandler {
             String presetName = buf.readUtf();
 
             client.execute(() -> {
-                com.mateof24.config.ClientConfig config = com.mateof24.config.ClientConfig.getInstance();
+                com.mateof24.config.ModConfig config = com.mateof24.config.ModConfig.getInstance();
 
                 com.mateof24.config.TimerPositionPreset preset =
                         com.mateof24.config.TimerPositionPreset.fromString(presetName);

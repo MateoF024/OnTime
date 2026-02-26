@@ -58,8 +58,8 @@ sourceSets {
         }
         resources {
             srcDirs = [
-                    'src/client/resources',
-                    "src/${versionType}/client/resources"
+                    "src/${versionType}/client/resources",
+                    'src/client/resources'
             ]
         }
     }
@@ -90,6 +90,10 @@ processResources {
 }
 
 tasks.withType(Jar) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.named('processClientResources') {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 

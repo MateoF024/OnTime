@@ -13,7 +13,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
-import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -74,27 +74,30 @@ public class OnTime {
         });
     }
 
-    private void onPlayerJoin(EntityJoinLevelEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) {
-            UUID playerUUID = player.getUUID();
-            boolean visible = PlayerPreferences.getTimerVisibility(playerUUID);
-            NetworkHandler.syncVisibilityToClient(player, visible);
+    private void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
-            TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
-                MinecraftServer server = player.level().getServer();
-                if (server != null) {
-                    NetworkHandler.syncTimerToClients(
-                            server,
-                            timer.getName(),
-                            timer.getCurrentTicks(),
-                            timer.getTargetTicks(),
-                            timer.isCountUp(),
-                            timer.isRunning(),
-                            timer.isSilent()
-                    );
-                }
-            });
-        }
+        UUID playerUUID = player.getUUID();
+
+        NetworkHandler.syncVisibilityToClient(player, PlayerPreferences.getTimerVisibility(playerUUID));
+        NetworkHandler.syncSilentToClient(player, PlayerPreferences.getTimerSilent(playerUUID));
+        NetworkHandler.syncPositionToClient(player, PlayerPreferences.getTimerPosition(playerUUID));
+
+        TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
+            MinecraftServer server = player.getServer();
+            if (server != null) {
+                NetworkHandler.syncTimerToClient(
+                        player,
+                        timer.getName(),
+                        timer.getCurrentTicks(),
+                        timer.getTargetTicks(),
+                        timer.isCountUp(),
+                        timer.isRunning(),
+                        timer.isSilent(),
+                        server.getTickCount()
+                );
+            }
+        });
     }
 
     private void onServerStopping(ServerStoppingEvent event) {

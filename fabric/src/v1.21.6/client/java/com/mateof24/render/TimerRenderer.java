@@ -1,7 +1,6 @@
 package com.mateof24.render;
 
 import com.mateof24.config.ModConfig;
-import com.mateof24.config.ModConfig;
 import com.mateof24.config.TimerPositionPreset;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;

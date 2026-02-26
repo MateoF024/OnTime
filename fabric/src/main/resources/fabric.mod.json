@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "ontime",
-  "version": "1.2.1",
+  "version": "${version}",
   "name": "OnTime",
   "description": "create custom timers with command execution capabilities. Perfect for minigames, events, or automated server tasks!",
   "authors": [
@@ -34,8 +34,5 @@
     "java": ">=17",
     "fabric-api": "*",
     "cloth-config": ">=11.0.0"
-  },
-  "suggests": {
-    "another-mod": "*"
   }
 }
