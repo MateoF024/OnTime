@@ -1,6 +1,5 @@
 package com.mateof24.render;
 
-import com.mateof24.config.ClientConfig;
 import com.mateof24.config.ModConfig;
 import com.mateof24.config.TimerPositionPreset;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -27,7 +26,7 @@ public class TimerRenderer {
         int screenWidth = mc.getWindow().getGuiScaledWidth();
         int screenHeight = mc.getWindow().getGuiScaledHeight();
 
-        ClientConfig config = ClientConfig.getInstance();
+        ModConfig config = ModConfig.getInstance();
         TimerPositionPreset preset = config.getPositionPreset();
         float scale = config.getTimerScale();
 

@@ -23,7 +23,7 @@ public class TimerPositionPayload {
 
     public static void handle(TimerPositionPayload msg, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
-            com.mateof24.config.ClientConfig config = com.mateof24.config.ClientConfig.getInstance();
+            com.mateof24.config.ModConfig config = com.mateof24.config.ModConfig.getInstance();
             Minecraft mc = Minecraft.getInstance();
 
             com.mateof24.config.TimerPositionPreset preset =

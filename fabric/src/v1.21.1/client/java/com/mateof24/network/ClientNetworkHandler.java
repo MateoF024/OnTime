@@ -38,7 +38,7 @@ public class ClientNetworkHandler {
 
         ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerPositionPayload.TYPE, (payload, context) -> {
             context.client().execute(() -> {
-                com.mateof24.config.ClientConfig config = com.mateof24.config.ClientConfig.getInstance();
+                com.mateof24.config.ModConfig config = com.mateof24.config.ModConfig.getInstance();
                 net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
 
                 com.mateof24.config.TimerPositionPreset preset =

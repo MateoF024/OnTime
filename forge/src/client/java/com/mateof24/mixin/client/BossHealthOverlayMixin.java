@@ -1,6 +1,6 @@
 package com.mateof24.mixin.client;
 
-import com.mateof24.config.ClientConfig;
+import com.mateof24.config.ModConfig;
 import com.mateof24.network.ClientTimerState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.BossHealthOverlay;
@@ -28,7 +28,7 @@ public class BossHealthOverlayMixin {
             return y;
         }
 
-        ClientConfig config = ClientConfig.getInstance();
+        ModConfig config = ModConfig.getInstance();
         int timerY = config.getTimerY();
         int timerX = config.getTimerX();
         float scale = config.getTimerScale();

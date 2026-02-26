@@ -1,13 +1,12 @@
 package com.mateof24;
 
-import com.mateof24.config.ClientConfig;
+
 import com.mateof24.config.ConfigScreen;
 import com.mateof24.network.ClientTimerState;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
-import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
@@ -19,7 +18,6 @@ public class OnTimeClient {
 
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
-        ClientConfig.getInstance().load();
 
         ModLoadingContext.get().registerExtensionPoint(
                 IConfigScreenFactory.class,

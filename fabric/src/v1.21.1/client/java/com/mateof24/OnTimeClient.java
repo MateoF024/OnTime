@@ -1,6 +1,5 @@
 package com.mateof24;
 
-import com.mateof24.config.ClientConfig;
 import com.mateof24.network.ClientNetworkHandler;
 import com.mateof24.render.ClientTimerState;
 import com.mateof24.render.TimerRenderer;
@@ -11,7 +10,6 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 public class OnTimeClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
-        ClientConfig.getInstance().load();  // ← CAMBIAR A ClientConfig
         ClientNetworkHandler.registerClientPackets();
         HudRenderCallback.EVENT.register(TimerRenderer::render);
         ClientTickEvents.END_CLIENT_TICK.register(client -> ClientTimerState.tick());

@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class ModConfig {
+    // Creación de archivo de configuración principal.
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_DIR = Services.PLATFORM.getConfigDir().resolve("ontime");
     private static final Path CONFIG_FILE = CONFIG_DIR.resolve("config.json");
@@ -25,80 +26,70 @@ public class ModConfig {
         return INSTANCE;
     }
 
+    // Variables Configurables (Valores Predeterminados)
+
+    private int timerX = -1;
+    private int timerY = 4;
+    private TimerPositionPreset positionPreset = TimerPositionPreset.BOSSBAR;
+    private float timerScale = 1.0f;
+    private long maxTimerSeconds = 86400;
+    private int colorHigh = 0xFFFFFF;
+    private int colorMid = 0xFFFF00;
+    private int colorLow = 0xFF0000;
+    private int thresholdMid = 30;
+    private int thresholdLow = 10;
+    private String timerSoundId = "minecraft:block.note_block.hat";
+    private float timerSoundVolume = 1.0f;
+    private float timerSoundPitch = 2.0f;
+
+
+    // Función para cargar parámetros
     public void load() {
         if (!Files.exists(CONFIG_FILE)) {
             save();
             return;
         }
-
         try (FileReader reader = new FileReader(CONFIG_FILE.toFile())) {
             JsonObject root = GSON.fromJson(reader, JsonObject.class);
-            if (root != null) {
-                if (root.has("allowPlayersUseHide")) {
-                    allowPlayersUseHide = root.get("allowPlayersUseHide").getAsBoolean();
-                }
-                if (root.has("allowPlayersUseList")) {
-                    allowPlayersUseList = root.get("allowPlayersUseList").getAsBoolean();
-                }
-                if (root.has("allowPlayersUseSilent")) {
-                    allowPlayersUseSilent = root.get("allowPlayersUseSilent").getAsBoolean();
-                }
-                if (root.has("allowPlayersChangePosition")) {
-                    allowPlayersChangePosition = root.get("allowPlayersChangePosition").getAsBoolean();
-                }
-                if (root.has("allowPlayersChangeSound")) {
-                    allowPlayersChangeSound = root.get("allowPlayersChangeSound").getAsBoolean();
-                }
-                if (root.has("maxTimerSeconds")) {
-                    maxTimerSeconds = root.get("maxTimerSeconds").getAsLong();
-                    maxTimerSeconds = Math.max(1, maxTimerSeconds);
-                }
-                if (root.has("colorHigh")) {
-                    colorHigh = parseColor(root.get("colorHigh").getAsString());
-                }
-                if (root.has("colorMid")) {
-                    colorMid = parseColor(root.get("colorMid").getAsString());
-                }
-                if (root.has("colorLow")) {
-                    colorLow = parseColor(root.get("colorLow").getAsString());
-                }
-                if (root.has("thresholdMid")) {
-                    thresholdMid = root.get("thresholdMid").getAsInt();
-                    thresholdMid = Math.max(0, Math.min(100, thresholdMid));
-                }
-                if (root.has("thresholdLow")) {
-                    thresholdLow = root.get("thresholdLow").getAsInt();
-                    thresholdLow = Math.max(0, Math.min(100, thresholdLow));
-                }
-                if (root.has("timerSoundId")) {
-                    timerSoundId = root.get("timerSoundId").getAsString();
-                }
-                if (root.has("timerSoundVolume")) {
-                    timerSoundVolume = root.get("timerSoundVolume").getAsFloat();
-                    timerSoundVolume = Math.max(0.0f, Math.min(1.0f, timerSoundVolume));
-                }
-                if (root.has("timerSoundPitch")) {
-                    timerSoundPitch = root.get("timerSoundPitch").getAsFloat();
-                    timerSoundPitch = Math.max(0.5f, Math.min(2.0f, timerSoundPitch));
-                }
+            if (root == null) return;
+            if (root.has("timerX")) {
+                timerX = root.get("timerX").getAsInt();
             }
+            if (root.has("timerY")) {
+                timerY = root.get("timerY").getAsInt();
+                timerY = Math.max(0, timerY);
+            }
+            if (root.has("timerScale")) {
+                timerScale = root.get("timerScale").getAsFloat();
+                timerScale = Math.max(0.1f, Math.min(5.0f, timerScale));
+            }
+            if (root.has("positionPreset")) {
+                String presetName = root.get("positionPreset").getAsString();
+                positionPreset = TimerPositionPreset.fromString(presetName);
+            }
+            if (root.has("maxTimerSeconds")) maxTimerSeconds = root.get("maxTimerSeconds").getAsLong();
+            if (root.has("colorHigh")) colorHigh = parseColor(root.get("colorHigh").getAsString());
+            if (root.has("colorMid")) colorMid = parseColor(root.get("colorMid").getAsString());
+            if (root.has("colorLow")) colorLow = parseColor(root.get("colorLow").getAsString());
+            if (root.has("thresholdMid")) thresholdMid = root.get("thresholdMid").getAsInt();
+            if (root.has("thresholdLow")) thresholdLow = root.get("thresholdLow").getAsInt();
+            if (root.has("timerSoundId")) timerSoundId = root.get("timerSoundId").getAsString();
+            if (root.has("timerSoundVolume")) timerSoundVolume = root.get("timerSoundVolume").getAsFloat();
+            if (root.has("timerSoundPitch")) timerSoundPitch = root.get("timerSoundPitch").getAsFloat();
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to load config", e);
-        } catch (Exception e) {
-            OnTimeConstants.LOGGER.error("Failed to parse config", e);
         }
     }
 
+    // Función para guardar parámetros
     public void save() {
         try {
             Files.createDirectories(CONFIG_DIR);
             JsonObject root = new JsonObject();
-
-            root.addProperty("allowPlayersUseHide", allowPlayersUseHide);
-            root.addProperty("allowPlayersUseList", allowPlayersUseList);
-            root.addProperty("allowPlayersUseSilent", allowPlayersUseSilent);
-            root.addProperty("allowPlayersChangePosition", allowPlayersChangePosition);
-            root.addProperty("allowPlayersChangeSound", allowPlayersChangeSound);
+            root.addProperty("timerX", timerX);
+            root.addProperty("timerY", timerY);
+            root.addProperty("timerScale", timerScale);
+            root.addProperty("positionPreset", positionPreset.name());
             root.addProperty("maxTimerSeconds", maxTimerSeconds);
             root.addProperty("colorHigh", String.format("#%06X", colorHigh));
             root.addProperty("colorMid", String.format("#%06X", colorMid));
@@ -108,7 +99,6 @@ public class ModConfig {
             root.addProperty("timerSoundId", timerSoundId);
             root.addProperty("timerSoundVolume", timerSoundVolume);
             root.addProperty("timerSoundPitch", timerSoundPitch);
-
             try (FileWriter writer = new FileWriter(CONFIG_FILE.toFile())) {
                 GSON.toJson(root, writer);
             }
@@ -117,114 +107,76 @@ public class ModConfig {
         }
     }
 
-    private boolean allowPlayersUseHide = false;
-    private boolean allowPlayersUseList = false;
-    private boolean allowPlayersUseSilent = false;
-    private boolean allowPlayersChangePosition = false;
-    private boolean allowPlayersChangeSound = false;
 
-    public boolean getAllowPlayersUseHide() {
-        return allowPlayersUseHide;
+    // Métodos para obtener y establecer presets de posición.
+    public TimerPositionPreset getPositionPreset() {
+        return positionPreset;
     }
+    public void setPositionPreset(TimerPositionPreset preset) {
+        this.positionPreset = preset;
 
-    public void setAllowPlayersUseHide(boolean allow) {
-        this.allowPlayersUseHide = allow;
+        save();
+    }
+    public void applyPreset(TimerPositionPreset preset, int screenWidth, int screenHeight,
+                            int timerWidth, int timerHeight) {
+        this.positionPreset = preset;
+
+
+        this.timerX = preset.calculateX(screenWidth, timerWidth, this.timerX);
+        this.timerY = preset.calculateY(screenHeight, timerHeight, this.timerY);
+
         save();
     }
 
-    public boolean getAllowPlayersChangeHide() {
-        return allowPlayersUseHide;
-    }
+    // Métodos para obtener y establecer posición
 
-    public void setAllowPlayersChangeHide(boolean allow) {
-        this.allowPlayersUseHide = allow;
+    public int getTimerX() { return timerX; }
+    public int getTimerY() { return timerY; }
+    public void setTimerX(int x) {
+        this.timerX = x;
+        save();
+    }
+    public void setTimerY(int y) {
+        this.timerY = Math.max(0, y);
         save();
     }
 
-    public boolean getAllowPlayersUseList() {
-        return allowPlayersUseList;
+    public void setCustomPosition(int x, int y) {
+        this.positionPreset = TimerPositionPreset.CUSTOM;
+        this.timerX = x;
+        this.timerY = Math.max(0, y);
+        save();
     }
-
-    public void setAllowPlayersUseList(boolean allow) {
-        this.allowPlayersUseList = allow;
+    public void setCustomPositionX(int x) {
+        this.positionPreset = TimerPositionPreset.CUSTOM;
+        this.timerX = x;
+        save();
+    }
+    public void setCustomPositionY(int y) {
+        this.positionPreset = TimerPositionPreset.CUSTOM;
+        this.timerY = Math.max(0, y);
         save();
     }
 
-    public boolean getAllowPlayersUseSilent() {
-        return allowPlayersUseSilent;
-    }
+    // Métodos para obtener y establecer escalas.
 
-    public void setAllowPlayersUseSilent(boolean allow) {
-        this.allowPlayersUseSilent = allow;
+    public float getTimerScale() { return timerScale; }
+    public void setTimerScale(float scale) {
+        this.timerScale = Math.max(0.1f, Math.min(5.0f, scale));
         save();
     }
 
-    public boolean getAllowPlayersChangeSilent() {
-        return allowPlayersUseSilent;
-    }
 
-    public void setAllowPlayersChangeSilent(boolean allow) {
-        this.allowPlayersUseSilent = allow;
-        save();
-    }
+    // Métodos para obtener y establecer tiempos.
 
-    public boolean getAllowPlayersChangePosition() {
-        return allowPlayersChangePosition;
-    }
+    public long getMaxTimerSeconds() { return maxTimerSeconds; }
+    public void setMaxTimerSeconds(long seconds) { this.maxTimerSeconds = Math.max(1, seconds); save(); }
 
-    public void setAllowPlayersChangePosition(boolean allow) {
-        this.allowPlayersChangePosition = allow;
-        save();
-    }
+    // Métodos para obtener y establecer colores
 
-    public boolean getAllowPlayersChangeSound() {
-        return allowPlayersChangeSound;
-    }
-
-    public void setAllowPlayersChangeSound(boolean allow) {
-        this.allowPlayersChangeSound = allow;
-        save();
-    }
-
-    private long maxTimerSeconds = 86400;
-
-    public long getMaxTimerSeconds() {
-        return maxTimerSeconds;
-    }
-
-    public void setMaxTimerSeconds(long seconds) {
-        this.maxTimerSeconds = Math.max(1, seconds);
-        save();
-    }
-
-    public long getMaxTimerTicks() {
-        return maxTimerSeconds * 20L;
-    }
-
-    private int colorHigh = 0xFFFFFF;
-    private int colorMid = 0xFFFF00;
-    private int colorLow = 0xFF0000;
-    private int thresholdMid = 30;
-    private int thresholdLow = 10;
-
-    public int getColorHigh() {
-        return colorHigh;
-    }
-
-    public int getColorMid() {
-        return colorMid;
-    }
-
-    public int getColorLow() {
-        return colorLow;
-    }
-
-    public int getThresholdMid() {
-        return thresholdMid;
-    }
-
-    public int getThresholdLow() {
-        return thresholdLow;
+    private int parseColor(String hex) {
+        try { return Integer.parseInt(hex.replace("#", ""), 16); }
+        catch (NumberFormatException e) { return 0xFFFFFF; }
     }
 
     public int getColorForPercentage(float percentage) {
@@ -237,71 +189,29 @@ public class ModConfig {
         }
     }
 
-    private int parseColor(String colorStr) {
-        try {
-            if (colorStr.startsWith("#")) {
-                return Integer.parseInt(colorStr.substring(1), 16);
-            }
-            return Integer.parseInt(colorStr, 16);
-        } catch (NumberFormatException e) {
-            OnTimeConstants.LOGGER.warn("Invalid color format: {}, using default", colorStr);
-            return 0xFFFFFF;
-        }
-    }
+    public int getColorHigh() { return colorHigh; }
+    public void setColorHigh(int color) { this.colorHigh = color; save(); }
 
-    public void setColorHigh(int color) {
-        this.colorHigh = color;
-        save();
-    }
+    public int getColorMid() { return colorMid; }
+    public void setColorMid(int color) { this.colorMid = color; save(); }
 
-    public void setColorMid(int color) {
-        this.colorMid = color;
-        save();
-    }
+    public int getColorLow() { return colorLow; }
+    public void setColorLow(int color) { this.colorLow = color; save(); }
 
-    public void setColorLow(int color) {
-        this.colorLow = color;
-        save();
-    }
+    public int getThresholdMid() { return thresholdMid; }
+    public void setThresholdMid(int threshold) { this.thresholdMid = threshold; save(); }
 
-    public void setThresholdMid(int threshold) {
-        this.thresholdMid = Math.max(0, Math.min(100, threshold));
-        save();
-    }
+    public int getThresholdLow() { return thresholdLow; }
+    public void setThresholdLow(int threshold) { this.thresholdLow = threshold; save(); }
 
-    public void setThresholdLow(int threshold) {
-        this.thresholdLow = Math.max(0, Math.min(100, threshold));
-        save();
-    }
+    // Métodos para obtener y establecer sonido, volumen y pitch
 
-    private String timerSoundId = "minecraft:block.note_block.hat";
-    private float timerSoundVolume = 0.75f;
-    private float timerSoundPitch = 2.0f;
+    public String getTimerSoundId() { return timerSoundId; }
+    public void setTimerSoundId(String soundId) { this.timerSoundId = soundId; save(); }
 
-    public String getTimerSoundId() {
-        return timerSoundId;
-    }
+    public float getTimerSoundVolume() { return timerSoundVolume; }
+    public void setTimerSoundVolume(float volume) { this.timerSoundVolume = volume; save(); }
 
-    public void setTimerSoundId(String soundId) {
-        this.timerSoundId = soundId != null ? soundId : "minecraft:block.note_block.hat";
-        save();
-    }
-
-    public float getTimerSoundVolume() {
-        return timerSoundVolume;
-    }
-
-    public void setTimerSoundVolume(float volume) {
-        this.timerSoundVolume = Math.max(0.0f, Math.min(1.0f, volume));
-        save();
-    }
-
-    public float getTimerSoundPitch() {
-        return timerSoundPitch;
-    }
-
-    public void setTimerSoundPitch(float pitch) {
-        this.timerSoundPitch = Math.max(0.5f, Math.min(2.0f, pitch));
-        save();
-    }
+    public float getTimerSoundPitch() { return timerSoundPitch; }
+    public void setTimerSoundPitch(float pitch) { this.timerSoundPitch = pitch; save(); }
 }

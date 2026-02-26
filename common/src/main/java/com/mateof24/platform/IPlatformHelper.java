@@ -17,6 +17,7 @@ public interface IPlatformHelper {
 
     void sendVisibilityPacket(ServerPlayer player, boolean visible);
 
+    // Requiere re hacerse en NeoForge!
     void sendSilentPacket(ServerPlayer player, boolean silent);
 
     void sendPositionPacket(ServerPlayer player, String presetName);

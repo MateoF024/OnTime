@@ -23,13 +23,13 @@ public class NetworkHandler {
                 TimerVisibilityPayload.STREAM_CODEC,
                 NetworkHandler::handleVisibility
         );
-
+/***
         registrar.playToClient(
                 TimerSilentPayload.TYPE,
                 TimerSilentPayload.STREAM_CODEC,
                 NetworkHandler::handleSilent
         );
-
+***/
         registrar.playToClient(
                 TimerPositionPayload.TYPE,
                 TimerPositionPayload.STREAM_CODEC,
@@ -61,15 +61,17 @@ public class NetworkHandler {
         });
     }
 
+/***
     private static void handleSilent(TimerSilentPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             ClientTimerState.setPlayerSilent(payload.silent());
         });
     }
+***/
 
     private static void handlePosition(TimerPositionPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
-            com.mateof24.config.ClientConfig config = com.mateof24.config.ClientConfig.getInstance();
+            com.mateof24.config.ModConfig config = com.mateof24.config.ModConfig.getInstance();
             net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
 
             com.mateof24.config.TimerPositionPreset preset =
@@ -101,10 +103,12 @@ public class NetworkHandler {
         PacketDistributor.sendToPlayer(player, payload);
     }
 
+/***
     public static void syncSilentToClient(ServerPlayer player, boolean silent) {
         TimerSilentPayload payload = new TimerSilentPayload(silent);
         PacketDistributor.sendToPlayer(player, payload);
     }
+***/
 
     public static void syncPositionToClient(ServerPlayer player, String presetName) {
         TimerPositionPayload payload = new TimerPositionPayload(presetName);

@@ -1,6 +1,5 @@
 package com.mateof24;
 
-import com.mateof24.config.ClientConfig;
 import com.mateof24.config.ConfigScreen;
 import com.mateof24.render.ClientTimerState;
 import com.mateof24.render.TimerRenderer;
@@ -20,7 +19,6 @@ public class OnTimeClient {
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
-            ClientConfig.getInstance().load();
 
             ModLoadingContext.get().registerExtensionPoint(
                     ConfigScreenHandler.ConfigScreenFactory.class,

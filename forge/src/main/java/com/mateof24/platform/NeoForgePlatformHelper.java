@@ -35,12 +35,12 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
     public void sendVisibilityPacket(ServerPlayer player, boolean visible) {
         NetworkHandler.syncVisibilityToClient(player, visible);
     }
-
+/***
     @Override
     public void sendSilentPacket(ServerPlayer player, boolean silent) {
         NetworkHandler.syncSilentToClient(player, silent);
     }
-
+***/
     @Override
     public void sendPositionPacket(ServerPlayer player, String presetName) {
         NetworkHandler.syncPositionToClient(player, presetName);

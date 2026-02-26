@@ -53,8 +53,9 @@ public class TimerCommands {
     private static final TimerNameSuggestionProvider TIMER_SUGGESTIONS = new TimerNameSuggestionProvider();
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("timer")
-
+        dispatcher.register(Commands.literal("timer").requires(source ->
+                                source.hasPermission(4)
+                        )
                 .then(Commands.literal("create")
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .then(Commands.argument("hours", IntegerArgumentType.integer(0))
@@ -118,24 +119,15 @@ public class TimerCommands {
                         )
                 )
                 .then(Commands.literal("list")
-                        .requires(source ->
-                                ModConfig.getInstance().getAllowPlayersUseList() || source.hasPermission(4)
-                        )
                         .executes(TimerCommands::listTimers)
                 )
                 .then(Commands.literal("silent")
-                        .requires(source ->
-                                ModConfig.getInstance().getAllowPlayersChangeSilent() || source.hasPermission(4)
-                        )
                         .executes(TimerCommands::toggleSilentSelf)
                         .then(Commands.argument("targets", EntityArgument.players())
                                 .executes(TimerCommands::toggleSilentTargets)
                         )
                 )
                 .then(Commands.literal("hide")
-                        .requires(source ->
-                                ModConfig.getInstance().getAllowPlayersChangeHide() || source.hasPermission(4)
-                        )
                         .executes(TimerCommands::toggleHideSelf)
                         .then(Commands.argument("targets", net.minecraft.commands.arguments.EntityArgument.players())
                                 .executes(TimerCommands::toggleHideTargets)
@@ -144,7 +136,9 @@ public class TimerCommands {
                 .then(Commands.literal("stop")
                         .executes(TimerCommands::stopTimer)
                 )
-                .then(Commands.literal("reset")
+                .then(Commands.literal("reset").requires(source ->
+                                        source.hasPermission(4)
+                                )
                         .executes(TimerCommands::resetCurrentTimer)
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
@@ -156,22 +150,16 @@ public class TimerCommands {
                         .then(Commands.argument("pageOrCommand", StringArgumentType.word())
                                 .executes(ctx -> {
                                     String arg = StringArgumentType.getString(ctx, "pageOrCommand");
-
-                                    // Intentar parsear como número (página)
                                     try {
                                         int page = Integer.parseInt(arg);
                                         return HelpSystem.showHelpPage(ctx.getSource(), page);
                                     } catch (NumberFormatException e) {
-                                        // No es un número, tratarlo como nombre de comando
                                         return HelpSystem.showCommandHelp(ctx.getSource(), arg);
                                     }
                                 })
                         )
                 )
                 .then(Commands.literal("position")
-                        .requires(source ->
-                                ModConfig.getInstance().getAllowPlayersChangePosition() || source.hasPermission(4)
-                        )
                         .then(Commands.argument("preset", StringArgumentType.word())
                                 .suggests((context, builder) -> {
                                     for (TimerPositionPreset preset : TimerPositionPreset.values()) {
@@ -189,9 +177,6 @@ public class TimerCommands {
                         )
                 )
                 .then(Commands.literal("sound")
-                        .requires(source ->
-                                ModConfig.getInstance().getAllowPlayersChangeSound() || source.hasPermission(4)
-                        )
                         .then(Commands.argument("soundId", ResourceLocationArgument.id())
                                 .suggests((context, builder) ->
                                         SharedSuggestionProvider.suggestResource(

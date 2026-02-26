@@ -6,14 +6,12 @@ import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import com.mateof24.config.TimerPositionPreset;
 
 public class ConfigScreen {
 
+    // Crear pantalla de configuración in-game
     public static Screen createConfigScreen(Screen parent) {
         ModConfig config = ModConfig.getInstance();
-        ClientConfig clientConfig = ClientConfig.getInstance();
-
         ConfigBuilder builder = ConfigBuilder.create()
                 .setParentScreen(parent)
                 .setTitle(Component.translatable("ontime.config.title"));
@@ -22,12 +20,13 @@ public class ConfigScreen {
 
         ConfigEntryBuilder entryBuilder = builder.entryBuilder();
 
+        // Categoria "Display" (Posición y Escala)
         ConfigCategory display = builder.getOrCreateCategory(Component.translatable("ontime.config.category.display"));
 
         display.addEntry(entryBuilder.startSelector(
                         Component.translatable("ontime.config.position_preset"),
                         TimerPositionPreset.values(),
-                        clientConfig.getPositionPreset())
+                        config.getPositionPreset())
                 .setDefaultValue(TimerPositionPreset.BOSSBAR)
                 .setNameProvider(preset -> Component.literal(preset.getDisplayName()))
                 .setTooltip(Component.translatable("ontime.config.position_preset.tooltip"))
@@ -37,50 +36,54 @@ public class ConfigScreen {
                     int screenHeight = mc.getWindow().getGuiScaledHeight();
 
                     String timeText = "00:00";
-                    int textWidth = (int) (mc.font.width(timeText) * clientConfig.getTimerScale());
-                    int textHeight = (int) (mc.font.lineHeight * clientConfig.getTimerScale());
+                    int textWidth = (int) (mc.font.width(timeText) * config.getTimerScale());
+                    int textHeight = (int) (mc.font.lineHeight * config.getTimerScale());
 
-                    clientConfig.applyPreset(preset, screenWidth, screenHeight, textWidth, textHeight);
+                    config.applyPreset(preset, screenWidth, screenHeight, textWidth, textHeight);
                 })
                 .build());
-
-        display.addEntry(entryBuilder.startIntField(Component.translatable("ontime.config.timer_x"), clientConfig.getTimerX())
+        // Muestro opciones de X, Y solo si el preset se encuentra en CUSTOM
+        if (config.getPositionPreset() == TimerPositionPreset.CUSTOM) {
+        display.addEntry(entryBuilder.startIntField(Component.translatable("ontime.config.timer_x"), config.getTimerX())
                 .setDefaultValue(-1)
                 .setTooltip(Component.translatable(
-                        clientConfig.getPositionPreset() == TimerPositionPreset.CUSTOM
+                        config.getPositionPreset() == TimerPositionPreset.CUSTOM
                                 ? "ontime.config.timer_x.tooltip"
                                 : "ontime.config.timer_x.disabled"
                 ))
                 .setSaveConsumer(x -> {
-                    if (clientConfig.getPositionPreset() == TimerPositionPreset.CUSTOM) {
-                        clientConfig.setTimerX(x);
-                    }
+
+                        config.setTimerX(x);
+
                 })
                 .build());
+                }
 
-        display.addEntry(entryBuilder.startIntField(Component.translatable("ontime.config.timer_y"), clientConfig.getTimerY())
+        if (config.getPositionPreset() == TimerPositionPreset.CUSTOM) {
+        display.addEntry(entryBuilder.startIntField(Component.translatable("ontime.config.timer_y"), config.getTimerY())
                 .setDefaultValue(4)
                 .setMin(0)
                 .setTooltip(Component.translatable(
-                        clientConfig.getPositionPreset() == TimerPositionPreset.CUSTOM
+                        config.getPositionPreset() == TimerPositionPreset.CUSTOM
                                 ? "ontime.config.timer_y.tooltip"
                                 : "ontime.config.timer_y.disabled"
                 ))
                 .setSaveConsumer(y -> {
-                    if (clientConfig.getPositionPreset() == TimerPositionPreset.CUSTOM) {
-                        clientConfig.setTimerY(y);
-                    }
+                        config.setTimerY(y);
+
                 })
                 .build());
+                        }
 
-        display.addEntry(entryBuilder.startFloatField(Component.translatable("ontime.config.timer_scale"), clientConfig.getTimerScale())
+        display.addEntry(entryBuilder.startFloatField(Component.translatable("ontime.config.timer_scale"), config.getTimerScale())
                 .setDefaultValue(1.0f)
                 .setMin(0.1f)
                 .setMax(5.0f)
                 .setTooltip(Component.translatable("ontime.config.timer_scale.tooltip"))
-                .setSaveConsumer(clientConfig::setTimerScale)
+                .setSaveConsumer(config::setTimerScale)
                 .build());
 
+        // Categoria de "Colors"
         ConfigCategory colors = builder.getOrCreateCategory(Component.translatable("ontime.config.category.colors"));
 
         colors.addEntry(entryBuilder.startColorField(Component.translatable("ontime.config.color_high"),
@@ -118,39 +121,8 @@ public class ConfigScreen {
                 .setSaveConsumer(config::setThresholdLow)
                 .build());
 
+        // Categoria de "Server"
         ConfigCategory server = builder.getOrCreateCategory(Component.translatable("ontime.config.category.server"));
-
-        server.addEntry(entryBuilder.startBooleanToggle(
-                        Component.translatable("ontime.config.allow_players_hide"),
-                        config.getAllowPlayersUseHide())
-                .setDefaultValue(false)
-                .setTooltip(Component.translatable("ontime.config.allow_players_hide.tooltip"))
-                .setSaveConsumer(config::setAllowPlayersUseHide)
-                .build());
-
-        server.addEntry(entryBuilder.startBooleanToggle(
-                        Component.translatable("ontime.config.allow_players_list"),
-                        config.getAllowPlayersUseList())
-                .setDefaultValue(false)
-                .setTooltip(Component.translatable("ontime.config.allow_players_list.tooltip"))
-                .setSaveConsumer(config::setAllowPlayersUseList)
-                .build());
-
-        server.addEntry(entryBuilder.startBooleanToggle(
-                        Component.translatable("ontime.config.allow_players_silent"),
-                        config.getAllowPlayersUseSilent())
-                .setDefaultValue(false)
-                .setTooltip(Component.translatable("ontime.config.allow_players_silent.tooltip"))
-                .setSaveConsumer(config::setAllowPlayersUseSilent)
-                .build());
-
-        server.addEntry(entryBuilder.startBooleanToggle(
-                        Component.translatable("ontime.config.allow_players_position"),
-                        config.getAllowPlayersChangePosition())
-                .setDefaultValue(false)
-                .setTooltip(Component.translatable("ontime.config.allow_players_position.tooltip"))
-                .setSaveConsumer(config::setAllowPlayersChangePosition)
-                .build());
 
         server.addEntry(entryBuilder.startLongField(Component.translatable("ontime.config.max_timer_seconds"),
                         config.getMaxTimerSeconds())
@@ -158,6 +130,29 @@ public class ConfigScreen {
                 .setMin(1L)
                 .setTooltip(Component.translatable("ontime.config.max_timer_seconds.tooltip"))
                 .setSaveConsumer(config::setMaxTimerSeconds)
+                .build());
+
+        server.addEntry(entryBuilder.startStrField(Component.translatable("ontime.config.timer_sound_id"),
+                        config.getTimerSoundId())
+                .setDefaultValue("minecraft:block.note_block.hat")
+                .setTooltip(Component.translatable("ontime.config.timer_sound_id.tooltip"))
+                .setSaveConsumer(config::setTimerSoundId)
+                .build());
+
+        server.addEntry(entryBuilder.startFloatField(Component.translatable("ontime.config.timer_sound_volume"),
+                        config.getTimerSoundVolume())
+                .setDefaultValue(1.0f)
+                .setMin(0.0f)
+                .setTooltip(Component.translatable("ontime.config.timer_sound_volume.tooltip"))
+                .setSaveConsumer(config::setTimerSoundVolume)
+                .build());
+
+        server.addEntry(entryBuilder.startFloatField(Component.translatable("ontime.config.timer_sound_pitch"),
+                        config.getTimerSoundPitch())
+                .setDefaultValue(2.0f)
+                .setMin(0.0f)
+                .setTooltip(Component.translatable("ontime.config.timer_sound_pitch.tooltip"))
+                .setSaveConsumer(config::setTimerSoundPitch)
                 .build());
 
         return builder.build();
