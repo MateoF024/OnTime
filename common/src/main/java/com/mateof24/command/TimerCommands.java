@@ -170,10 +170,7 @@ public class TimerCommands {
                                     }
                                     return builder.buildFuture();
                                 })
-                                .executes(TimerCommands::setPositionSelf)
-                                .then(Commands.argument("targets", EntityArgument.players())
-                                        .executes(TimerCommands::setPositionTargets)
-                                )
+                                .executes(TimerCommands::setPosition)
                         )
                 )
                 .then(Commands.literal("sound")
@@ -380,6 +377,7 @@ public class TimerCommands {
             );
             return 1;
         } else {
+            TimerManager.getInstance().reloadCommandsFromDisk();
             timer.setRunning(true);
             TimerManager.getInstance().saveTimers();
 
@@ -450,34 +448,6 @@ public class TimerCommands {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
-    }
-
-    private static int toggleSilentGlobal(CommandContext<CommandSourceStack> ctx) {
-        Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
-
-        if (activeTimer.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.silent.none"));
-            return 0;
-        }
-
-        Timer timer = activeTimer.get();
-        timer.setSilent(!timer.isSilent());
-        TimerManager.getInstance().saveTimers();
-
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable(timer.isSilent() ? "ontime.command.silent.disabled" : "ontime.command.silent.enabled", timer.getName()), true);
-
-        Services.PLATFORM.sendTimerSyncPacket(
-                ctx.getSource().getServer(),
-                timer.getName(),
-                timer.getCurrentTicks(),
-                timer.getTargetTicks(),
-                timer.isCountUp(),
-                timer.isRunning(),
-                timer.isSilent()
-        );
-
-        return 1;
     }
 
     private static int toggleSilentSelf(CommandContext<CommandSourceStack> ctx) {
@@ -740,52 +710,15 @@ public class TimerCommands {
         return 1;
     }
 
-    private static int setPositionSelf(CommandContext<CommandSourceStack> ctx) {
-        if (!(ctx.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
-            ctx.getSource().sendFailure(Component.literal("§cThis command can only be used by players"));
-            return 0;
-        }
-
+    private static int setPosition(CommandContext<CommandSourceStack> ctx) {
         String presetName = StringArgumentType.getString(ctx, "preset");
         TimerPositionPreset preset = TimerPositionPreset.fromString(presetName);
 
-        UUID playerUUID = player.getUUID();
-        PlayerPreferences.setTimerPosition(playerUUID, preset.name());
-        Services.PLATFORM.sendPositionPacket(player, preset.name());
+        ModConfig.getInstance().setPositionPreset(preset);
 
         ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.position.success", preset.getDisplayName()), false);
-
+                Component.translatable("ontime.command.position.success", preset.getDisplayName()), true);
         return 1;
-    }
-
-    private static int setPositionTargets(CommandContext<CommandSourceStack> ctx) {
-        String presetName = StringArgumentType.getString(ctx, "preset");
-        TimerPositionPreset preset = TimerPositionPreset.fromString(presetName);
-
-        try {
-            var targets = EntityArgument.getPlayers(ctx, "targets");
-            int count = 0;
-
-            for (net.minecraft.server.level.ServerPlayer target : targets) {
-                UUID playerUUID = target.getUUID();
-                PlayerPreferences.setTimerPosition(playerUUID, preset.name());
-                Services.PLATFORM.sendPositionPacket(target, preset.name());
-                count++;
-            }
-
-            int finalCount = count;
-            String finalPresetName = preset.getDisplayName();
-
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.position.success_targets",
-                            finalPresetName, finalCount), true);
-
-            return count;
-        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
-            ctx.getSource().sendFailure(Component.literal("§cInvalid target selector"));
-            return 0;
-        }
     }
 
     private static int setSoundDefault(CommandContext<CommandSourceStack> ctx, String soundId) {
@@ -801,15 +734,10 @@ public class TimerCommands {
     }
 
     private static int setSound(CommandContext<CommandSourceStack> ctx, String soundId, float volume, float pitch) {
-        ModConfig config = ModConfig.getInstance();
-
-        config.setTimerSoundId(soundId);
-        config.setTimerSoundVolume(volume);
-        config.setTimerSoundPitch(pitch);
+        ModConfig.getInstance().setTimerSound(soundId, volume, pitch);
 
         ctx.getSource().sendSuccess(() ->
                 Component.translatable("ontime.command.sound.success", soundId, volume, pitch), true);
-
         return 1;
     }
 }

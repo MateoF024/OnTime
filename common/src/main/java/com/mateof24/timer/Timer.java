@@ -9,16 +9,14 @@ public class Timer {
     private final boolean countUp;
     private boolean running;
     private String command;
-    private final long initialTicks;
     private boolean silent;
-    private boolean wasRunningBeforeShutdown;;
+    private boolean wasRunningBeforeShutdown;
 
     public Timer(String name, int hours, int minutes, int seconds, boolean countUp) {
         this.name = name;
         this.targetTicks = (hours * 3600L + minutes * 60L + seconds) * 20L;
         this.countUp = countUp;
         this.currentTicks = countUp ? 0 : this.targetTicks;
-        this.initialTicks = this.currentTicks;
         this.running = false;
         this.command = com.mateof24.command.PlaceholderSystem.DEFAULT_COMMAND;
         this.silent = false;
@@ -103,29 +101,16 @@ public class Timer {
         Timer timer = new Timer(name, hours, minutes, seconds, countUp);
         timer.currentTicks = json.get("currentTicks").getAsLong();
         timer.running = json.get("running").getAsBoolean();
-
-        if (json.has("command") && !json.get("command").isJsonNull()) {
-            timer.command = json.get("command").getAsString();
-        } else {
-            timer.command = com.mateof24.command.PlaceholderSystem.DEFAULT_COMMAND;
-        }
-
-        if (json.has("silent")) {
-            timer.silent = json.get("silent").getAsBoolean();
-        } else {
-            timer.silent = false;
-        }
-
-        if (json.has("wasRunningBeforeShutdown")) {
-            timer.wasRunningBeforeShutdown = json.get("wasRunningBeforeShutdown").getAsBoolean();
-        } else {
-            timer.wasRunningBeforeShutdown = false;
-        }
+        timer.command = json.has("command") && !json.get("command").isJsonNull()
+                ? json.get("command").getAsString()
+                : com.mateof24.command.PlaceholderSystem.DEFAULT_COMMAND;
+        timer.silent = json.has("silent") && json.get("silent").getAsBoolean();
+        timer.wasRunningBeforeShutdown = json.has("wasRunningBeforeShutdown")
+                && json.get("wasRunningBeforeShutdown").getAsBoolean();
 
         return timer;
     }
 
-    // Getters y setters
     public String getName() { return name; }
     public long getCurrentTicks() { return currentTicks; }
     public long getTargetTicks() { return targetTicks; }
@@ -133,9 +118,7 @@ public class Timer {
     public boolean isRunning() { return running; }
     public void setRunning(boolean running) { this.running = running; }
     public String getCommand() { return command; }
-    public void setCommand(String command) {
-        this.command = command != null ? command : "";
-    }
+    public void setCommand(String command) { this.command = command != null ? command : ""; }
     public void setCurrentTicks(long ticks) { this.currentTicks = ticks; }
     public boolean isSilent() { return silent; }
     public void setSilent(boolean silent) { this.silent = silent; }

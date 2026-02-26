@@ -27,7 +27,7 @@ public class ModConfig {
     }
 
     // Variables Configurables (Valores Predeterminados)
-
+    public static Runnable onSaveHook = null;
     private int timerX = -1;
     private int timerY = 4;
     private TimerPositionPreset positionPreset = TimerPositionPreset.BOSSBAR;
@@ -105,6 +105,7 @@ public class ModConfig {
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to save config", e);
         }
+        if (onSaveHook != null) onSaveHook.run();
     }
 
 
@@ -214,4 +215,11 @@ public class ModConfig {
 
     public float getTimerSoundPitch() { return timerSoundPitch; }
     public void setTimerSoundPitch(float pitch) { this.timerSoundPitch = pitch; save(); }
+    public void setTimerSound(String soundId, float volume, float pitch) {
+        this.timerSoundId = soundId;
+        this.timerSoundVolume = volume;
+        this.timerSoundPitch = pitch;
+        save();
+    }
+
 }

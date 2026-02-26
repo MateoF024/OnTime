@@ -1,5 +1,6 @@
 package com.mateof24.platform;
 
+import com.mateof24.config.ModConfig;
 import com.mateof24.network.NetworkHandler;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
@@ -10,19 +11,13 @@ import java.nio.file.Path;
 public class FabricPlatformHelper implements IPlatformHelper {
 
     @Override
-    public String getPlatformName() {
-        return "Fabric";
-    }
+    public String getPlatformName() { return "Fabric"; }
 
     @Override
-    public boolean isModLoaded(String modId) {
-        return FabricLoader.getInstance().isModLoaded(modId);
-    }
+    public boolean isModLoaded(String modId) { return FabricLoader.getInstance().isModLoaded(modId); }
 
     @Override
-    public Path getConfigDir() {
-        return FabricLoader.getInstance().getConfigDir();
-    }
+    public Path getConfigDir() { return FabricLoader.getInstance().getConfigDir(); }
 
     @Override
     public void sendTimerSyncPacket(MinecraftServer server, String name, long currentTicks,
@@ -41,17 +36,21 @@ public class FabricPlatformHelper implements IPlatformHelper {
     }
 
     @Override
-    public void sendPositionPacket(ServerPlayer player, String presetName) {
-        NetworkHandler.syncPositionToClient(player, presetName);
+    public void sendPositionPacket(ServerPlayer player, String presetName) {}
+
+    @Override
+    public void sendPositionPacketToAll(MinecraftServer server, String presetName) {}
+
+    @Override
+    public void sendDisplayConfigPacket(ServerPlayer player) {
+        NetworkHandler.syncDisplayConfigToClient(player, ModConfig.getInstance());
     }
 
     @Override
-    public void sendPositionPacketToAll(MinecraftServer server, String presetName) {
-        NetworkHandler.syncPositionToAllClients(server, presetName);
+    public void sendDisplayConfigPacketToAll(MinecraftServer server) {
+        NetworkHandler.syncDisplayConfigToAllClients(server, ModConfig.getInstance());
     }
 
     @Override
-    public void registerPackets() {
-        NetworkHandler.registerPackets();
-    }
+    public void registerPackets() { NetworkHandler.registerPackets(); }
 }

@@ -13,5 +13,6 @@ public class OnTimeClient implements ClientModInitializer {
         ClientNetworkHandler.registerClientPackets();
         HudRenderCallback.EVENT.register(TimerRenderer::render);
         ClientTickEvents.END_CLIENT_TICK.register(client -> ClientTimerState.tick());
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ClientTimerState.clear());
     }
 }

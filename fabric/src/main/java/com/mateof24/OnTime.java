@@ -11,14 +11,13 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import net.minecraft.server.MinecraftServer;
 
 import java.util.UUID;
 
 public class OnTime implements ModInitializer {
     public static final String MOD_ID = "ontime";
-    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    private static MinecraftServer serverInstance = null;
 
     @Override
     public void onInitialize() {
@@ -26,67 +25,64 @@ public class OnTime implements ModInitializer {
         PlayerPreferences.load();
         Services.PLATFORM.registerPackets();
 
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            TimerCommands.register(dispatcher);
-        });
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
+                TimerCommands.register(dispatcher));
 
-        ServerTickEvents.END_SERVER_TICK.register(server -> {
-            TimerTickHandler.tick(server);
-        });
+        ServerTickEvents.END_SERVER_TICK.register(TimerTickHandler::tick);
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
-            TimerManager.getInstance().loadTimers();
+            serverInstance = server;
+            ModConfig.onSaveHook = () -> Services.PLATFORM.sendDisplayConfigPacketToAll(serverInstance);
 
+            TimerManager.getInstance().loadTimers();
             TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
                 if (timer.wasRunningBeforeShutdown()) {
                     timer.setRunning(true);
                     timer.setWasRunningBeforeShutdown(false);
                     TimerManager.getInstance().saveTimers();
-                    LOGGER.info("Timer '{}' auto-resumed after server restart at {}",
-                            timer.getName(),
-                            timer.getFormattedTime());
+                    OnTimeConstants.LOGGER.info("Timer '{}' auto-resumed after server restart at {}",
+                            timer.getName(), timer.getFormattedTime());
                 } else {
-                    LOGGER.info("Active timer loaded: '{}' at {} (paused)",
-                            timer.getName(),
-                            timer.getFormattedTime());
+                    OnTimeConstants.LOGGER.info("Active timer loaded: '{}' at {} (paused)",
+                            timer.getName(), timer.getFormattedTime());
                 }
             });
         });
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             UUID playerUUID = handler.getPlayer().getUUID();
-            boolean visible = PlayerPreferences.getTimerVisibility(playerUUID);
-            Services.PLATFORM.sendVisibilityPacket(handler.getPlayer(), visible);
-            boolean silent = PlayerPreferences.getTimerSilent(playerUUID);
-            Services.PLATFORM.sendSilentPacket(handler.getPlayer(), silent);
-            String position = PlayerPreferences.getTimerPosition(playerUUID);
-            Services.PLATFORM.sendPositionPacket(handler.getPlayer(), position);
+            Services.PLATFORM.sendVisibilityPacket(handler.getPlayer(), PlayerPreferences.getTimerVisibility(playerUUID));
+            Services.PLATFORM.sendSilentPacket(handler.getPlayer(), PlayerPreferences.getTimerSilent(playerUUID));
+            Services.PLATFORM.sendDisplayConfigPacket(handler.getPlayer());
 
-            TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
-                Services.PLATFORM.sendTimerSyncPacket(
-                        server,
-                        timer.getName(),
-                        timer.getCurrentTicks(),
-                        timer.getTargetTicks(),
-                        timer.isCountUp(),
-                        timer.isRunning(),
-                        timer.isSilent()
-                );
-            });
+            TimerManager.getInstance().getActiveTimer().ifPresent(timer ->
+                    Services.PLATFORM.sendTimerSyncPacket(
+                            server,
+                            timer.getName(),
+                            timer.getCurrentTicks(),
+                            timer.getTargetTicks(),
+                            timer.isCountUp(),
+                            timer.isRunning(),
+                            timer.isSilent()
+                    )
+            );
         });
 
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            ModConfig.onSaveHook = null;
+            serverInstance = null;
+
             TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
                 timer.setWasRunningBeforeShutdown(timer.isRunning());
                 if (timer.isRunning()) {
                     timer.setRunning(false);
-                    LOGGER.info("Timer '{}' paused due to server shutdown", timer.getName());
+                    OnTimeConstants.LOGGER.info("Timer '{}' paused due to server shutdown", timer.getName());
                 }
             });
             TimerManager.getInstance().saveTimers();
-            LOGGER.info("Timers saved on server shutdown");
+            OnTimeConstants.LOGGER.info("Timers saved on server shutdown");
         });
 
-        LOGGER.info("OnTime mod initialized successfully!");
+        OnTimeConstants.LOGGER.info("OnTime mod initialized successfully!");
     }
 }

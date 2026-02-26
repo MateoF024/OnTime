@@ -5,24 +5,15 @@ import net.minecraft.server.level.ServerPlayer;
 import java.nio.file.Path;
 
 public interface IPlatformHelper {
-
     String getPlatformName();
-
     boolean isModLoaded(String modId);
-
     Path getConfigDir();
-
-    void sendTimerSyncPacket(MinecraftServer server, String name, long currentTicks,
-                             long targetTicks, boolean countUp, boolean running, boolean silent);
-
+    void sendTimerSyncPacket(MinecraftServer server, String name, long currentTicks, long targetTicks, boolean countUp, boolean running, boolean silent);
     void sendVisibilityPacket(ServerPlayer player, boolean visible);
-
-    // Requiere re hacerse en NeoForge!
     void sendSilentPacket(ServerPlayer player, boolean silent);
-
     void sendPositionPacket(ServerPlayer player, String presetName);
-
     void sendPositionPacketToAll(MinecraftServer server, String presetName);
-
+    default void sendDisplayConfigPacket(ServerPlayer player) {}
+    default void sendDisplayConfigPacketToAll(MinecraftServer server) {}
     void registerPackets();
 }

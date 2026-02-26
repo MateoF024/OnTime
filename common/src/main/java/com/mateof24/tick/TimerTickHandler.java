@@ -37,6 +37,7 @@ public class TimerTickHandler {
         }
 
         if (finished) {
+            TimerManager.getInstance().reloadCommandsFromDisk();
             executeTimerCommand(server, activeTimer);
             activeTimer.reset();
             TimerManager.getInstance().clearActiveTimer();

@@ -6,53 +6,29 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 public class ClientNetworkHandler {
 
     public static void registerClientPackets() {
-        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerSyncPayload.TYPE, (payload, context) -> {
-            context.client().execute(() -> {
-                if (payload.name().isEmpty()) {
-                    ClientTimerState.clear();
-                } else {
-                    ClientTimerState.updateTimer(
-                            payload.name(),
-                            payload.currentTicks(),
-                            payload.targetTicks(),
-                            payload.countUp(),
-                            payload.running(),
-                            payload.silent(),
-                            payload.serverTick()
-                    );
-                }
-            });
-        });
+        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerSyncPayload.TYPE, (payload, context) ->
+                context.client().execute(() -> {
+                    if (payload.name().isEmpty()) ClientTimerState.clear();
+                    else ClientTimerState.updateTimer(payload.name(), payload.currentTicks(), payload.targetTicks(),
+                            payload.countUp(), payload.running(), payload.silent(), payload.serverTick());
+                })
+        );
 
-        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerVisibilityPayload.TYPE, (payload, context) -> {
-            context.client().execute(() -> {
-                ClientTimerState.setVisible(payload.visible());
-            });
-        });
+        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerVisibilityPayload.TYPE, (payload, context) ->
+                context.client().execute(() -> ClientTimerState.setVisible(payload.visible()))
+        );
 
-        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerSilentPayload.TYPE, (payload, context) -> {
-            context.client().execute(() -> {
-                ClientTimerState.setPlayerSilent(payload.silent());
-            });
-        });
+        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerSilentPayload.TYPE, (payload, context) ->
+                context.client().execute(() -> ClientTimerState.setPlayerSilent(payload.silent()))
+        );
 
-        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerPositionPayload.TYPE, (payload, context) -> {
-            context.client().execute(() -> {
-                com.mateof24.config.ModConfig config = com.mateof24.config.ModConfig.getInstance();
-                net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-
-                com.mateof24.config.TimerPositionPreset preset =
-                        com.mateof24.config.TimerPositionPreset.fromString(payload.presetName());
-
-                int screenWidth = mc.getWindow().getGuiScaledWidth();
-                int screenHeight = mc.getWindow().getGuiScaledHeight();
-
-                String sampleText = "00:00:00";
-                int textWidth = (int) (mc.font.width(sampleText) * config.getTimerScale());
-                int textHeight = (int) (mc.font.lineHeight * config.getTimerScale());
-
-                config.applyPreset(preset, screenWidth, screenHeight, textWidth, textHeight);
-            });
-        });
+        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerDisplayConfigPayload.TYPE, (payload, context) ->
+                context.client().execute(() -> ClientTimerState.updateDisplayConfig(
+                        payload.timerX(), payload.timerY(), payload.positionPreset(), payload.scale(),
+                        payload.colorHigh(), payload.colorMid(), payload.colorLow(),
+                        payload.thresholdMid(), payload.thresholdLow(),
+                        payload.soundId(), payload.soundVolume(), payload.soundPitch()
+                ))
+        );
     }
 }

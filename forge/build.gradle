@@ -87,9 +87,6 @@ processResources {
 
     inputs.property "version", mod_version
 
-    filesMatching("META-INF/neoforge.mods.toml") {
-        expand "version": mod_version
-    }
     from('../common/src/main/resources') {
         include 'assets/**'
         exclude 'META-INF/**'
