@@ -3,10 +3,10 @@ package com.mateof24;
 import com.mateof24.command.TimerCommands;
 import com.mateof24.config.ModConfig;
 import com.mateof24.manager.TimerManager;
-import com.mateof24.network.NetworkHandler;
 import com.mateof24.platform.Services;
 import com.mateof24.storage.PlayerPreferences;
 import com.mateof24.tick.TimerTickHandler;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -27,11 +27,11 @@ import java.util.UUID;
 @Mod(OnTimeConstants.MOD_ID)
 public class OnTime {
     public static final Logger LOGGER = LoggerFactory.getLogger(OnTimeConstants.MOD_ID);
+    private static MinecraftServer serverInstance = null;
 
     public OnTime() {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
         modEventBus.addListener(this::commonSetup);
-
         MinecraftForge.EVENT_BUS.register(this);
     }
 
@@ -39,15 +39,17 @@ public class OnTime {
         event.enqueueWork(() -> {
             ModConfig.getInstance().load();
             PlayerPreferences.load();
-            NetworkHandler.registerPackets();
+            Services.PLATFORM.registerPackets();
             LOGGER.info("OnTime mod initialized (Forge 1.20.1)");
         });
     }
 
     @SubscribeEvent
     public void onServerStarted(ServerStartedEvent event) {
-        TimerManager.getInstance().loadTimers();
+        serverInstance = event.getServer();
+        ModConfig.onSaveHook = () -> Services.PLATFORM.sendDisplayConfigPacketToAll(serverInstance);
 
+        TimerManager.getInstance().loadTimers();
         TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
             if (timer.wasRunningBeforeShutdown()) {
                 timer.setRunning(true);
@@ -64,6 +66,9 @@ public class OnTime {
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
+        ModConfig.onSaveHook = null;
+        serverInstance = null;
+
         TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
             timer.setWasRunningBeforeShutdown(timer.isRunning());
             if (timer.isRunning()) {
@@ -89,26 +94,23 @@ public class OnTime {
 
     @SubscribeEvent
     public void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) {
-            UUID playerUUID = player.getUUID();
-            boolean visible = PlayerPreferences.getTimerVisibility(playerUUID);
-            Services.PLATFORM.sendVisibilityPacket(player, visible);
-            boolean silent = PlayerPreferences.getTimerSilent(playerUUID);
-            Services.PLATFORM.sendSilentPacket(player, silent);
-            String position = PlayerPreferences.getTimerPosition(playerUUID);
-            Services.PLATFORM.sendPositionPacket(player, position);
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
-            TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
-                Services.PLATFORM.sendTimerSyncPacket(
-                        player.getServer(),
-                        timer.getName(),
-                        timer.getCurrentTicks(),
-                        timer.getTargetTicks(),
-                        timer.isCountUp(),
-                        timer.isRunning(),
-                        timer.isSilent()
-                );
-            });
-        }
+        UUID playerUUID = player.getUUID();
+        Services.PLATFORM.sendVisibilityPacket(player, PlayerPreferences.getTimerVisibility(playerUUID));
+        Services.PLATFORM.sendSilentPacket(player, PlayerPreferences.getTimerSilent(playerUUID));
+        Services.PLATFORM.sendDisplayConfigPacket(player);
+
+        TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
+            Services.PLATFORM.sendTimerSyncPacket(
+                    player.getServer(),
+                    timer.getName(),
+                    timer.getCurrentTicks(),
+                    timer.getTargetTicks(),
+                    timer.isCountUp(),
+                    timer.isRunning(),
+                    timer.isSilent()
+            );
+        });
     }
 }

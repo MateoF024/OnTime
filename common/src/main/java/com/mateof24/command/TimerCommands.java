@@ -192,6 +192,10 @@ public class TimerCommands {
                                         )
                                 )
                         )
+                ).then(Commands.literal("scale")
+                        .then(Commands.argument("scale", FloatArgumentType.floatArg(0.1f, 5.0f))
+                                .executes(ctx -> setScale(ctx, FloatArgumentType.getFloat(ctx, "scale")))
+                        )
                 )
         );
     }
@@ -738,6 +742,13 @@ public class TimerCommands {
 
         ctx.getSource().sendSuccess(() ->
                 Component.translatable("ontime.command.sound.success", soundId, volume, pitch), true);
+        return 1;
+    }
+
+    private static int setScale(CommandContext<CommandSourceStack> ctx, float scale) {
+        ModConfig.getInstance().setTimerScale(scale);
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.scale.success", scale), true);
         return 1;
     }
 }

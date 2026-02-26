@@ -32,6 +32,7 @@
   "ontime.command.hide.disabled": "§cTimer display §fdisabled for %s",
   "ontime.command.hide.self": "yourself",
   "ontime.command.hide.players": "%d player(s)",
+  "ontime.command.scale.success": "§aTimer scale set to: §f%.2f",
   "ontime.command.error.maxtime": "§cTimer exceeds maximum allowed time of §f%s",
   "ontime.command.error.maxtime.add": "§cAdding this time would exceed maximum allowed time of §f%s",
   "ontime.config.title": "OnTime Configuration",
@@ -105,5 +106,6 @@
   "ontime.help.list.desc": "List all timers and their status",
   "ontime.help.help.desc": "Show this help menu",
   "ontime.help.position.desc": "Set timer display position preset",
-  "ontime.help.sound.desc": "Configure timer tick sound globally"
+  "ontime.help.sound.desc": "Configure timer tick sound globally",
+  "ontime.help.scale.desc": "Set timer display scale globally"
 }

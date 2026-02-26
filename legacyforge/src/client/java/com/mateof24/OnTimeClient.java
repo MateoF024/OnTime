@@ -20,7 +20,9 @@ public class OnTimeClient {
     public static void onClientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
 
-            ModLoadingContext.get().registerExtensionPoint(
+            net.minecraftforge.fml.ModContainer modContainer =
+                    net.minecraftforge.fml.ModList.get().getModContainerById(OnTimeConstants.MOD_ID).orElseThrow();
+            modContainer.registerExtensionPoint(
                     ConfigScreenHandler.ConfigScreenFactory.class,
                     () -> new ConfigScreenHandler.ConfigScreenFactory(
                             (minecraft, screen) -> ConfigScreen.createConfigScreen(screen)

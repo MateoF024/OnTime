@@ -153,6 +153,15 @@ public class HelpSystem {
                 "/timer sound ui.button.click 0.8 1.5"
         ));
 
+        HELP_ENTRIES.add(new HelpEntry(
+                "scale",
+                "ontime.help.scale.desc",
+                "/timer scale <value>",
+                "/timer scale 1.0",
+                "/timer scale 1.5",
+                "/timer scale 0.8"
+        ));
+
     }
 
     /**

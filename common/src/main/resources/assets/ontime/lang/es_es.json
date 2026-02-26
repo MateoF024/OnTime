@@ -14,6 +14,7 @@
   "ontime.command.silent.disabled_for": "§cSonido del contador §fdesactivado para %s",
   "ontime.command.silent.self": "vos mismo",
   "ontime.command.silent.players": "%d jugador(es)",
+  "ontime.command.scale.success": "§aEscala del contador establecida en: §f%.2f",
   "ontime.config.allow_players_silent": "Permitir a Jugadores Usar Silent",
   "ontime.config.allow_players_silent.tooltip": "Si está activado, todos los jugadores pueden usar /timer silent. Si está desactivado, solo los operadores pueden usarlo",
   "ontime.command.silent.none": "§cNo hay ningún contador activo para cambiar el sonido",
@@ -105,5 +106,6 @@
   "ontime.help.list.desc": "Listar todos los contadores y su estado",
   "ontime.help.help.desc": "Mostrar este menú de ayuda",
   "ontime.help.position.desc": "Establecer preset de posición del contador",
-  "ontime.help.sound.desc": "Configurar sonido de tick del contador globalmente"
+  "ontime.help.sound.desc": "Configurar sonido de tick del contador globalmente",
+  "ontime.help.scale.desc": "Establecer escala de visualización del contador globalmente"
 }

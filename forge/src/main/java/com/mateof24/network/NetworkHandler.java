@@ -1,5 +1,6 @@
 package com.mateof24.network;
 
+import com.mateof24.config.ModConfig;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -12,46 +13,17 @@ public class NetworkHandler {
     public static void registerPayloads(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
 
-        registrar.playToClient(
-                TimerSyncPayload.TYPE,
-                TimerSyncPayload.STREAM_CODEC,
-                NetworkHandler::handleTimerSync
-        );
-
-        registrar.playToClient(
-                TimerVisibilityPayload.TYPE,
-                TimerVisibilityPayload.STREAM_CODEC,
-                NetworkHandler::handleVisibility
-        );
-
-        registrar.playToClient(
-                TimerSilentPayload.TYPE,
-                TimerSilentPayload.STREAM_CODEC,
-                NetworkHandler::handleSilent
-        );
-
-        registrar.playToClient(
-                TimerPositionPayload.TYPE,
-                TimerPositionPayload.STREAM_CODEC,
-                NetworkHandler::handlePosition
-        );
+        registrar.playToClient(TimerSyncPayload.TYPE, TimerSyncPayload.STREAM_CODEC, NetworkHandler::handleTimerSync);
+        registrar.playToClient(TimerVisibilityPayload.TYPE, TimerVisibilityPayload.STREAM_CODEC, NetworkHandler::handleVisibility);
+        registrar.playToClient(TimerSilentPayload.TYPE, TimerSilentPayload.STREAM_CODEC, NetworkHandler::handleSilent);
+        registrar.playToClient(TimerDisplayConfigPayload.TYPE, TimerDisplayConfigPayload.STREAM_CODEC, NetworkHandler::handleDisplayConfig);
     }
 
     private static void handleTimerSync(TimerSyncPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
-            if (payload.name().isEmpty()) {
-                ClientTimerState.clear();
-            } else {
-                ClientTimerState.updateTimer(
-                        payload.name(),
-                        payload.currentTicks(),
-                        payload.targetTicks(),
-                        payload.countUp(),
-                        payload.running(),
-                        payload.silent(),
-                        payload.serverTick()
-                );
-            }
+            if (payload.name().isEmpty()) ClientTimerState.clear();
+            else ClientTimerState.updateTimer(payload.name(), payload.currentTicks(), payload.targetTicks(),
+                    payload.countUp(), payload.running(), payload.silent(), payload.serverTick());
         });
     }
 
@@ -63,42 +35,27 @@ public class NetworkHandler {
         context.enqueueWork(() -> ClientTimerState.setPlayerSilent(payload.silent()));
     }
 
-    private static void handlePosition(TimerPositionPayload payload, IPayloadContext context) {
-        context.enqueueWork(() -> {
-            com.mateof24.config.ModConfig config = com.mateof24.config.ModConfig.getInstance();
-            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-
-            com.mateof24.config.TimerPositionPreset preset =
-                    com.mateof24.config.TimerPositionPreset.fromString(payload.presetName());
-
-            int screenWidth = mc.getWindow().getGuiScaledWidth();
-            int screenHeight = mc.getWindow().getGuiScaledHeight();
-
-            String sampleText = "00:00:00";
-            int textWidth = (int) (mc.font.width(sampleText) * config.getTimerScale());
-            int textHeight = (int) (mc.font.lineHeight * config.getTimerScale());
-
-            config.applyPreset(preset, screenWidth, screenHeight, textWidth, textHeight);
-        });
+    private static void handleDisplayConfig(TimerDisplayConfigPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> ClientTimerState.updateDisplayConfig(
+                payload.timerX(), payload.timerY(), payload.positionPreset(), payload.scale(),
+                payload.colorHigh(), payload.colorMid(), payload.colorLow(),
+                payload.thresholdMid(), payload.thresholdLow(),
+                payload.soundId(), payload.soundVolume(), payload.soundPitch()
+        ));
     }
 
     public static void syncTimerToClients(MinecraftServer server, String name,
                                           long currentTicks, long targetTicks,
                                           boolean countUp, boolean running, boolean silent) {
-        TimerSyncPayload payload = new TimerSyncPayload(
-                name, currentTicks, targetTicks, countUp, running, silent, server.getTickCount()
-        );
-        PacketDistributor.sendToAllPlayers(payload);
+        PacketDistributor.sendToAllPlayers(new TimerSyncPayload(
+                name, currentTicks, targetTicks, countUp, running, silent, server.getTickCount()));
     }
 
     public static void syncTimerToClient(ServerPlayer player, String name,
                                          long currentTicks, long targetTicks,
-                                         boolean countUp, boolean running, boolean silent,
-                                         long serverTick) {
-        TimerSyncPayload payload = new TimerSyncPayload(
-                name, currentTicks, targetTicks, countUp, running, silent, serverTick
-        );
-        PacketDistributor.sendToPlayer(player, payload);
+                                         boolean countUp, boolean running, boolean silent, long serverTick) {
+        PacketDistributor.sendToPlayer(player, new TimerSyncPayload(
+                name, currentTicks, targetTicks, countUp, running, silent, serverTick));
     }
 
     public static void syncVisibilityToClient(ServerPlayer player, boolean visible) {
@@ -109,11 +66,20 @@ public class NetworkHandler {
         PacketDistributor.sendToPlayer(player, new TimerSilentPayload(silent));
     }
 
-    public static void syncPositionToClient(ServerPlayer player, String presetName) {
-        PacketDistributor.sendToPlayer(player, new TimerPositionPayload(presetName));
+    public static void syncDisplayConfigToClient(ServerPlayer player, ModConfig cfg) {
+        PacketDistributor.sendToPlayer(player, buildDisplayConfigPayload(cfg));
     }
 
-    public static void syncPositionToAllClients(net.minecraft.server.MinecraftServer server, String presetName) {
-        PacketDistributor.sendToAllPlayers(new TimerPositionPayload(presetName));
+    public static void syncDisplayConfigToAllClients(MinecraftServer server, ModConfig cfg) {
+        PacketDistributor.sendToAllPlayers(buildDisplayConfigPayload(cfg));
+    }
+
+    private static TimerDisplayConfigPayload buildDisplayConfigPayload(ModConfig cfg) {
+        return new TimerDisplayConfigPayload(
+                cfg.getTimerX(), cfg.getTimerY(), cfg.getPositionPreset().name(), cfg.getTimerScale(),
+                cfg.getColorHigh(), cfg.getColorMid(), cfg.getColorLow(),
+                cfg.getThresholdMid(), cfg.getThresholdLow(),
+                cfg.getTimerSoundId(), cfg.getTimerSoundVolume(), cfg.getTimerSoundPitch()
+        );
     }
 }

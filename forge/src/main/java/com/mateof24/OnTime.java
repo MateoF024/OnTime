@@ -4,6 +4,7 @@ import com.mateof24.command.TimerCommands;
 import com.mateof24.config.ModConfig;
 import com.mateof24.manager.TimerManager;
 import com.mateof24.network.NetworkHandler;
+import com.mateof24.platform.Services;
 import com.mateof24.storage.PlayerPreferences;
 import com.mateof24.tick.TimerTickHandler;
 import net.minecraft.server.MinecraftServer;
@@ -26,6 +27,7 @@ import java.util.UUID;
 @Mod(OnTimeConstants.MOD_ID)
 public class OnTime {
     public static final Logger LOGGER = LoggerFactory.getLogger(OnTimeConstants.MOD_ID);
+    private static MinecraftServer serverInstance = null;
 
     public OnTime(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
@@ -58,8 +60,10 @@ public class OnTime {
     }
 
     private void onServerStarted(ServerStartedEvent event) {
-        TimerManager.getInstance().loadTimers();
+        serverInstance = event.getServer();
+        ModConfig.onSaveHook = () -> Services.PLATFORM.sendDisplayConfigPacketToAll(serverInstance);
 
+        TimerManager.getInstance().loadTimers();
         TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
             if (timer.wasRunningBeforeShutdown()) {
                 timer.setRunning(true);
@@ -78,29 +82,24 @@ public class OnTime {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
         UUID playerUUID = player.getUUID();
-
         NetworkHandler.syncVisibilityToClient(player, PlayerPreferences.getTimerVisibility(playerUUID));
         NetworkHandler.syncSilentToClient(player, PlayerPreferences.getTimerSilent(playerUUID));
-        NetworkHandler.syncPositionToClient(player, PlayerPreferences.getTimerPosition(playerUUID));
+        Services.PLATFORM.sendDisplayConfigPacket(player);
 
         TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
             MinecraftServer server = player.getServer();
             if (server != null) {
-                NetworkHandler.syncTimerToClient(
-                        player,
-                        timer.getName(),
-                        timer.getCurrentTicks(),
-                        timer.getTargetTicks(),
-                        timer.isCountUp(),
-                        timer.isRunning(),
-                        timer.isSilent(),
-                        server.getTickCount()
-                );
+                NetworkHandler.syncTimerToClient(player, timer.getName(), timer.getCurrentTicks(),
+                        timer.getTargetTicks(), timer.isCountUp(), timer.isRunning(),
+                        timer.isSilent(), server.getTickCount());
             }
         });
     }
 
     private void onServerStopping(ServerStoppingEvent event) {
+        ModConfig.onSaveHook = null;
+        serverInstance = null;
+
         TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
             timer.setWasRunningBeforeShutdown(timer.isRunning());
             if (timer.isRunning()) {

@@ -1,6 +1,5 @@
 package com.mateof24.mixin.client;
 
-import com.mateof24.config.ModConfig;
 import com.mateof24.network.ClientTimerState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.BossHealthOverlay;
@@ -18,46 +17,29 @@ public class BossHealthOverlayMixin {
     private static final int BOSSBAR_HEIGHT = 19;
     private static final int BOSSBAR_WIDTH = 182;
 
-    @ModifyVariable(
-            method = "render",
-            at = @At(value = "STORE"),
-            ordinal = 1
-    )
+    @ModifyVariable(method = "render", at = @At(value = "STORE"), ordinal = 1)
     private int adjustBossBarY(int y) {
-        if (!ClientTimerState.shouldDisplay()) {
-            return y;
-        }
+        if (!ClientTimerState.shouldDisplay()) return y;
 
-        ModConfig config = ModConfig.getInstance();
-        int timerY = config.getTimerY();
-        int timerX = config.getTimerX();
-        float scale = config.getTimerScale();
+        float scale = ClientTimerState.getDisplayScale();
+        int timerX = ClientTimerState.getDisplayX();
+        int timerY = ClientTimerState.getDisplayY();
 
         int screenWidth = this.minecraft.getWindow().getGuiScaledWidth();
         String timeText = ClientTimerState.getFormattedTime();
         int timerWidth = (int) (this.minecraft.font.width(timeText) * scale);
         int timerHeight = (int) (this.minecraft.font.lineHeight * scale);
 
-        if (timerX == -1) {
-            timerX = (screenWidth - timerWidth) / 2;
-        }
-
-        int timerLeft = timerX;
-        int timerRight = timerX + timerWidth;
-        int timerTop = timerY;
-        int timerBottom = timerY + timerHeight;
+        if (timerX == -1) timerX = (screenWidth - timerWidth) / 2;
 
         int bossBarLeft = (screenWidth - BOSSBAR_WIDTH) / 2;
         int bossBarRight = bossBarLeft + BOSSBAR_WIDTH;
-        int bossBarTop = BOSSBAR_DEFAULT_Y;
-        int bossBarBottom = bossBarTop + BOSSBAR_HEIGHT;
 
-        boolean horizontalOverlap = timerRight > bossBarLeft && timerLeft < bossBarRight;
-        boolean verticalOverlap = timerBottom > bossBarTop && timerTop < bossBarBottom;
+        boolean horizontalOverlap = (timerX + timerWidth) > bossBarLeft && timerX < bossBarRight;
+        boolean verticalOverlap = (timerY + timerHeight) > BOSSBAR_DEFAULT_Y && timerY < (BOSSBAR_DEFAULT_Y + BOSSBAR_HEIGHT);
 
         if (horizontalOverlap && verticalOverlap) {
-            int overlap = timerBottom - bossBarTop;
-            return y + overlap + 10;
+            return y + (timerY + timerHeight - BOSSBAR_DEFAULT_Y) + 10;
         }
 
         return y;
