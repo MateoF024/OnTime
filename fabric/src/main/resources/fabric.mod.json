@@ -34,5 +34,8 @@
     "java": ">=17",
     "fabric-api": "*",
     "cloth-config": ">=11.0.0"
+  },
+  "suggests": {
+    "placeholder-api": "*"
   }
 }

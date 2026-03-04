@@ -22,6 +22,10 @@ public class PlaceholderSystem {
         PLACEHOLDERS.put("{seconds}", timer -> String.valueOf(timer.getCurrentTicks() / 20L));
     }
 
+    public static void registerPlaceholder(String key, Function<Timer, String> resolver) {
+        PLACEHOLDERS.put("{" + key + "}", resolver);
+    }
+
     /**
      * Comando predeterminado que se asigna a timers sin comando específico
      */

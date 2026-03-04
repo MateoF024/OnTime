@@ -3,30 +3,51 @@ plugins {
     id 'fabric-loom' version '1.13-SNAPSHOT'
 }
 
+def minecraftVer = project.minecraft_version
+
+String versionType
+if (minecraftVer.startsWith("1.20.1")) {
+    versionType = "v1.20.1"
+} else if (minecraftVer.startsWith("1.21.6") || minecraftVer.startsWith("1.21.7") ||
+        minecraftVer.startsWith("1.21.8") || minecraftVer.startsWith("1.21.9") ||
+        minecraftVer.startsWith("1.21.10")) {
+    versionType = "v1.21.6"
+} else {
+    versionType = "v1.21.1"
+}
+
+def helpSystemVer = (versionType == "v1.21.6") ? "v2" : "v1"
+def javaVer = (versionType == "v1.20.1") ? 17 : 21
+
 base {
     archivesName = "${project.archives_base_name}-common"
 }
-
-def helpSystemVer = project.hasProperty('helpsystem_version') ? project.helpsystem_version : 'v1'
 
 sourceSets {
     main {
         java {
             srcDirs = [
                     'src/main/java',
-                    "src/${helpSystemVer}/java"  // ← Agregar HelpSystem versionado
+                    "src/${helpSystemVer}/java"
             ]
         }
     }
 }
 
 dependencies {
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    minecraft "com.mojang:minecraft:${minecraftVer}"
     mappings loom.officialMojangMappings()
-
+    modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
     compileOnly 'com.google.code.gson:gson:2.10.1'
 }
 
 java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(javaVer)
+    }
     withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
 }

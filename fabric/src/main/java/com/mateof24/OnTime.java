@@ -12,6 +12,10 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.server.MinecraftServer;
+import com.mateof24.api.OnTimeAPI;
+import com.mateof24.api.OnTimeEntrypoint;
+import com.mateof24.integration.PlaceholderAPIIntegration;
+import net.fabricmc.loader.api.FabricLoader;
 
 import java.util.UUID;
 
@@ -82,6 +86,26 @@ public class OnTime implements ModInitializer {
             TimerManager.getInstance().saveTimers();
             OnTimeConstants.LOGGER.info("Timers saved on server shutdown");
         });
+
+        OnTimeAPI api = OnTimeAPI.getInstance();
+
+        if (FabricLoader.getInstance().isModLoaded("placeholder-api")) {
+            try {
+                PlaceholderAPIIntegration.register(api);
+                OnTimeConstants.LOGGER.info("Placeholder API integration registered");
+            } catch (Exception e) {
+                OnTimeConstants.LOGGER.warn("Failed to register Placeholder API integration", e);
+            }
+        }
+
+        FabricLoader.getInstance().getEntrypoints("ontime", OnTimeEntrypoint.class)
+                .forEach(ep -> {
+                    try {
+                        ep.onOntimeInitialize(api);
+                    } catch (Exception e) {
+                        OnTimeConstants.LOGGER.warn("OnTime entrypoint failed: {}", ep.getClass().getName(), e);
+                    }
+                });
 
         OnTimeConstants.LOGGER.info("OnTime mod initialized successfully!");
     }

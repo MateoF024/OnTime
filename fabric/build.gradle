@@ -1,24 +1,37 @@
-
 plugins {
     id 'fabric-loom' version '1.13-SNAPSHOT'
 }
 
 def minecraftVer = project.minecraft_version
-def versionType
 
+String versionType
 if (minecraftVer.startsWith("1.20.1")) {
     versionType = "v1.20.1"
-} else if (minecraftVer.startsWith("1.21.1") || minecraftVer.startsWith("1.21.2") || minecraftVer.startsWith("1.21.3") || minecraftVer.startsWith("1.21.4") || minecraftVer.startsWith("1.21.5")) {
+} else if (minecraftVer.startsWith("1.21.1") || minecraftVer.startsWith("1.21.2") ||
+        minecraftVer.startsWith("1.21.3") || minecraftVer.startsWith("1.21.4") ||
+        minecraftVer.startsWith("1.21.5")) {
     versionType = "v1.21.1"
-} else if (minecraftVer.startsWith("1.21.6") || minecraftVer.startsWith("1.21.7") || minecraftVer.startsWith("1.21.8") || minecraftVer.startsWith("1.21.9") || minecraftVer.startsWith("1.21.10")) {
+} else if (minecraftVer.startsWith("1.21.6") || minecraftVer.startsWith("1.21.7") ||
+        minecraftVer.startsWith("1.21.8") || minecraftVer.startsWith("1.21.9") ||
+        minecraftVer.startsWith("1.21.10")) {
     versionType = "v1.21.6"
 } else {
     versionType = "v1.21.1"
 }
 
+def vKey = versionType.replace('.', '_')
+
+def fabricApiVer      = project.findProperty("fabric_api_${vKey}")
+def clothVer          = project.findProperty("cloth_${vKey}")
+def modmenuVer        = project.findProperty("modmenu_${vKey}")
+def placeholderApiVer = project.findProperty("placeholder_api_${vKey}")
+
 base {
-    archivesName = "${project.archives_base_name}+fabric+${project.minecraft_version}"
+    archivesName = "${project.archives_base_name}+fabric+${minecraftVer}"
 }
+
+version = project.mod_version
+group = project.maven_group
 
 loom {
     splitEnvironmentSourceSets()
@@ -58,24 +71,35 @@ sourceSets {
         }
         resources {
             srcDirs = [
-                    "src/${versionType}/client/resources",
-                    'src/client/resources'
+                    'src/client/resources',
+                    "src/${versionType}/client/resources"
             ]
         }
     }
 }
 
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.shedaniel.me/' }
+    maven { url = 'https://maven.terraformersmc.com/' }
+    maven { url = 'https://maven.nucleoid.xyz/' }
+}
+
 dependencies {
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    minecraft "com.mojang:minecraft:${minecraftVer}"
     mappings loom.officialMojangMappings()
 
     modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVer}"
 
-    modApi("me.shedaniel.cloth:cloth-config-fabric:${project.cloth_version}") {
+    modApi("me.shedaniel.cloth:cloth-config-fabric:${clothVer}") {
         exclude(group: "net.fabricmc.fabric-api")
     }
-    modImplementation("com.terraformersmc:modmenu:${project.modmenu_version}")
+    modImplementation("com.terraformersmc:modmenu:${modmenuVer}")
+
+    if (placeholderApiVer) {
+        modCompileOnly "eu.pb4:placeholder-api:${placeholderApiVer}"
+    }
 
     implementation project(path: ':common', configuration: 'namedElements')
     include project(':common')
@@ -83,17 +107,12 @@ dependencies {
 
 processResources {
     inputs.property "version", mod_version
-
     filesMatching("fabric.mod.json") {
         expand "version": mod_version
     }
 }
 
 tasks.withType(Jar) {
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
-tasks.named('processClientResources') {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 

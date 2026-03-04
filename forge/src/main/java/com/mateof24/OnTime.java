@@ -19,6 +19,7 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.fml.event.lifecycle.InterModProcessEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +33,7 @@ public class OnTime {
     public OnTime(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(this::registerPayloads);
+        modEventBus.addListener(this::processIMC);
 
         IEventBus forgeEventBus = NeoForge.EVENT_BUS;
         forgeEventBus.addListener(this::onRegisterCommands);
@@ -110,4 +112,21 @@ public class OnTime {
         TimerManager.getInstance().saveTimers();
         LOGGER.info("Timers saved on server shutdown");
     }
+
+
+    private void processIMC(InterModProcessEvent event) {
+        event.getIMCStream()
+                .filter(msg -> msg.method().equals("register"))
+                .forEach(msg -> {
+                    try {
+                        Object supplier = msg.messageSupplier().get();
+                        if (supplier instanceof com.mateof24.api.OnTimeEntrypoint ep) {
+                            ep.onOntimeInitialize(com.mateof24.api.OnTimeAPI.getInstance());
+                        }
+                    } catch (Exception e) {
+                        LOGGER.warn("OnTime IMC entrypoint failed from mod: {}", msg.senderModId(), e);
+                    }
+                });
+    }
+
 }

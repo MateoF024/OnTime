@@ -19,6 +19,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.fml.event.lifecycle.InterModProcessEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +33,7 @@ public class OnTime {
     public OnTime() {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
         modEventBus.addListener(this::commonSetup);
+        modEventBus.addListener(this::processIMC);
         MinecraftForge.EVENT_BUS.register(this);
     }
 
@@ -112,5 +114,20 @@ public class OnTime {
                     timer.isSilent()
             );
         });
+    }
+
+    private void processIMC(InterModProcessEvent event) {
+        event.getIMCStream()
+                .filter(msg -> msg.method().equals("register"))
+                .forEach(msg -> {
+                    try {
+                        Object supplier = msg.messageSupplier().get();
+                        if (supplier instanceof com.mateof24.api.OnTimeEntrypoint ep) {
+                            ep.onOntimeInitialize(com.mateof24.api.OnTimeAPI.getInstance());
+                        }
+                    } catch (Exception e) {
+                        LOGGER.warn("OnTime IMC entrypoint failed from mod: {}", msg.senderModId(), e);
+                    }
+                });
     }
 }

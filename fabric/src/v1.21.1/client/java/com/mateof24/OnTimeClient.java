@@ -5,6 +5,7 @@ import com.mateof24.render.ClientTimerState;
 import com.mateof24.render.TimerRenderer;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 
 public class OnTimeClient implements ClientModInitializer {

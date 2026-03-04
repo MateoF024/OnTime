@@ -4,11 +4,15 @@ plugins {
     id 'org.spongepowered.mixin' version '0.7.+'
 }
 
-base {
-    archivesName = "${project.archives_base_name}+forge+${project.minecraft_version}"
-}
+def forgeMcVer      = project.forge_mc_version
+def forgeVer        = project.forge_version
+def forgeClothVer   = project.forge_cloth_version
+def forgeMappingVer = project.forge_mapping_version
+def helpSystemVer   = "v1"
 
-def helpSystemVer = project.hasProperty('helpsystem_version') ? project.helpsystem_version : 'v1'
+base {
+    archivesName = "${project.archives_base_name}+forge+${forgeMcVer}"
+}
 
 version = project.mod_version
 group = project.maven_group
@@ -16,7 +20,7 @@ group = project.maven_group
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 minecraft {
-    mappings channel: mapping_channel, version: mapping_version
+    mappings channel: project.mapping_channel, version: forgeMappingVer
 
     runs {
         configureEach {
@@ -69,8 +73,8 @@ repositories {
 }
 
 dependencies {
-    minecraft "net.minecraftforge:forge:1.20.1-47.4.10"
-    implementation fg.deobf("me.shedaniel.cloth:cloth-config-forge:11.1.136")
+    minecraft "net.minecraftforge:forge:${forgeMcVer}-${forgeVer}"
+    implementation fg.deobf("me.shedaniel.cloth:cloth-config-forge:${forgeClothVer}")
     annotationProcessor "org.spongepowered:mixin:0.8.5:processor"
 }
 
@@ -80,7 +84,6 @@ mixin {
     debug.verbose = true
     debug.export = true
 }
-
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
@@ -109,15 +112,14 @@ java {
 jar {
     manifest {
         attributes([
-                'Specification-Title'     : mod_name,
-                'Specification-Vendor'    : 'MateoF24',
-                'Specification-Version'   : '1',
-                'Implementation-Title'    : mod_name,
-                'Implementation-Version'  : mod_version,
-                'Implementation-Vendor'   : 'MateoF24',
-                'MixinConfigs'            : 'ontime.client.mixins.json'
+                'Specification-Title'  : mod_name,
+                'Specification-Vendor' : 'MateoF24',
+                'Specification-Version': '1',
+                'Implementation-Title' : mod_name,
+                'Implementation-Version': mod_version,
+                'Implementation-Vendor': 'MateoF24',
+                'MixinConfigs'         : 'ontime.client.mixins.json'
         ])
     }
-
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
