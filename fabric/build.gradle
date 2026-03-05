@@ -55,9 +55,10 @@ sourceSets {
         }
         resources {
             srcDirs = [
+                    "src/${versionType}/main/resources",
                     'src/main/resources',
-                    '../common/src/main/resources',
-                    "src/${versionType}/main/resources"
+                    '../common/src/main/resources'
+
             ]
         }
     }
@@ -71,8 +72,8 @@ sourceSets {
         }
         resources {
             srcDirs = [
-                    'src/client/resources',
-                    "src/${versionType}/client/resources"
+                    "src/${versionType}/client/resources",
+                    'src/client/resources'
             ]
         }
     }
@@ -110,12 +111,15 @@ processResources {
     filesMatching("fabric.mod.json") {
         expand "version": mod_version
     }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
+tasks.named('processClientResources') {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
 tasks.withType(Jar) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 java {
-    withSourcesJar()
 }

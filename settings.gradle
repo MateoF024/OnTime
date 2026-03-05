@@ -14,7 +14,20 @@ plugins {
 
 rootProject.name = 'ontime'
 
+def minecraftVer = settings.extensions.extraProperties.has('minecraft_version')
+        ? settings.extensions.extraProperties.get('minecraft_version')
+        : new File(rootDir, 'gradle.properties').with { f ->
+    def props = new Properties()
+    f.withInputStream { props.load(it) }
+    props.getProperty('minecraft_version')
+}
+
 include('common')
-include('fabric')
-include('forge')
-include('legacyforge')
+
+if (minecraftVer.startsWith("1.20.1")) {
+    include('fabric')
+    include('legacyforge')
+} else {
+    include('fabric')
+    include('forge')
+}

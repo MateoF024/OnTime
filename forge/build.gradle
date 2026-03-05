@@ -102,7 +102,6 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
     }
-    withSourcesJar()
 }
 
 tasks.named('jar', Jar).configure {

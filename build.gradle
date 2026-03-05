@@ -2,6 +2,8 @@ plugins {
     id 'java'
 }
 
+jar.enabled = false
+
 subprojects {
     apply plugin: 'java'
 
@@ -26,6 +28,14 @@ subprojects {
         } else {
             options.release = 21
         }
-
+     }
+    afterEvaluate {
+        tasks.withType(AbstractArchiveTask).configureEach {
+            if (project.name != 'common'
+                    && !name.toLowerCase().contains('source')
+                    && !archiveClassifier.getOrElse('').toLowerCase().contains('dev')) {
+                destinationDirectory = rootProject.layout.buildDirectory.dir("libs")
+            }
+        }
     }
     }

@@ -87,6 +87,7 @@ mixin {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    options.release = 17
 }
 
 processResources {
@@ -104,7 +105,6 @@ processResources {
 }
 
 java {
-    withSourcesJar()
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
 }
