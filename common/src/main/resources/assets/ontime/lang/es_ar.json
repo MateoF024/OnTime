@@ -107,5 +107,22 @@
   "ontime.help.help.desc": "Mostrar este menú de ayuda",
   "ontime.help.position.desc": "Establecer preset de posición del contador",
   "ontime.help.sound.desc": "Configurar sonido de tick del contador globalmente",
-  "ontime.help.scale.desc": "Establecer escala de visualización del contador globalmente"
+  "ontime.help.scale.desc": "Establecer escala de visualización del contador globalmente",
+  "ontime.command.command.current": "Comando del timer '%s': %s",
+  "ontime.command.command.set": "Comando del timer '%s' actualizado a: %s",
+  "ontime.command.repeat.enabled_infinite": "El timer '%s' se repetirá indefinidamente",
+  "ontime.command.repeat.enabled_count": "El timer '%s' se repetirá %s vez/veces",
+  "ontime.command.repeat.disabled": "Repetición del timer '%s' desactivada",
+  "ontime.help.command.desc": "Ver o modificar el comando que se ejecuta al finalizar un timer",
+  "ontime.help.repeat.desc": "Activa o desactiva el modo repetición de un timer. Indica un número para limitar las repeticiones, o ninguno para infinitas",
+  "ontime.command.sequence.current": "El siguiente timer tras '%s' es: %s",
+  "ontime.command.sequence.set": "Al terminar '%s' se iniciará '%s'",
+  "ontime.command.sequence.cleared": "Secuencia eliminada del timer '%s'",
+  "ontime.command.sequence.self": "Un timer no puede apuntarse a sí mismo en una secuencia",
+  "ontime.command.condition.none": "El timer '%s' no tiene condición de finalización",
+  "ontime.command.condition.current": "Condición del timer '%s': objetivo=%s puntuación>=%s objetivo=%s",
+  "ontime.command.condition.set": "El timer '%s' finalizará cuando '%s' alcance %s en '%s'",
+  "ontime.command.condition.cleared": "Condición de finalización eliminada del timer '%s'",
+  "ontime.help.sequence.desc": "Encadena timers para que el siguiente se inicie automáticamente al terminar el actual",
+  "ontime.help.condition.desc": "Define una condición de scoreboard que finaliza el timer anticipadamente al cumplirse"
 }

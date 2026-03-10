@@ -107,5 +107,22 @@
   "ontime.help.help.desc": "Show this help menu",
   "ontime.help.position.desc": "Set timer display position preset",
   "ontime.help.sound.desc": "Configure timer tick sound globally",
-  "ontime.help.scale.desc": "Set timer display scale globally"
+  "ontime.help.scale.desc": "Set timer display scale globally",
+  "ontime.command.command.current": "Timer '%s' command: %s",
+  "ontime.command.command.set": "Timer '%s' command updated to: %s",
+  "ontime.command.repeat.enabled_infinite": "Timer '%s' will now repeat indefinitely",
+  "ontime.command.repeat.enabled_count": "Timer '%s' will repeat %s time(s)",
+  "ontime.command.repeat.disabled": "Timer '%s' repeat disabled",
+  "ontime.help.command.desc": "View or update the command executed when a timer finishes",
+  "ontime.help.repeat.desc": "Toggle repeat mode for a timer. Use a count to limit repetitions, or no count for infinite",
+  "ontime.command.sequence.current": "Timer '%s' next in sequence: %s",
+  "ontime.command.sequence.set": "Timer '%s' will be followed by '%s'",
+  "ontime.command.sequence.cleared": "Sequence cleared for timer '%s'",
+  "ontime.command.sequence.self": "A timer cannot point to itself in a sequence",
+  "ontime.command.condition.none": "Timer '%s' has no finish condition set",
+  "ontime.command.condition.current": "Timer '%s' condition: objective=%s score>=%s target=%s",
+  "ontime.command.condition.set": "Timer '%s' will finish when '%s' reaches %s for target '%s'",
+  "ontime.command.condition.cleared": "Finish condition cleared for timer '%s'",
+  "ontime.help.sequence.desc": "Chain timers so the next starts automatically when the current one finishes",
+  "ontime.help.condition.desc": "Set a scoreboard condition that finishes the timer early when met"
 }

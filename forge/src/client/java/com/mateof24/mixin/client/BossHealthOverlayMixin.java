@@ -1,6 +1,6 @@
 package com.mateof24.mixin.client;
 
-import com.mateof24.network.ClientTimerState;
+import com.mateof24.render.ClientTimerState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.BossHealthOverlay;
 import org.spongepowered.asm.mixin.Final;

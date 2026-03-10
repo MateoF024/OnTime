@@ -1,6 +1,7 @@
 package com.mateof24.network;
 
 import com.mateof24.config.ModConfig;
+import com.mateof24.render.ClientTimerState;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;

@@ -73,6 +73,67 @@ public class OnTimeAPI {
 
     private TimerInfo toInfo(Timer t) {
         return new TimerInfo(t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
-                t.isCountUp(), t.isRunning(), t.isSilent(), t.getCommand());
+                t.isCountUp(), t.isRunning(), t.isSilent(), t.getCommand(),
+                t.isRepeat(), t.getRepeatCount(), t.getRepeatsDone());
     }
+
+    public boolean setTimerCommand(String name, String command) {
+        return TimerManager.getInstance().setTimerCommand(name, command);
+    }
+
+    public boolean setTimerRepeat(String name, boolean repeat, int count) {
+        return TimerManager.getInstance().getTimer(name).map(t -> {
+            t.setRepeat(repeat);
+            t.setRepeatCount(count);
+            TimerManager.getInstance().saveTimers();
+            return true;
+        }).orElse(false);
+    }
+
+    public static final String SCOREBOARD_OBJECTIVE = "ontime_active";
+
+    public String getScoreboardObjectiveName() {
+        return SCOREBOARD_OBJECTIVE;
+    }
+
+    public void registerOnStart(java.util.function.Consumer<TimerInfo> listener) {
+        com.mateof24.event.TimerEventBus.registerOnStart(listener);
+    }
+    public void registerOnFinish(java.util.function.Consumer<TimerInfo> listener) {
+        com.mateof24.event.TimerEventBus.registerOnFinish(listener);
+    }
+    public void registerOnPause(java.util.function.Consumer<TimerInfo> listener) {
+        com.mateof24.event.TimerEventBus.registerOnPause(listener);
+    }
+    public void registerOnResume(java.util.function.Consumer<TimerInfo> listener) {
+        com.mateof24.event.TimerEventBus.registerOnResume(listener);
+    }
+    public void registerOnTick(java.util.function.Consumer<TimerInfo> listener) {
+        com.mateof24.event.TimerEventBus.registerOnTick(listener);
+    }
+
+    public void registerFinishCondition(String timerName, java.util.function.Supplier<Boolean> condition) {
+        com.mateof24.event.TimerConditionRegistry.register(timerName, condition);
+    }
+
+    public void unregisterFinishCondition(String timerName) {
+        com.mateof24.event.TimerConditionRegistry.unregister(timerName);
+    }
+
+    public void setPermissionProvider(com.mateof24.permission.PermissionHelper.IPermissionProvider provider) {
+        com.mateof24.permission.PermissionHelper.setProvider(provider);
+    }
+
+    public void startWebSocket(int port) {
+        com.mateof24.websocket.TimerWebSocketServer.getInstance().start(port);
+    }
+
+    public void stopWebSocket() {
+        com.mateof24.websocket.TimerWebSocketServer.getInstance().stop();
+    }
+
+    public boolean isWebSocketRunning() {
+        return com.mateof24.websocket.TimerWebSocketServer.getInstance().isRunning();
+    }
+
 }

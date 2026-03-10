@@ -1,5 +1,5 @@
 package com.mateof24.api;
 
 public interface OnTimeEntrypoint {
-    void onOntimeInitialize(OnTimeAPI api);
+    void onOntimeInitialize(com.mateof24.api.OnTimeAPI api);
 }

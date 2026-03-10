@@ -52,6 +52,10 @@ public class OnTime {
         ModConfig.onSaveHook = () -> Services.PLATFORM.sendDisplayConfigPacketToAll(serverInstance);
 
         TimerManager.getInstance().loadTimers();
+        if (ModConfig.getInstance().isWebSocketEnabled()) {
+            com.mateof24.websocket.TimerWebSocketServer.getInstance()
+                    .start(ModConfig.getInstance().getWebSocketPort());
+        }
         TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
             if (timer.wasRunningBeforeShutdown()) {
                 timer.setRunning(true);
@@ -68,6 +72,7 @@ public class OnTime {
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
+        com.mateof24.websocket.TimerWebSocketServer.getInstance().stop();
         ModConfig.onSaveHook = null;
         serverInstance = null;
 

@@ -67,6 +67,9 @@ public class TimerManager {
         timer.setRunning(true);
         activeTimer = timer;
         saveTimers();
+
+        getTimer(name).ifPresent(t ->
+                com.mateof24.event.TimerEventBus.fireOnStart(toInfo(t)));
         return true;
     }
 
@@ -98,6 +101,14 @@ public class TimerManager {
         }
 
         timer.addTime(hours, minutes, seconds);
+        saveTimers();
+        return true;
+    }
+
+    public boolean setTimerCommand(String name, String command) {
+        Timer timer = timers.get(name);
+        if (timer == null) return false;
+        timer.setCommand(command);
         saveTimers();
         return true;
     }
@@ -189,5 +200,11 @@ public class TimerManager {
             return false;
         }
         return true;
+    }
+
+    private com.mateof24.api.TimerInfo toInfo(Timer t) {
+        return new com.mateof24.api.TimerInfo(t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
+                t.isCountUp(), t.isRunning(), t.isSilent(), t.getCommand(),
+                t.isRepeat(), t.getRepeatCount(), t.getRepeatsDone());
     }
 }

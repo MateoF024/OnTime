@@ -3,6 +3,7 @@ package com.mateof24.tick;
 import com.mateof24.manager.TimerManager;
 import com.mateof24.platform.Services;
 import com.mateof24.timer.Timer;
+import com.mateof24.storage.TimerLogger;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -17,18 +18,24 @@ public class TimerTickHandler {
 
     public static void tick(MinecraftServer server) {
         Optional<Timer> activeTimerOpt = TimerManager.getInstance().getActiveTimer();
-
-        if (activeTimerOpt.isEmpty()) {
-            return;
-        }
+        if (activeTimerOpt.isEmpty()) return;
 
         Timer activeTimer = activeTimerOpt.get();
-
-        if (!activeTimer.isRunning()) {
-            return;
-        }
+        if (!activeTimer.isRunning()) return;
 
         boolean finished = activeTimer.tick();
+
+        if (!finished && activeTimer.hasCondition()) {
+            finished = checkScoreboardCondition(server, activeTimer);
+        }
+
+        if (!finished && activeTimer.hasCondition()) {
+            finished = checkScoreboardCondition(server, activeTimer);
+        }
+
+        if (!finished && com.mateof24.event.TimerConditionRegistry.hasCondition(activeTimer.getName())) {
+            finished = com.mateof24.event.TimerConditionRegistry.evaluate(activeTimer.getName());
+        }
 
         syncCounter++;
         if (syncCounter >= SYNC_INTERVAL) {
@@ -36,13 +43,43 @@ public class TimerTickHandler {
             syncTimerToClients(server, activeTimer);
         }
 
+        Services.PLATFORM.updateScoreboardTimer(server,
+                activeTimer.getName(),
+                activeTimer.getCurrentTicks() / 20L,
+                activeTimer.getTargetTicks() / 20L);
+
+        if (syncCounter == 0) {
+            com.mateof24.event.TimerEventBus.fireOnTick(toInfo(activeTimer));
+        }
+
         if (finished) {
             TimerManager.getInstance().reloadCommandsFromDisk();
+            TimerLogger.logFinish(activeTimer);
+            com.mateof24.event.TimerEventBus.fireOnFinish(toInfo(activeTimer));
             executeTimerCommand(server, activeTimer);
-            activeTimer.reset();
-            TimerManager.getInstance().clearActiveTimer();
-            TimerManager.getInstance().saveTimers();
-            Services.PLATFORM.sendTimerSyncPacket(server, "", 0, 0, false, false, false);
+
+            if (activeTimer.shouldRepeatAgain()) {
+                activeTimer.incrementRepeatsDone();
+                activeTimer.reset();
+                activeTimer.setRunning(true);
+                TimerManager.getInstance().saveTimers();
+                syncTimerToClients(server, activeTimer);
+            } else {
+                String nextTimerName = activeTimer.getNextTimer();
+                activeTimer.resetRepeatsDone();
+                activeTimer.reset();
+                TimerManager.getInstance().clearActiveTimer();
+                TimerManager.getInstance().saveTimers();
+
+                if (nextTimerName != null && TimerManager.getInstance().hasTimer(nextTimerName)) {
+                    TimerManager.getInstance().startTimer(nextTimerName);
+                    TimerManager.getInstance().getTimer(nextTimerName).ifPresent(next ->
+                            syncTimerToClients(server, next));
+                } else {
+                    Services.PLATFORM.clearScoreboardTimer(server);
+                    Services.PLATFORM.sendTimerSyncPacket(server, "", 0, 0, false, false, false);
+                }
+            }
         }
     }
 
@@ -88,5 +125,23 @@ public class TimerTickHandler {
         } catch (Exception e) {
             com.mateof24.OnTimeConstants.LOGGER.error("Failed to execute timer command: " + processedCommand, e);
         }
+    }
+
+    private static boolean checkScoreboardCondition(MinecraftServer server, Timer timer) {
+        try {
+            return Services.PLATFORM.checkScoreboardCondition(server,
+                    timer.getConditionObjective(),
+                    timer.getConditionScore(),
+                    timer.getConditionTarget());
+        } catch (Exception e) {
+            com.mateof24.OnTimeConstants.LOGGER.warn("Failed to evaluate scoreboard condition for timer '{}'", timer.getName(), e);
+            return false;
+        }
+    }
+
+    private static com.mateof24.api.TimerInfo toInfo(Timer t) {
+        return new com.mateof24.api.TimerInfo(t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
+                t.isCountUp(), t.isRunning(), t.isSilent(), t.getCommand(),
+                t.isRepeat(), t.getRepeatCount(), t.getRepeatsDone());
     }
 }

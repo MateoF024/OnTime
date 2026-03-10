@@ -7,7 +7,10 @@ public record TimerInfo(
         boolean countUp,
         boolean running,
         boolean silent,
-        String command
+        String command,
+        boolean repeat,
+        int repeatCount,
+        int repeatsDone
 ) {
     public long getCurrentSeconds() { return currentTicks / 20L; }
     public long getTargetSeconds() { return targetTicks / 20L; }

@@ -39,6 +39,10 @@ public class OnTime implements ModInitializer {
             ModConfig.onSaveHook = () -> Services.PLATFORM.sendDisplayConfigPacketToAll(serverInstance);
 
             TimerManager.getInstance().loadTimers();
+            if (ModConfig.getInstance().isWebSocketEnabled()) {
+                com.mateof24.websocket.TimerWebSocketServer.getInstance()
+                        .start(ModConfig.getInstance().getWebSocketPort());
+            }
             TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
                 if (timer.wasRunningBeforeShutdown()) {
                     timer.setRunning(true);
@@ -73,6 +77,7 @@ public class OnTime implements ModInitializer {
         });
 
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            com.mateof24.websocket.TimerWebSocketServer.getInstance().stop();
             ModConfig.onSaveHook = null;
             serverInstance = null;
 

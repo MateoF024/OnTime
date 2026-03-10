@@ -41,6 +41,8 @@ public class ModConfig {
     private String timerSoundId = "minecraft:block.note_block.hat";
     private float timerSoundVolume = 1.0f;
     private float timerSoundPitch = 2.0f;
+    private boolean webSocketEnabled = false;
+    private int webSocketPort = 8765;
 
 
     // Función para cargar parámetros
@@ -76,9 +78,12 @@ public class ModConfig {
             if (root.has("timerSoundId")) timerSoundId = root.get("timerSoundId").getAsString();
             if (root.has("timerSoundVolume")) timerSoundVolume = root.get("timerSoundVolume").getAsFloat();
             if (root.has("timerSoundPitch")) timerSoundPitch = root.get("timerSoundPitch").getAsFloat();
+            if (root.has("webSocketEnabled")) webSocketEnabled = root.get("webSocketEnabled").getAsBoolean();
+            if (root.has("webSocketPort")) webSocketPort = root.get("webSocketPort").getAsInt();
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to load config", e);
         }
+
     }
 
     // Función para guardar parámetros
@@ -99,6 +104,8 @@ public class ModConfig {
             root.addProperty("timerSoundId", timerSoundId);
             root.addProperty("timerSoundVolume", timerSoundVolume);
             root.addProperty("timerSoundPitch", timerSoundPitch);
+            root.addProperty("webSocketEnabled", webSocketEnabled);
+            root.addProperty("webSocketPort", webSocketPort);
             try (FileWriter writer = new FileWriter(CONFIG_FILE.toFile())) {
                 GSON.toJson(root, writer);
             }
@@ -221,5 +228,10 @@ public class ModConfig {
         this.timerSoundPitch = pitch;
         save();
     }
+
+    public boolean isWebSocketEnabled() { return webSocketEnabled; }
+    public void setWebSocketEnabled(boolean enabled) { this.webSocketEnabled = enabled; save(); }
+    public int getWebSocketPort() { return webSocketPort; }
+    public void setWebSocketPort(int port) { this.webSocketPort = port; save(); }
 
 }

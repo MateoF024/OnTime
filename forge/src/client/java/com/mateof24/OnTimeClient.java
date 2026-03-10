@@ -2,7 +2,7 @@ package com.mateof24;
 
 
 import com.mateof24.config.ConfigScreen;
-import com.mateof24.network.ClientTimerState;
+import com.mateof24.render.ClientTimerState;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;

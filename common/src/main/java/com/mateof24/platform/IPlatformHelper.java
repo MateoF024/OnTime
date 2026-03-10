@@ -16,4 +16,7 @@ public interface IPlatformHelper {
     default void sendDisplayConfigPacket(ServerPlayer player) {}
     default void sendDisplayConfigPacketToAll(MinecraftServer server) {}
     void registerPackets();
+    boolean checkScoreboardCondition(MinecraftServer server, String objective, int score, String target);
+    void updateScoreboardTimer(MinecraftServer server, String timerName, long currentSeconds, long targetSeconds);
+    void clearScoreboardTimer(MinecraftServer server);
 }

@@ -6,6 +6,8 @@ import com.mateof24.config.ModConfig;
 import com.mateof24.manager.TimerManager;
 import com.mateof24.storage.PlayerPreferences;
 import com.mateof24.timer.Timer;
+import com.mateof24.permission.PermissionHelper;
+import com.mateof24.permission.PermissionNodes;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -54,9 +56,9 @@ public class TimerCommands {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("timer").requires(source ->
-                                source.hasPermission(4)
-                        )
+                        PermissionHelper.hasPermission(source, "ontime.command", 4))
                 .then(Commands.literal("create")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_CREATE, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .then(Commands.argument("hours", IntegerArgumentType.integer(0))
                                         .then(Commands.argument("minutes", IntegerArgumentType.integer(0, 59))
@@ -80,6 +82,7 @@ public class TimerCommands {
                         )
                 )
                 .then(Commands.literal("set")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SET, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
                                 .then(Commands.argument("hours", IntegerArgumentType.integer(0))
@@ -92,21 +95,25 @@ public class TimerCommands {
                         )
                 )
                 .then(Commands.literal("start")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_START, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
                                 .executes(TimerCommands::startTimer)
                         )
                 )
                 .then(Commands.literal("pause")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_PAUSE, 4))
                         .executes(TimerCommands::pauseTimer)
                 )
                 .then(Commands.literal("remove")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_REMOVE, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
                                 .executes(TimerCommands::removeTimer)
                         )
                 )
                 .then(Commands.literal("add")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_ADD, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
                                 .then(Commands.argument("hours", IntegerArgumentType.integer(0))
@@ -119,26 +126,29 @@ public class TimerCommands {
                         )
                 )
                 .then(Commands.literal("list")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_LIST, 4))
                         .executes(TimerCommands::listTimers)
                 )
                 .then(Commands.literal("silent")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SILENT, 4))
                         .executes(TimerCommands::toggleSilentSelf)
                         .then(Commands.argument("targets", EntityArgument.players())
                                 .executes(TimerCommands::toggleSilentTargets)
                         )
                 )
                 .then(Commands.literal("hide")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_HIDE, 4))
                         .executes(TimerCommands::toggleHideSelf)
                         .then(Commands.argument("targets", net.minecraft.commands.arguments.EntityArgument.players())
                                 .executes(TimerCommands::toggleHideTargets)
                         )
                 )
                 .then(Commands.literal("stop")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_STOP, 4))
                         .executes(TimerCommands::stopTimer)
                 )
-                .then(Commands.literal("reset").requires(source ->
-                                        source.hasPermission(4)
-                                )
+                .then(Commands.literal("reset")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_RESET, 4))
                         .executes(TimerCommands::resetCurrentTimer)
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
@@ -146,6 +156,7 @@ public class TimerCommands {
                         )
                 )
                 .then(Commands.literal("help")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_HELP, 4))
                         .executes(ctx -> HelpSystem.showHelpPage(ctx.getSource(), 1))
                         .then(Commands.argument("pageOrCommand", StringArgumentType.word())
                                 .executes(ctx -> {
@@ -160,13 +171,13 @@ public class TimerCommands {
                         )
                 )
                 .then(Commands.literal("position")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_POSITION, 4))
                         .then(Commands.argument("preset", StringArgumentType.word())
                                 .suggests((context, builder) -> {
                                     for (TimerPositionPreset preset : TimerPositionPreset.values()) {
                                         String presetName = preset.name().toLowerCase();
-                                        if (presetName.startsWith(builder.getRemaining().toLowerCase())) {
+                                        if (presetName.startsWith(builder.getRemaining().toLowerCase()))
                                             builder.suggest(presetName);
-                                        }
                                     }
                                     return builder.buildFuture();
                                 })
@@ -174,6 +185,7 @@ public class TimerCommands {
                         )
                 )
                 .then(Commands.literal("sound")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SOUND, 4))
                         .then(Commands.argument("soundId", ResourceLocationArgument.id())
                                 .suggests((context, builder) ->
                                         SharedSuggestionProvider.suggestResource(
@@ -192,9 +204,90 @@ public class TimerCommands {
                                         )
                                 )
                         )
-                ).then(Commands.literal("scale")
+                )
+                .then(Commands.literal("scale")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SCALE, 4))
                         .then(Commands.argument("scale", FloatArgumentType.floatArg(0.1f, 5.0f))
                                 .executes(ctx -> setScale(ctx, FloatArgumentType.getFloat(ctx, "scale")))
+                        )
+                )
+                .then(Commands.literal("command")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_COMMAND, 4))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(TimerCommands::viewTimerCommand)
+                                .then(Commands.argument("command", StringArgumentType.greedyString())
+                                        .executes(ctx -> updateTimerCommand(ctx,
+                                                StringArgumentType.getString(ctx, "command")))
+                                )
+                        )
+                )
+                .then(Commands.literal("repeat")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_REPEAT, 4))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(TimerCommands::toggleRepeatInfinite)
+                                .then(Commands.argument("count", IntegerArgumentType.integer(0))
+                                        .executes(ctx -> setRepeatCount(ctx,
+                                                IntegerArgumentType.getInteger(ctx, "count")))
+                                )
+                        )
+                )
+                .then(Commands.literal("sequence")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SEQUENCE, 4))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(TimerCommands::viewSequence)
+                                .then(Commands.literal("clear")
+                                        .executes(TimerCommands::clearSequence)
+                                )
+                                .then(Commands.argument("nextName", StringArgumentType.word())
+                                        .suggests(TIMER_SUGGESTIONS)
+                                        .executes(ctx -> setSequence(ctx,
+                                                StringArgumentType.getString(ctx, "nextName")))
+                                )
+                        )
+                )
+                .then(Commands.literal("condition")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_CONDITION, 4))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(TimerCommands::viewCondition)
+                                .then(Commands.literal("clear")
+                                        .executes(TimerCommands::clearCondition)
+                                )
+                                .then(Commands.argument("objective", StringArgumentType.word())
+                                        .suggests((ctx, builder) -> {
+                                            ctx.getSource().getServer().getScoreboard().getObjectives()
+                                                    .forEach(obj -> {
+                                                        if (obj.getName().toLowerCase().startsWith(builder.getRemaining().toLowerCase()))
+                                                            builder.suggest(obj.getName());
+                                                    });
+                                            return builder.buildFuture();
+                                        })
+                                        .then(Commands.argument("score", IntegerArgumentType.integer(0))
+                                                .executes(ctx -> setCondition(ctx,
+                                                        StringArgumentType.getString(ctx, "objective"),
+                                                        IntegerArgumentType.getInteger(ctx, "score"),
+                                                        "*"))
+                                                .then(Commands.argument("target", StringArgumentType.word())
+                                                        .suggests((ctx, builder) -> {
+                                                            String remaining = builder.getRemaining().toLowerCase();
+                                                            if ("*".startsWith(remaining)) builder.suggest("*");
+                                                            ctx.getSource().getServer().getPlayerList().getPlayers()
+                                                                    .forEach(p -> {
+                                                                        if (p.getScoreboardName().toLowerCase().startsWith(remaining))
+                                                                            builder.suggest(p.getScoreboardName());
+                                                                    });
+                                                            return builder.buildFuture();
+                                                        })
+                                                        .executes(ctx -> setCondition(ctx,
+                                                                StringArgumentType.getString(ctx, "objective"),
+                                                                IntegerArgumentType.getInteger(ctx, "score"),
+                                                                StringArgumentType.getString(ctx, "target")))
+                                                )
+                                        )
+                                )
                         )
                 )
         );
@@ -367,6 +460,11 @@ public class TimerCommands {
             timer.setRunning(false);
             TimerManager.getInstance().saveTimers();
 
+            com.mateof24.event.TimerEventBus.fireOnPause(
+                    new com.mateof24.api.TimerInfo(timer.getName(), timer.getCurrentTicks(), timer.getTargetTicks(),
+                            timer.isCountUp(), false, timer.isSilent(), timer.getCommand(),
+                            timer.isRepeat(), timer.getRepeatCount(), timer.getRepeatsDone()));
+
             ctx.getSource().sendSuccess(() ->
                     Component.translatable("ontime.command.pause.success", timer.getName()), true);
 
@@ -384,6 +482,11 @@ public class TimerCommands {
             TimerManager.getInstance().reloadCommandsFromDisk();
             timer.setRunning(true);
             TimerManager.getInstance().saveTimers();
+
+            com.mateof24.event.TimerEventBus.fireOnResume(
+                    new com.mateof24.api.TimerInfo(timer.getName(), timer.getCurrentTicks(), timer.getTargetTicks(),
+                            timer.isCountUp(), true, timer.isSilent(), timer.getCommand(),
+                            timer.isRepeat(), timer.getRepeatCount(), timer.getRepeatsDone()));
 
             ctx.getSource().sendSuccess(() ->
                     Component.translatable("ontime.command.resume.success", timer.getName()), true);
@@ -636,6 +739,7 @@ public class TimerCommands {
         }
 
         Timer timer = activeTimer.get();
+        timer.resetRepeatsDone();
         timer.reset();
         TimerManager.getInstance().clearActiveTimer();
         TimerManager.getInstance().saveTimers();
@@ -749,6 +853,183 @@ public class TimerCommands {
         ModConfig.getInstance().setTimerScale(scale);
         ctx.getSource().sendSuccess(() ->
                 Component.translatable("ontime.command.scale.success", scale), true);
+        return 1;
+    }
+
+    private static int viewTimerCommand(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        String command = timerOpt.get().getCommand();
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.command.current", name,
+                        command != null && !command.isEmpty() ? command : "(none)"), false);
+        return 1;
+    }
+
+    private static int updateTimerCommand(CommandContext<CommandSourceStack> ctx, String command) {
+        String name = StringArgumentType.getString(ctx, "name");
+
+        if (!command.isEmpty()) {
+            com.mateof24.validation.CommandValidator.ValidationResult validation =
+                    com.mateof24.validation.CommandValidator.validate(command);
+            if (!validation.isValid()) {
+                ctx.getSource().sendFailure(validation.getErrorMessage());
+                return 0;
+            }
+        }
+
+        if (TimerManager.getInstance().setTimerCommand(name, command)) {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.command.set", name, command), true);
+            return 1;
+        }
+        ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+        return 0;
+    }
+
+    private static int toggleRepeatInfinite(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        Timer timer = timerOpt.get();
+        boolean newRepeat = !timer.isRepeat();
+        timer.setRepeat(newRepeat);
+        if (newRepeat) timer.setRepeatCount(-1);
+        TimerManager.getInstance().saveTimers();
+        ctx.getSource().sendSuccess(() -> Component.translatable(
+                newRepeat ? "ontime.command.repeat.enabled_infinite"
+                        : "ontime.command.repeat.disabled", name), true);
+        return 1;
+    }
+
+    private static int setRepeatCount(CommandContext<CommandSourceStack> ctx, int count) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        Timer timer = timerOpt.get();
+        if (count == 0) {
+            timer.setRepeat(false);
+            timer.setRepeatCount(0);
+            TimerManager.getInstance().saveTimers();
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.repeat.disabled", name), true);
+        } else {
+            timer.setRepeat(true);
+            timer.setRepeatCount(count);
+            TimerManager.getInstance().saveTimers();
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.repeat.enabled_count", name, count), true);
+        }
+        return 1;
+    }
+
+    private static int viewSequence(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        String next = timerOpt.get().getNextTimer();
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.sequence.current", name,
+                        next != null ? next : "(none)"), false);
+        return 1;
+    }
+
+    private static int setSequence(CommandContext<CommandSourceStack> ctx, String nextName) {
+        String name = StringArgumentType.getString(ctx, "name");
+        if (name.equals(nextName)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.sequence.self"));
+            return 0;
+        }
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        if (!TimerManager.getInstance().hasTimer(nextName)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", nextName));
+            return 0;
+        }
+        timerOpt.get().setNextTimer(nextName);
+        TimerManager.getInstance().saveTimers();
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.sequence.set", name, nextName), true);
+        return 1;
+    }
+
+    private static int clearSequence(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        timerOpt.get().setNextTimer(null);
+        TimerManager.getInstance().saveTimers();
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.sequence.cleared", name), true);
+        return 1;
+    }
+
+    private static int viewCondition(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        Timer timer = timerOpt.get();
+        if (!timer.hasCondition()) {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.condition.none", name), false);
+        } else {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.condition.current",
+                            name, timer.getConditionObjective(),
+                            timer.getConditionScore(), timer.getConditionTarget()), false);
+        }
+        return 1;
+    }
+
+    private static int setCondition(CommandContext<CommandSourceStack> ctx,
+                                    String objective, int score, String target) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        timerOpt.get().setCondition(objective, score, target);
+        TimerManager.getInstance().saveTimers();
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.condition.set",
+                        name, objective, score, target), true);
+        return 1;
+    }
+
+    private static int clearCondition(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        timerOpt.get().clearCondition();
+        TimerManager.getInstance().saveTimers();
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.condition.cleared", name), true);
         return 1;
     }
 }

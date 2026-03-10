@@ -162,6 +162,42 @@ public class HelpSystem {
                 "/timer scale 0.8"
         ));
 
+        HELP_ENTRIES.add(new HelpEntry(
+                "command",
+                "ontime.help.command.desc",
+                "/timer command <name> [command]",
+                "/timer command speedrun",
+                "/timer command speedrun say {name} finished in {time}!",
+                "/timer command event title @a [{\"text\":\"\"}] [{\"text\":\"Event over!\"}]"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "repeat",
+                "ontime.help.repeat.desc",
+                "/timer repeat <name> [count]",
+                "/timer repeat speedrun",
+                "/timer repeat event 3",
+                "/timer repeat event 0"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "sequence",
+                "ontime.help.sequence.desc",
+                "/timer sequence <name> [nextName|clear]",
+                "/timer sequence round1 round2",
+                "/timer sequence round1",
+                "/timer sequence round1 clear"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "condition",
+                "ontime.help.condition.desc",
+                "/timer condition <name> <objective> <score> [target|clear]",
+                "/timer condition event kills 10",
+                "/timer condition event kills 10 PlayerName",
+                "/timer condition event clear"
+        ));
+
     }
 
     /**

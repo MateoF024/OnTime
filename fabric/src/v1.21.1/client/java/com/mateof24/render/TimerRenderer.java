@@ -35,6 +35,12 @@ public class TimerRenderer {
             if (x == -1) x = (screenWidth - textWidth) / 2;
         }
 
+        if (com.mateof24.render.TimerRendererRegistry.hasCustomRenderer()) {
+            com.mateof24.render.TimerRendererRegistry.getCustomRenderer()
+                    .render(graphics, 0f, timeText, ClientTimerState.getPercentage(), x, y, scale);
+            return;
+        }
+
         int shadowColor = 0xFF000000;
         int mainColor = 0xFF000000 | textColor;
 

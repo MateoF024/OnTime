@@ -1,4 +1,4 @@
-package com.mateof24.network;
+package com.mateof24.render;
 
 import com.mateof24.config.TimerPositionPreset;
 import net.minecraft.client.Minecraft;
@@ -44,11 +44,13 @@ public class ClientTimerState {
         displaySoundId = soundId; displaySoundVolume = soundVolume; displaySoundPitch = soundPitch;
     }
 
-    public static void updateTimer(String name, long current, long target, boolean up, boolean run, boolean sil, long servTick) {
+    public static void updateTimer(String name, long current, long target, boolean up,
+                                   boolean run, boolean sil, long servTick) {
         boolean isFirstUpdate = timerName.isEmpty() || !timerName.equals(name);
         timerName = name; currentTicks = current; targetTicks = target;
         countUp = up; running = run; silent = sil; serverTick = servTick;
-        clientTickAtSync = Minecraft.getInstance().level != null ? Minecraft.getInstance().level.getGameTime() : 0;
+        clientTickAtSync = Minecraft.getInstance().level != null
+                ? Minecraft.getInstance().level.getGameTime() : 0;
         if (isFirstUpdate || !running) lastSecond = current / 20L;
         pausedTicks = 0; wasPaused = false;
     }
@@ -79,11 +81,14 @@ public class ClientTimerState {
         lastSecond = currentSecond;
     }
 
+    protected static ResourceLocation parseSound(String id) {
+        return ResourceLocation.tryParse(id);
+    }
+
     private static void playTimerSound() {
         Minecraft mc = Minecraft.getInstance();
         try {
-            ResourceLocation soundLocation = ResourceLocation.parse(displaySoundId);
-            SoundEvent soundEvent = SoundEvent.createVariableRangeEvent(soundLocation);
+            SoundEvent soundEvent = SoundEvent.createVariableRangeEvent(parseSound(displaySoundId));
             mc.level.playLocalSound(mc.player.getX(), mc.player.getY(), mc.player.getZ(),
                     soundEvent, SoundSource.MASTER, displaySoundVolume, displaySoundPitch, false);
         } catch (Exception e) {
@@ -97,10 +102,8 @@ public class ClientTimerState {
         Minecraft mc = Minecraft.getInstance();
         if (mc.isPaused() && wasPaused) return pausedTicks;
         if (!running) return currentTicks;
-
         long currentClientTick = mc.level != null ? mc.level.getGameTime() : 0;
         long ticksSinceSync = Math.max(0, Math.min(currentClientTick - clientTickAtSync, 40));
-
         if (countUp) return Math.min(currentTicks + ticksSinceSync, targetTicks);
         else return Math.max(currentTicks - ticksSinceSync, 0);
     }

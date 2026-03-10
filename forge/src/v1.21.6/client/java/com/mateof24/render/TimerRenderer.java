@@ -1,7 +1,7 @@
 package com.mateof24.render;
 
 import com.mateof24.config.TimerPositionPreset;
-import com.mateof24.network.ClientTimerState;
+import com.mateof24.render.ClientTimerState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 
@@ -33,6 +33,12 @@ public class TimerRenderer {
             x = preset.calculateX(screenWidth, textWidth, ClientTimerState.getDisplayX());
             y = preset.calculateY(screenHeight, textHeight, ClientTimerState.getDisplayY());
             if (x == -1) x = (screenWidth - textWidth) / 2;
+        }
+
+        if (com.mateof24.render.TimerRendererRegistry.hasCustomRenderer()) {
+            com.mateof24.render.TimerRendererRegistry.getCustomRenderer()
+                    .render(graphics, 0f, timeText, ClientTimerState.getPercentage(), x, y, scale);
+            return;
         }
 
         int shadowColor = 0xFF000000;

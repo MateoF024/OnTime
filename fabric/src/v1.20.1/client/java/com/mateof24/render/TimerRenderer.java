@@ -35,6 +35,12 @@ public class TimerRenderer {
             if (x == -1) x = (screenWidth - textWidth) / 2;
         }
 
+        if (com.mateof24.render.TimerRendererRegistry.hasCustomRenderer()) {
+            com.mateof24.render.TimerRendererRegistry.getCustomRenderer()
+                    .render(graphics, 0f, timeText, ClientTimerState.getPercentage(), x, y, scale);
+            return;
+        }
+
         PoseStack poseStack = graphics.pose();
         poseStack.pushPose();
         poseStack.translate(x, y, 0);

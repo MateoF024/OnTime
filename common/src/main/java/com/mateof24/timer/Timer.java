@@ -11,6 +11,13 @@ public class Timer {
     private String command;
     private boolean silent;
     private boolean wasRunningBeforeShutdown;
+    private boolean repeat = false;
+    private int repeatCount = -1;
+    private int repeatsDone = 0;
+    private String nextTimer = null;
+    private String conditionObjective = null;
+    private int conditionScore = 0;
+    private String conditionTarget = "*";
 
     public Timer(String name, int hours, int minutes, int seconds, boolean countUp) {
         this.name = name;
@@ -85,6 +92,13 @@ public class Timer {
         json.addProperty("command", command != null ? command : "");
         json.addProperty("silent", silent);
         json.addProperty("wasRunningBeforeShutdown", wasRunningBeforeShutdown);
+        json.addProperty("repeat", repeat);
+        json.addProperty("repeatCount", repeatCount);
+        json.addProperty("repeatsDone", repeatsDone);
+        json.addProperty("nextTimer", nextTimer != null ? nextTimer : "");
+        json.addProperty("conditionObjective", conditionObjective != null ? conditionObjective : "");
+        json.addProperty("conditionScore", conditionScore);
+        json.addProperty("conditionTarget", conditionTarget != null ? conditionTarget : "*");
         return json;
     }
 
@@ -107,7 +121,15 @@ public class Timer {
         timer.silent = json.has("silent") && json.get("silent").getAsBoolean();
         timer.wasRunningBeforeShutdown = json.has("wasRunningBeforeShutdown")
                 && json.get("wasRunningBeforeShutdown").getAsBoolean();
-
+        timer.repeat = json.has("repeat") && json.get("repeat").getAsBoolean();
+        timer.repeatCount = json.has("repeatCount") ? json.get("repeatCount").getAsInt() : -1;
+        timer.repeatsDone = json.has("repeatsDone") ? json.get("repeatsDone").getAsInt() : 0;
+        timer.nextTimer = json.has("nextTimer") ? json.get("nextTimer").getAsString() : "";
+        if (timer.nextTimer.isEmpty()) timer.nextTimer = null;
+        String condObj = json.has("conditionObjective") ? json.get("conditionObjective").getAsString() : "";
+        timer.conditionObjective = condObj.isEmpty() ? null : condObj;
+        timer.conditionScore = json.has("conditionScore") ? json.get("conditionScore").getAsInt() : 0;
+        timer.conditionTarget = json.has("conditionTarget") ? json.get("conditionTarget").getAsString() : "*";
         return timer;
     }
 
@@ -124,4 +146,34 @@ public class Timer {
     public void setSilent(boolean silent) { this.silent = silent; }
     public boolean wasRunningBeforeShutdown() { return wasRunningBeforeShutdown; }
     public void setWasRunningBeforeShutdown(boolean was) { this.wasRunningBeforeShutdown = was; }
+    public boolean isRepeat() { return repeat; }
+    public void setRepeat(boolean repeat) { this.repeat = repeat; }
+    public int getRepeatCount() { return repeatCount; }
+    public void setRepeatCount(int count) { this.repeatCount = count; }
+    public int getRepeatsDone() { return repeatsDone; }
+    public void incrementRepeatsDone() { repeatsDone++; }
+    public void resetRepeatsDone() { repeatsDone = 0; }
+    public boolean shouldRepeatAgain() {
+        if (!repeat) return false;
+        if (repeatCount == -1) return true;
+        return repeatsDone < repeatCount;
+    }
+    public String getNextTimer() { return nextTimer; }
+    public void setNextTimer(String nextTimer) {
+        this.nextTimer = (nextTimer == null || nextTimer.isEmpty()) ? null : nextTimer;
+    }
+    public String getConditionObjective() { return conditionObjective; }
+    public int getConditionScore() { return conditionScore; }
+    public String getConditionTarget() { return conditionTarget; }
+    public boolean hasCondition() { return conditionObjective != null && !conditionObjective.isEmpty(); }
+    public void setCondition(String objective, int score, String target) {
+        this.conditionObjective = objective;
+        this.conditionScore = score;
+        this.conditionTarget = (target == null || target.isEmpty()) ? "*" : target;
+    }
+    public void clearCondition() {
+        this.conditionObjective = null;
+        this.conditionScore = 0;
+        this.conditionTarget = "*";
+    }
 }
