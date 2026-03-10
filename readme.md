@@ -4,10 +4,10 @@ A powerful and flexible timer mod for Minecraft. Create custom timers with on-sc
 
 <div align="center">
 
-[![Modrinth Downloads](https://img.shields.io/modrinth/dt/ontime?style=for-the-badge&logo=modrinth&label=Downloads&color=00AF5C&logoColor=white)](https://modrinth.com/mod/ontime)
+[![Modrinth Downloads](https://img.shields.io/modrinth/dt/ontime?style=for-the-badge&logo=modrinth&label=Modrinth&color=00AF5C&logoColor=white)](https://modrinth.com/mod/ontime)
+[![CurseForge Downloads](https://img.shields.io/curseforge/dt/1478348?style=for-the-badge&logo=curseforge&label=CurseForge&color=f16a20&logoColor=white)](https://www.curseforge.com/minecraft/mc-mods/ontime)
 [![Modrinth Version](https://img.shields.io/modrinth/v/ontime?style=for-the-badge&logo=modrinth&label=Latest&color=00AF5C&logoColor=white)](https://modrinth.com/mod/ontime)
 [![License](https://img.shields.io/badge/License-CC0-lightgrey?style=for-the-badge)](LICENSE)
-
 [![Fabric](https://img.shields.io/badge/Fabric-1.20.1%20%7C%201.21.1--1.21.10-dbd0b4?style=for-the-badge)](https://fabricmc.net)
 [![NeoForge](https://img.shields.io/badge/NeoForge-1.21.1--1.21.10-f16a20?style=for-the-badge)](https://neoforged.net)
 [![Forge](https://img.shields.io/badge/Forge-1.20.1-e04e14?style=for-the-badge)](https://minecraftforge.net)
