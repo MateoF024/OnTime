@@ -73,6 +73,7 @@ public class OnTime {
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
         com.mateof24.websocket.TimerWebSocketServer.getInstance().stop();
+        com.mateof24.webpanel.TimerWebPanel.getInstance().stop();
         ModConfig.onSaveHook = null;
         serverInstance = null;
 

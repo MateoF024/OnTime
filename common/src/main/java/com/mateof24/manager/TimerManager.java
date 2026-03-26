@@ -113,6 +113,13 @@ public class TimerManager {
         return true;
     }
 
+    public boolean addTimer(Timer timer) {
+        if (timers.containsKey(timer.getName())) return false;
+        timers.put(timer.getName(), timer);
+        saveTimers();
+        return true;
+    }
+
     public Optional<Timer> getTimer(String name) {
         return Optional.ofNullable(timers.get(name));
     }

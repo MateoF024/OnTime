@@ -18,6 +18,8 @@ public class Timer {
     private String conditionObjective = null;
     private int conditionScore = 0;
     private String conditionTarget = "*";
+    private long repeatCooldownTicks = 0L;
+    private long sequenceCooldownTicks = 0L;
 
     public Timer(String name, int hours, int minutes, int seconds, boolean countUp) {
         this.name = name;
@@ -99,6 +101,8 @@ public class Timer {
         json.addProperty("conditionObjective", conditionObjective != null ? conditionObjective : "");
         json.addProperty("conditionScore", conditionScore);
         json.addProperty("conditionTarget", conditionTarget != null ? conditionTarget : "*");
+        json.addProperty("repeatCooldownTicks", repeatCooldownTicks);
+        json.addProperty("sequenceCooldownTicks", sequenceCooldownTicks);
         return json;
     }
 
@@ -130,6 +134,8 @@ public class Timer {
         timer.conditionObjective = condObj.isEmpty() ? null : condObj;
         timer.conditionScore = json.has("conditionScore") ? json.get("conditionScore").getAsInt() : 0;
         timer.conditionTarget = json.has("conditionTarget") ? json.get("conditionTarget").getAsString() : "*";
+        timer.repeatCooldownTicks = json.has("repeatCooldownTicks") ? json.get("repeatCooldownTicks").getAsLong() : 0L;
+        timer.sequenceCooldownTicks = json.has("sequenceCooldownTicks") ? json.get("sequenceCooldownTicks").getAsLong() : 0L;
         return timer;
     }
 
@@ -176,4 +182,8 @@ public class Timer {
         this.conditionScore = 0;
         this.conditionTarget = "*";
     }
+    public long getRepeatCooldownTicks() { return repeatCooldownTicks; }
+    public void setRepeatCooldownTicks(long ticks) { this.repeatCooldownTicks = Math.max(0, ticks); }
+    public long getSequenceCooldownTicks() { return sequenceCooldownTicks; }
+    public void setSequenceCooldownTicks(long ticks) { this.sequenceCooldownTicks = Math.max(0, ticks); }
 }

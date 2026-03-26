@@ -174,17 +174,20 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "repeat",
                 "ontime.help.repeat.desc",
-                "/timer repeat <name> [count]",
+                "/timer repeat <name> [count|-1] [cooldownSeconds]",
                 "/timer repeat speedrun",
                 "/timer repeat event 3",
-                "/timer repeat event 0"
+                "/timer repeat event 0",
+                "/timer repeat event -1 30",
+                "/timer repeat event 5 10"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
                 "sequence",
                 "ontime.help.sequence.desc",
-                "/timer sequence <name> [nextName|clear]",
+                "/timer sequence <name> [nextName|clear] [cooldownSeconds]",
                 "/timer sequence round1 round2",
+                "/timer sequence round1 round2 30",
                 "/timer sequence round1",
                 "/timer sequence round1 clear"
         ));
@@ -196,6 +199,40 @@ public class HelpSystem {
                 "/timer condition event kills 10",
                 "/timer condition event kills 10 PlayerName",
                 "/timer condition event clear"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "export",
+                "ontime.help.export.desc",
+                "/timer export <name>",
+                "/timer export speedrun",
+                "/timer export event"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "import",
+                "ontime.help.import.desc",
+                "/timer import <filename> [newname]",
+                "/timer import speedrun",
+                "/timer import speedrun speedrun_copy"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "clone",
+                "ontime.help.clone.desc",
+                "/timer clone <source> <dest>",
+                "/timer clone speedrun speedrun2",
+                "/timer clone event event_backup"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "webpanel",
+                "ontime.help.webpanel.desc",
+                "/timer webpanel <start|stop|info> [port]",
+                "/timer webpanel start",
+                "/timer webpanel start 9000",
+                "/timer webpanel info",
+                "/timer webpanel stop"
         ));
 
     }

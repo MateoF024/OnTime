@@ -5,9 +5,12 @@ import com.mateof24.platform.Services;
 import com.mateof24.config.ModConfig;
 import com.mateof24.manager.TimerManager;
 import com.mateof24.storage.PlayerPreferences;
+import com.mateof24.storage.TimerStorage;
 import com.mateof24.timer.Timer;
+import com.mateof24.tick.TimerTickHandler;
 import com.mateof24.permission.PermissionHelper;
 import com.mateof24.permission.PermissionNodes;
+import com.mateof24.webpanel.TimerWebPanel;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -227,9 +230,14 @@ public class TimerCommands {
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
                                 .executes(TimerCommands::toggleRepeatInfinite)
-                                .then(Commands.argument("count", IntegerArgumentType.integer(0))
+                                .then(Commands.argument("count", IntegerArgumentType.integer(-1))
                                         .executes(ctx -> setRepeatCount(ctx,
-                                                IntegerArgumentType.getInteger(ctx, "count")))
+                                                IntegerArgumentType.getInteger(ctx, "count"), 0))
+                                        .then(Commands.argument("cooldownSeconds", IntegerArgumentType.integer(0))
+                                                .executes(ctx -> setRepeatCount(ctx,
+                                                        IntegerArgumentType.getInteger(ctx, "count"),
+                                                        IntegerArgumentType.getInteger(ctx, "cooldownSeconds")))
+                                        )
                                 )
                         )
                 )
@@ -244,7 +252,12 @@ public class TimerCommands {
                                 .then(Commands.argument("nextName", StringArgumentType.word())
                                         .suggests(TIMER_SUGGESTIONS)
                                         .executes(ctx -> setSequence(ctx,
-                                                StringArgumentType.getString(ctx, "nextName")))
+                                                StringArgumentType.getString(ctx, "nextName"), 0))
+                                        .then(Commands.argument("cooldownSeconds", IntegerArgumentType.integer(0))
+                                                .executes(ctx -> setSequence(ctx,
+                                                        StringArgumentType.getString(ctx, "nextName"),
+                                                        IntegerArgumentType.getInteger(ctx, "cooldownSeconds")))
+                                        )
                                 )
                         )
                 )
@@ -288,6 +301,56 @@ public class TimerCommands {
                                                 )
                                         )
                                 )
+                        )
+                )
+                .then(Commands.literal("export")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_EXPORT, 4))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(ctx -> exportTimer(ctx, StringArgumentType.getString(ctx, "name")))
+                        )
+                )
+                .then(Commands.literal("import")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_IMPORT, 4))
+                        .then(Commands.argument("filename", StringArgumentType.word())
+                                .suggests((ctx, builder) -> {
+                                    TimerStorage.getExportNames().stream()
+                                            .filter(n -> n.toLowerCase().startsWith(builder.getRemaining().toLowerCase()))
+                                            .forEach(builder::suggest);
+                                    return builder.buildFuture();
+                                })
+                                .executes(ctx -> importTimer(ctx, StringArgumentType.getString(ctx, "filename"), null))
+                                .then(Commands.argument("newname", StringArgumentType.word())
+                                        .executes(ctx -> importTimer(ctx,
+                                                StringArgumentType.getString(ctx, "filename"),
+                                                StringArgumentType.getString(ctx, "newname")))
+                                )
+                        )
+                )
+                .then(Commands.literal("clone")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_CLONE, 4))
+                        .then(Commands.argument("source", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .then(Commands.argument("dest", StringArgumentType.word())
+                                        .executes(ctx -> cloneTimer(ctx,
+                                                StringArgumentType.getString(ctx, "source"),
+                                                StringArgumentType.getString(ctx, "dest")))
+                                )
+                        )
+                )
+                .then(Commands.literal("webpanel")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_WEBPANEL, 4))
+                        .then(Commands.literal("start")
+                                .executes(ctx -> webPanelStart(ctx, ModConfig.getInstance().getWebPanelPort()))
+                                .then(Commands.argument("port", IntegerArgumentType.integer(1024, 65535))
+                                        .executes(ctx -> webPanelStart(ctx, IntegerArgumentType.getInteger(ctx, "port")))
+                                )
+                        )
+                        .then(Commands.literal("stop")
+                                .executes(TimerCommands::webPanelStop)
+                        )
+                        .then(Commands.literal("info")
+                                .executes(TimerCommands::webPanelInfo)
                         )
                 )
         );
@@ -420,8 +483,9 @@ public class TimerCommands {
         }
 
         Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
-        if (activeTimer.isPresent()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.start.active", activeTimer.get().getName()));
+        if (activeTimer.isPresent() || TimerTickHandler.hasPendingCooldown()) {
+            String activeName = activeTimer.map(Timer::getName).orElse("(cooldown)");
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.start.active", activeName));
             return 0;
         }
 
@@ -732,20 +796,28 @@ public class TimerCommands {
 
     private static int stopTimer(CommandContext<CommandSourceStack> ctx) {
         Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
+        boolean hasCooldown = TimerTickHandler.hasPendingCooldown();
 
-        if (activeTimer.isEmpty()) {
+        if (activeTimer.isEmpty() && !hasCooldown) {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.stop.none"));
             return 0;
         }
 
-        Timer timer = activeTimer.get();
-        timer.resetRepeatsDone();
-        timer.reset();
-        TimerManager.getInstance().clearActiveTimer();
-        TimerManager.getInstance().saveTimers();
+        TimerTickHandler.cancelCooldown();
 
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.stop.success", timer.getName()), true);
+        if (activeTimer.isPresent()) {
+            Timer timer = activeTimer.get();
+            timer.resetRepeatsDone();
+            timer.reset();
+            TimerManager.getInstance().clearActiveTimer();
+            TimerManager.getInstance().saveTimers();
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.stop.success", timer.getName()), true);
+        } else {
+            TimerManager.getInstance().saveTimers();
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.stop.cooldown_cancelled"), true);
+        }
 
         Services.PLATFORM.sendTimerSyncPacket(ctx.getSource().getServer(), "", 0, 0, false, false, false);
         return 1;
@@ -759,6 +831,8 @@ public class TimerCommands {
             return 0;
         }
 
+        TimerTickHandler.cancelCooldown();
+
         Timer timer = activeTimer.get();
         boolean wasRunning = timer.isRunning();
         timer.reset();
@@ -770,15 +844,9 @@ public class TimerCommands {
         if (wasRunning) {
             Services.PLATFORM.sendTimerSyncPacket(
                     ctx.getSource().getServer(),
-                    timer.getName(),
-                    timer.getCurrentTicks(),
-                    timer.getTargetTicks(),
-                    timer.isCountUp(),
-                    false,
-                    timer.isSilent()
-            );
+                    timer.getName(), timer.getCurrentTicks(), timer.getTargetTicks(),
+                    timer.isCountUp(), false, timer.isSilent());
         }
-
         return 1;
     }
 
@@ -901,7 +969,11 @@ public class TimerCommands {
         Timer timer = timerOpt.get();
         boolean newRepeat = !timer.isRepeat();
         timer.setRepeat(newRepeat);
-        if (newRepeat) timer.setRepeatCount(-1);
+        if (newRepeat) {
+            timer.setRepeatCount(-1);
+        } else {
+            timer.setRepeatCooldownTicks(0);
+        }
         TimerManager.getInstance().saveTimers();
         ctx.getSource().sendSuccess(() -> Component.translatable(
                 newRepeat ? "ontime.command.repeat.enabled_infinite"
@@ -909,7 +981,7 @@ public class TimerCommands {
         return 1;
     }
 
-    private static int setRepeatCount(CommandContext<CommandSourceStack> ctx, int count) {
+    private static int setRepeatCount(CommandContext<CommandSourceStack> ctx, int count, int cooldownSeconds) {
         String name = StringArgumentType.getString(ctx, "name");
         Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
         if (timerOpt.isEmpty()) {
@@ -920,15 +992,34 @@ public class TimerCommands {
         if (count == 0) {
             timer.setRepeat(false);
             timer.setRepeatCount(0);
+            timer.setRepeatCooldownTicks(0);
             TimerManager.getInstance().saveTimers();
             ctx.getSource().sendSuccess(() ->
                     Component.translatable("ontime.command.repeat.disabled", name), true);
+        } else if (count == -1) {
+            timer.setRepeat(true);
+            timer.setRepeatCount(-1);
+            timer.setRepeatCooldownTicks(cooldownSeconds * 20L);
+            TimerManager.getInstance().saveTimers();
+            if (cooldownSeconds > 0) {
+                ctx.getSource().sendSuccess(() ->
+                        Component.translatable("ontime.command.repeat.enabled_infinite_cooldown", name, cooldownSeconds), true);
+            } else {
+                ctx.getSource().sendSuccess(() ->
+                        Component.translatable("ontime.command.repeat.enabled_infinite", name), true);
+            }
         } else {
             timer.setRepeat(true);
             timer.setRepeatCount(count);
+            timer.setRepeatCooldownTicks(cooldownSeconds * 20L);
             TimerManager.getInstance().saveTimers();
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.repeat.enabled_count", name, count), true);
+            if (cooldownSeconds > 0) {
+                ctx.getSource().sendSuccess(() ->
+                        Component.translatable("ontime.command.repeat.enabled_count_cooldown", name, count, cooldownSeconds), true);
+            } else {
+                ctx.getSource().sendSuccess(() ->
+                        Component.translatable("ontime.command.repeat.enabled_count", name, count), true);
+            }
         }
         return 1;
     }
@@ -940,14 +1031,23 @@ public class TimerCommands {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
-        String next = timerOpt.get().getNextTimer();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.sequence.current", name,
-                        next != null ? next : "(none)"), false);
+        Timer timer = timerOpt.get();
+        String next = timer.getNextTimer();
+        long cdSec = timer.getSequenceCooldownTicks() / 20L;
+        if (next == null) {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.sequence.current", name, "(none)"), false);
+        } else if (cdSec > 0) {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.sequence.current_cooldown", name, next, cdSec), false);
+        } else {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.sequence.current", name, next), false);
+        }
         return 1;
     }
 
-    private static int setSequence(CommandContext<CommandSourceStack> ctx, String nextName) {
+    private static int setSequence(CommandContext<CommandSourceStack> ctx, String nextName, int cooldownSeconds) {
         String name = StringArgumentType.getString(ctx, "name");
         if (name.equals(nextName)) {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.sequence.self"));
@@ -963,9 +1063,15 @@ public class TimerCommands {
             return 0;
         }
         timerOpt.get().setNextTimer(nextName);
+        timerOpt.get().setSequenceCooldownTicks(cooldownSeconds * 20L);
         TimerManager.getInstance().saveTimers();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.sequence.set", name, nextName), true);
+        if (cooldownSeconds > 0) {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.sequence.set_cooldown", name, nextName, cooldownSeconds), true);
+        } else {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.sequence.set", name, nextName), true);
+        }
         return 1;
     }
 
@@ -977,6 +1083,7 @@ public class TimerCommands {
             return 0;
         }
         timerOpt.get().setNextTimer(null);
+        timerOpt.get().setSequenceCooldownTicks(0);
         TimerManager.getInstance().saveTimers();
         ctx.getSource().sendSuccess(() ->
                 Component.translatable("ontime.command.sequence.cleared", name), true);
@@ -1030,6 +1137,125 @@ public class TimerCommands {
         TimerManager.getInstance().saveTimers();
         ctx.getSource().sendSuccess(() ->
                 Component.translatable("ontime.command.condition.cleared", name), true);
+        return 1;
+    }
+
+    private static int exportTimer(CommandContext<CommandSourceStack> ctx, String name) {
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        if (TimerStorage.exportTimer(name, timerOpt.get())) {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.export.success", name), true);
+            return 1;
+        }
+        ctx.getSource().sendFailure(Component.translatable("ontime.command.export.failed", name));
+        return 0;
+    }
+
+    private static int importTimer(CommandContext<CommandSourceStack> ctx, String filename, String overrideName) {
+        if (!TimerStorage.exportFileExists(filename)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.import.notfound", filename));
+            return 0;
+        }
+        Timer imported = TimerStorage.importTimerFromExports(filename);
+        if (imported == null) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.import.invalid", filename));
+            return 0;
+        }
+        String targetName = (overrideName != null && !overrideName.isEmpty()) ? overrideName : imported.getName();
+        if (TimerManager.getInstance().hasTimer(targetName)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.import.exists", targetName));
+            return 0;
+        }
+        long maxSeconds = ModConfig.getInstance().getMaxTimerSeconds();
+        if (imported.getTargetTicks() / 20L > maxSeconds) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.error.maxtime", formatTime(maxSeconds)));
+            return 0;
+        }
+        Timer toAdd = imported;
+        if (overrideName != null && !overrideName.isEmpty() && !overrideName.equals(imported.getName())) {
+            com.google.gson.JsonObject json = imported.toJson();
+            json.addProperty("name", overrideName);
+            json.addProperty("running", false);
+            json.addProperty("wasRunningBeforeShutdown", false);
+            toAdd = Timer.fromJson(json);
+        }
+        if (TimerManager.getInstance().addTimer(toAdd)) {
+            final Timer added = toAdd;
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.import.success", added.getName()), true);
+            return 1;
+        }
+        ctx.getSource().sendFailure(Component.translatable("ontime.command.import.exists", targetName));
+        return 0;
+    }
+
+    private static int cloneTimer(CommandContext<CommandSourceStack> ctx, String sourceName, String destName) {
+        Optional<Timer> sourceOpt = TimerManager.getInstance().getTimer(sourceName);
+        if (sourceOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", sourceName));
+            return 0;
+        }
+        if (TimerManager.getInstance().hasTimer(destName)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.clone.exists", destName));
+            return 0;
+        }
+        com.google.gson.JsonObject json = sourceOpt.get().toJson();
+        json.addProperty("name", destName);
+        json.addProperty("running", false);
+        json.addProperty("wasRunningBeforeShutdown", false);
+        json.addProperty("repeatsDone", 0);
+        long targetTicks = json.get("targetTicks").getAsLong();
+        boolean countUp = json.get("countUp").getAsBoolean();
+        json.addProperty("currentTicks", countUp ? 0 : targetTicks);
+        Timer cloned = Timer.fromJson(json);
+        if (TimerManager.getInstance().addTimer(cloned)) {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.clone.success", sourceName, destName), true);
+            return 1;
+        }
+        ctx.getSource().sendFailure(Component.translatable("ontime.command.clone.exists", destName));
+        return 0;
+    }
+
+    private static int webPanelStart(CommandContext<CommandSourceStack> ctx, int port) {
+        if (TimerWebPanel.getInstance().isRunning()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.webpanel.already_running",
+                    TimerWebPanel.getInstance().getAccessUrl()));
+            return 0;
+        }
+        TimerWebPanel.getInstance().start(port, ctx.getSource().getServer());
+        if (!TimerWebPanel.getInstance().isRunning()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.webpanel.start_failed", port));
+            return 0;
+        }
+        String url = TimerWebPanel.getInstance().getAccessUrl();
+        ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.webpanel.started", url), false);
+        return 1;
+    }
+
+    private static int webPanelStop(CommandContext<CommandSourceStack> ctx) {
+        if (!TimerWebPanel.getInstance().isRunning()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.webpanel.not_running"));
+            return 0;
+        }
+        TimerWebPanel.getInstance().stop();
+        ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.webpanel.stopped"), true);
+        return 1;
+    }
+
+    private static int webPanelInfo(CommandContext<CommandSourceStack> ctx) {
+        if (!TimerWebPanel.getInstance().isRunning()) {
+            ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.webpanel.not_running"), false);
+        } else {
+            String url = TimerWebPanel.getInstance().getAccessUrl();
+            int clients = TimerWebPanel.getInstance().getConnectedClients();
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.webpanel.info", url, clients), false);
+        }
         return 1;
     }
 }

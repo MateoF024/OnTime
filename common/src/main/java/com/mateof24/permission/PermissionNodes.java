@@ -20,4 +20,8 @@ public class PermissionNodes {
     public static final String TIMER_SEQUENCE = "ontime.command.sequence";
     public static final String TIMER_CONDITION = "ontime.command.condition";
     public static final String TIMER_HELP     = "ontime.command.help";
+    public static final String TIMER_EXPORT  = "ontime.command.export";
+    public static final String TIMER_IMPORT  = "ontime.command.import";
+    public static final String TIMER_CLONE   = "ontime.command.clone";
+    public static final String TIMER_WEBPANEL = "ontime.command.webpanel";
 }

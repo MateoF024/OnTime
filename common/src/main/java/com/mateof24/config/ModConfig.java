@@ -43,6 +43,7 @@ public class ModConfig {
     private float timerSoundPitch = 2.0f;
     private boolean webSocketEnabled = false;
     private int webSocketPort = 8765;
+    private int webPanelPort = 8766;
 
 
     // Función para cargar parámetros
@@ -80,6 +81,7 @@ public class ModConfig {
             if (root.has("timerSoundPitch")) timerSoundPitch = root.get("timerSoundPitch").getAsFloat();
             if (root.has("webSocketEnabled")) webSocketEnabled = root.get("webSocketEnabled").getAsBoolean();
             if (root.has("webSocketPort")) webSocketPort = root.get("webSocketPort").getAsInt();
+            if (root.has("webPanelPort")) webPanelPort = root.get("webPanelPort").getAsInt();
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to load config", e);
         }
@@ -106,6 +108,7 @@ public class ModConfig {
             root.addProperty("timerSoundPitch", timerSoundPitch);
             root.addProperty("webSocketEnabled", webSocketEnabled);
             root.addProperty("webSocketPort", webSocketPort);
+            root.addProperty("webPanelPort", webPanelPort);
             try (FileWriter writer = new FileWriter(CONFIG_FILE.toFile())) {
                 GSON.toJson(root, writer);
             }
@@ -233,5 +236,6 @@ public class ModConfig {
     public void setWebSocketEnabled(boolean enabled) { this.webSocketEnabled = enabled; save(); }
     public int getWebSocketPort() { return webSocketPort; }
     public void setWebSocketPort(int port) { this.webSocketPort = port; save(); }
-
+    public int getWebPanelPort() { return webPanelPort; }
+    public void setWebPanelPort(int port) { this.webPanelPort = port; save(); }
 }
