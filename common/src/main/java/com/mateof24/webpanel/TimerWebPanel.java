@@ -981,7 +981,7 @@ fetch('/api/history').then(r=>r.json()).then(data=>{
 const el=gid('hlist');
 if(!data||!data.length){el.innerHTML='<div class="empty">No history yet</div>';return;}
 el.innerHTML=[...data].reverse().slice(0,150).map(h=>{
-const rd=h.repeatsDone?<span class="bdg b-run">×${h.repeatsDone}</span>:'';
+const rd=h.repeatsDone?`<span class="bdg b-run">×${h.repeatsDone}</span>`:'';
 return `<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--bd)">
 <span style="color:var(--mu);font-size:.72rem;min-width:140px;flex-shrink:0">${esc(h.timestamp)}</span>
 <span style="flex:1;font-size:.85rem;font-weight:600">${esc(h.name)}</span>
