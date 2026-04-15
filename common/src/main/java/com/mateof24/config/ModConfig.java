@@ -43,7 +43,7 @@ public class ModConfig {
     private float timerSoundPitch = 2.0f;
     private boolean webSocketEnabled = false;
     private int webSocketPort = 8765;
-    private int webPanelPort = 8766;
+    private int webPanelPort = 8080;
 
 
     // Función para cargar parámetros

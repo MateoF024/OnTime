@@ -141,7 +141,7 @@
   "ontime.command.sequence.current_cooldown": "Timer '%s' next in sequence: '%s' (cooldown: %ss)",
   "ontime.command.sequence.set_cooldown": "Timer '%s' will be followed by '%s' after %ss cooldown",
   "ontime.command.stop.cooldown_cancelled": "§aPending sequence cooldown cancelled",
-  "ontime.command.webpanel.started": "§aOnTime WebPanel started: §f%s §7(shared only with you)",
+  "ontime.command.webpanel.started": "§aOnTime WebPanel started: §f%s",
   "ontime.command.webpanel.stopped": "§aOnTime WebPanel stopped",
   "ontime.command.webpanel.not_running": "§7OnTime WebPanel is not running",
   "ontime.command.webpanel.already_running": "§cWebPanel is already running at §f%s",

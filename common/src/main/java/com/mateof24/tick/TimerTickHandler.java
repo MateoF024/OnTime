@@ -15,6 +15,8 @@ import java.util.Optional;
 public class TimerTickHandler {
     private static int syncCounter = 0;
     private static final int SYNC_INTERVAL = 20;
+    private static int webPanelTickCounter = 0;
+    private static final int WEB_PANEL_TICK_INTERVAL = 4;
 
     private static long cooldownRemaining = 0L;
     private static boolean inRepeatCooldown = false;
@@ -93,6 +95,14 @@ public class TimerTickHandler {
 
         if (syncCounter == 0) {
             com.mateof24.event.TimerEventBus.fireOnTick(toInfo(activeTimer));
+        }
+
+        if (!finished) {
+            webPanelTickCounter++;
+            if (webPanelTickCounter >= WEB_PANEL_TICK_INTERVAL) {
+                webPanelTickCounter = 0;
+                com.mateof24.webpanel.TimerWebPanel.getInstance().onServerTick(activeTimer);
+            }
         }
 
         if (finished) {

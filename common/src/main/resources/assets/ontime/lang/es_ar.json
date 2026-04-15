@@ -141,7 +141,7 @@
   "ontime.command.sequence.current_cooldown": "El siguiente timer tras '%s' es: '%s' (cooldown: %ss)",
   "ontime.command.sequence.set_cooldown": "Al terminar '%s' se iniciará '%s' tras %ss de cooldown",
   "ontime.command.stop.cooldown_cancelled": "§aCooldown de secuencia pendiente cancelado",
-  "ontime.command.webpanel.started": "§aPanel web de OnTime iniciado: §f%s §7(link compartido solo contigo)",
+  "ontime.command.webpanel.started": "§aPanel web de OnTime iniciado: §f%s",
   "ontime.command.webpanel.stopped": "§aPanel web de OnTime detenido",
   "ontime.command.webpanel.not_running": "§7El panel web de OnTime no está en ejecución",
   "ontime.command.webpanel.already_running": "§cEl panel web ya está activo en §f%s",
