@@ -147,5 +147,6 @@
   "ontime.command.webpanel.already_running": "§cEl panel web ya está activo en §f%s",
   "ontime.command.webpanel.start_failed": "§cError al iniciar el panel en el puerto %s. El puerto puede estar en uso.",
   "ontime.command.webpanel.info": "§aPanel web activo en §f%s §7(%s conectado(s))",
-  "ontime.help.webpanel.desc": "Inicia, detiene o consulta el panel web en tiempo real para gestionar los timers"
+  "ontime.help.webpanel.desc": "Inicia, detiene o consulta el panel web en tiempo real para gestionar los timers",
+  "ontime.command.expr.invalid": "§cExpresión inválida: §f%s"
 }

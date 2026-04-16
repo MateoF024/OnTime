@@ -98,4 +98,13 @@ public class ForgePlatformHelper implements IPlatformHelper {
             sb.removeObjective(sb.getObjective(OBJECTIVE_NAME));
         }
     }
+
+    @Override
+    public long getScoreboardValue(MinecraftServer server, String objectiveName, String holderName) {
+        net.minecraft.world.scores.Scoreboard sb = server.getScoreboard();
+        net.minecraft.world.scores.Objective obj = sb.getObjective(objectiveName);
+        if (obj == null) return 0;
+        if (!sb.hasPlayerScore(holderName, obj)) return 0;
+        return sb.getOrCreatePlayerScore(holderName, obj).getScore();
+    }
 }

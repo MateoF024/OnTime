@@ -102,4 +102,15 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
             sb.removeObjective(sb.getObjective(OBJECTIVE_NAME));
         }
     }
+
+    @Override
+    public long getScoreboardValue(MinecraftServer server, String objectiveName, String holderName) {
+        net.minecraft.world.scores.Scoreboard sb = server.getScoreboard();
+        net.minecraft.world.scores.Objective obj = sb.getObjective(objectiveName);
+        if (obj == null) return 0;
+        net.minecraft.world.scores.ScoreHolder holder =
+                net.minecraft.world.scores.ScoreHolder.forNameOnly(holderName);
+        net.minecraft.world.scores.ReadOnlyScoreInfo info = sb.getPlayerScoreInfo(holder, obj);
+        return info != null ? info.value() : 0;
+    }
 }

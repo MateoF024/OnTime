@@ -19,4 +19,5 @@ public interface IPlatformHelper {
     boolean checkScoreboardCondition(MinecraftServer server, String objective, int score, String target);
     void updateScoreboardTimer(MinecraftServer server, String timerName, long currentSeconds, long targetSeconds);
     void clearScoreboardTimer(MinecraftServer server);
+    default long getScoreboardValue(MinecraftServer server, String objective, String holder) { return 0; }
 }

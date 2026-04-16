@@ -49,4 +49,13 @@ public class FabricScoreboardHelper {
         Objective obj = sb.getObjective(OBJECTIVE_NAME);
         if (obj != null) sb.removeObjective(obj);
     }
+
+    public static long getScoreboardValue(MinecraftServer server, String objectiveName, String holderName) {
+        Scoreboard sb = server.getScoreboard();
+        Objective obj = sb.getObjective(objectiveName);
+        if (obj == null) return 0;
+        ScoreHolder holder = ScoreHolder.forNameOnly(holderName);
+        ReadOnlyScoreInfo info = sb.getPlayerScoreInfo(holder, obj);
+        return info != null ? info.value() : 0;
+    }
 }

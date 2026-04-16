@@ -68,4 +68,9 @@ public class FabricPlatformHelper implements IPlatformHelper {
     public void clearScoreboardTimer(MinecraftServer server) {
         FabricScoreboardHelper.clearScoreboardTimer(server);
     }
+
+    @Override
+    public long getScoreboardValue(MinecraftServer server, String objective, String holder) {
+        return FabricScoreboardHelper.getScoreboardValue(server, objective, holder);
+    }
 }

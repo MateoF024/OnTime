@@ -147,5 +147,6 @@
   "ontime.command.webpanel.already_running": "§cWebPanel is already running at §f%s",
   "ontime.command.webpanel.start_failed": "§cFailed to start WebPanel on port %s. Port may be in use.",
   "ontime.command.webpanel.info": "§aWebPanel running at §f%s §7(%s connected)",
-  "ontime.help.webpanel.desc": "Start, stop or inspect the live web dashboard for timer management"
+  "ontime.help.webpanel.desc": "Start, stop or inspect the live web dashboard for timer management",
+  "ontime.command.expr.invalid": "§cInvalid expression: §f%s"
 }
