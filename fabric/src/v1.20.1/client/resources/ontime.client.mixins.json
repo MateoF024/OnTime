@@ -3,7 +3,8 @@
   "package": "com.mateof24.mixin.client",
   "compatibilityLevel": "JAVA_17",
   "client": [
-    "BossHealthOverlayMixin"
+    "BossHealthOverlayMixin",
+    "JadeOverlayv1_20_1Mixin"
   ],
   "injectors": {
     "defaultRequire": 1

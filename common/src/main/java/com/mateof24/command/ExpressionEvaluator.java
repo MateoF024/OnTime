@@ -99,6 +99,8 @@ public class ExpressionEvaluator {
         return switch (name) {
             case "players_online" -> server != null ? server.getPlayerList().getPlayerCount() : 0;
             case "score" -> parseScoreCall();
+            case "ftb_quest_completed"  -> parseFtbQuestCall(true);
+            case "ftb_reward_claimed"   -> parseFtbQuestCall(false);
             default -> throw new RuntimeException("Unknown variable: " + name);
         };
     }
@@ -133,5 +135,24 @@ public class ExpressionEvaluator {
 
     private void skipSpaces() {
         while (pos < input.length() && Character.isWhitespace(input.charAt(pos))) pos++;
+    }
+
+    private long parseFtbQuestCall(boolean isQuest) {
+        skipSpaces();
+        if (pos >= input.length() || input.charAt(pos) != '(')
+            throw new RuntimeException("Expected ( after ftb function");
+        pos++;
+        int start = pos;
+        while (pos < input.length() && input.charAt(pos) != ')') pos++;
+        String hexId = input.substring(start, pos).trim();
+        if (pos >= input.length() || input.charAt(pos) != ')')
+            throw new RuntimeException("Expected ) in ftb function");
+        pos++;
+        if (server == null || hexId.isEmpty()) return 0;
+        if (!com.mateof24.integration.FTBQuestsIntegration.isInstalled()) return 0;
+        boolean result = isQuest
+                ? com.mateof24.integration.FTBQuestsIntegration.isQuestCompletedByAnyPlayer(server, hexId)
+                : com.mateof24.integration.FTBQuestsIntegration.isRewardClaimedByAnyPlayer(server, hexId);
+        return result ? 1L : 0L;
     }
 }

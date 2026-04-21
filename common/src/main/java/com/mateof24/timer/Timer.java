@@ -20,6 +20,11 @@ public class Timer {
     private String conditionTarget = "*";
     private long repeatCooldownTicks = 0L;
     private long sequenceCooldownTicks = 0L;
+    private String conditionExpression = null;
+    private String triggerType = null;
+    private String conditionExpressionAction = "finish";
+    private String scoreConditionAction = "finish";
+    private String triggerAction = "finish";
 
     public Timer(String name, int hours, int minutes, int seconds, boolean countUp) {
         this.name = name;
@@ -103,6 +108,11 @@ public class Timer {
         json.addProperty("conditionTarget", conditionTarget != null ? conditionTarget : "*");
         json.addProperty("repeatCooldownTicks", repeatCooldownTicks);
         json.addProperty("sequenceCooldownTicks", sequenceCooldownTicks);
+        json.addProperty("conditionExpression", conditionExpression != null ? conditionExpression : "");
+        json.addProperty("triggerType", triggerType != null ? triggerType : "");
+        json.addProperty("conditionExpressionAction", conditionExpressionAction);
+        json.addProperty("scoreConditionAction", scoreConditionAction);
+        json.addProperty("triggerAction", triggerAction);
         return json;
     }
 
@@ -136,6 +146,14 @@ public class Timer {
         timer.conditionTarget = json.has("conditionTarget") ? json.get("conditionTarget").getAsString() : "*";
         timer.repeatCooldownTicks = json.has("repeatCooldownTicks") ? json.get("repeatCooldownTicks").getAsLong() : 0L;
         timer.sequenceCooldownTicks = json.has("sequenceCooldownTicks") ? json.get("sequenceCooldownTicks").getAsLong() : 0L;
+        String condExpr = json.has("conditionExpression") ? json.get("conditionExpression").getAsString() : "";
+        timer.conditionExpression = condExpr.isEmpty() ? null : condExpr;
+        String trig = json.has("triggerType") ? json.get("triggerType").getAsString() : "";
+        timer.triggerType = trig.isEmpty() ? null : trig;
+        timer.conditionExpressionAction = json.has("conditionExpressionAction") ? json.get("conditionExpressionAction").getAsString() : "finish";
+        timer.scoreConditionAction = json.has("scoreConditionAction") ? json.get("scoreConditionAction").getAsString() : "finish";
+        timer.triggerAction = json.has("triggerAction") ? json.get("triggerAction").getAsString() : "finish";
+
         return timer;
     }
 
@@ -186,4 +204,16 @@ public class Timer {
     public void setRepeatCooldownTicks(long ticks) { this.repeatCooldownTicks = Math.max(0, ticks); }
     public long getSequenceCooldownTicks() { return sequenceCooldownTicks; }
     public void setSequenceCooldownTicks(long ticks) { this.sequenceCooldownTicks = Math.max(0, ticks); }
+    public String getConditionExpression() { return conditionExpression; }
+    public void setConditionExpression(String expr) { this.conditionExpression = (expr == null || expr.isEmpty()) ? null : expr; }
+    public String getTriggerType() { return triggerType; }
+    public void setTriggerType(String type) { this.triggerType = (type == null || type.isEmpty()) ? null : type; }
+
+    public String getConditionExpressionAction() { return conditionExpressionAction; }
+    public void setConditionExpressionAction(String a) { this.conditionExpressionAction = "start".equals(a) ? "start" : "finish"; }
+    public String getScoreConditionAction() { return scoreConditionAction; }
+    public void setScoreConditionAction(String a) { this.scoreConditionAction = "start".equals(a) ? "start" : "finish"; }
+    public String getTriggerAction() { return triggerAction; }
+    public void setTriggerAction(String a) { this.triggerAction = "start".equals(a) ? "start" : "finish"; }
+
 }

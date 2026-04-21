@@ -16,6 +16,7 @@ public class BossHealthOverlayMixin {
     private static final int BOSSBAR_DEFAULT_Y = 12;
     private static final int BOSSBAR_HEIGHT = 19;
     private static final int BOSSBAR_WIDTH = 182;
+    private static final int JADE_ESTIMATED_HEIGHT = 22;
 
     @ModifyVariable(method = "render", at = @At(value = "STORE"), ordinal = 1)
     private int adjustBossBarY(int y) {
@@ -39,7 +40,11 @@ public class BossHealthOverlayMixin {
         boolean verticalOverlap = (timerY + timerHeight) > BOSSBAR_DEFAULT_Y && timerY < (BOSSBAR_DEFAULT_Y + BOSSBAR_HEIGHT);
 
         if (horizontalOverlap && verticalOverlap) {
-            return y + (timerY + timerHeight - BOSSBAR_DEFAULT_Y) + 10;
+            int bottomEdge = timerY + timerHeight;
+            if (com.mateof24.platform.Services.PLATFORM.isModLoaded("jade")) {
+                bottomEdge = Math.max(bottomEdge, JADE_ESTIMATED_HEIGHT);
+            }
+            return y + (bottomEdge - BOSSBAR_DEFAULT_Y) + 10;
         }
 
         return y;

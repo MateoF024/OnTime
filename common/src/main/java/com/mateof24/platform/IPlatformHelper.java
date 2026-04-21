@@ -20,4 +20,7 @@ public interface IPlatformHelper {
     void updateScoreboardTimer(MinecraftServer server, String timerName, long currentSeconds, long targetSeconds);
     void clearScoreboardTimer(MinecraftServer server);
     default long getScoreboardValue(MinecraftServer server, String objective, String holder) { return 0; }
+    default boolean isAnyPlayerInRegion(MinecraftServer server, String regionId) {
+        return com.mateof24.integration.WorldProtectorIntegration.isAnyPlayerInRegion(server, regionId);
+    }
 }

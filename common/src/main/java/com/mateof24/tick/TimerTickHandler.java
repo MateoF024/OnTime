@@ -21,11 +21,14 @@ public class TimerTickHandler {
     private static long cooldownRemaining = 0L;
     private static boolean inRepeatCooldown = false;
     private static String pendingSequenceTimerName = null;
+    private static int startConditionCheckCounter = 0;
+    private static final int START_CHECK_INTERVAL = 20;
 
     public static void cancelCooldown() {
         cooldownRemaining = 0;
         inRepeatCooldown = false;
         pendingSequenceTimerName = null;
+        com.mateof24.trigger.TriggerRegistry.reset();
     }
 
     public static boolean hasPendingCooldown() {
@@ -33,6 +36,11 @@ public class TimerTickHandler {
     }
 
     public static void tick(MinecraftServer server) {
+        startConditionCheckCounter++;
+        if (startConditionCheckCounter >= START_CHECK_INTERVAL) {
+            startConditionCheckCounter = 0;
+            checkStartConditions(server);
+        }
         if (inRepeatCooldown) {
             if (cooldownRemaining > 0) {
                 cooldownRemaining--;
@@ -74,8 +82,18 @@ public class TimerTickHandler {
 
         boolean finished = activeTimer.tick();
 
-        if (!finished && activeTimer.hasCondition()) {
+        if (!finished && "finish".equals(activeTimer.getTriggerType() != null ? activeTimer.getTriggerAction() : "finish")) {
+            if (com.mateof24.trigger.TriggerRegistry.consumeTrigger()) finished = true;
+        }
+
+        if (!finished && activeTimer.hasCondition() && "finish".equals(activeTimer.getScoreConditionAction())) {
             finished = checkScoreboardCondition(server, activeTimer);
+        }
+
+        if (!finished && activeTimer.getConditionExpression() != null && "finish".equals(activeTimer.getConditionExpressionAction())) {
+            finished = com.mateof24.command.ConditionEvaluator
+                    .evaluate(activeTimer.getConditionExpression(), server, activeTimer)
+                    .orElse(false);
         }
 
         if (!finished && com.mateof24.event.TimerConditionRegistry.hasCondition(activeTimer.getName())) {
@@ -147,6 +165,32 @@ public class TimerTickHandler {
                     Services.PLATFORM.clearScoreboardTimer(server);
                     Services.PLATFORM.sendTimerSyncPacket(server, "", 0, 0, false, false, false);
                 }
+            }
+        }
+    }
+
+    private static void checkStartConditions(MinecraftServer server) {
+        if (TimerManager.getInstance().getActiveTimer().isPresent()) return;
+        if (inRepeatCooldown || pendingSequenceTimerName != null) return;
+        for (Timer t : TimerManager.getInstance().getAllTimers().values()) {
+            if (t.isRunning()) continue;
+            boolean shouldStart = false;
+            if (t.getTriggerType() != null && "start".equals(t.getTriggerAction())) {
+                if (com.mateof24.trigger.TriggerRegistry.consumeTrigger()) shouldStart = true;
+            }
+            if (!shouldStart && t.hasCondition() && "start".equals(t.getScoreConditionAction())) {
+                shouldStart = checkScoreboardCondition(server, t);
+            }
+            if (!shouldStart && t.getConditionExpression() != null && "start".equals(t.getConditionExpressionAction())) {
+                shouldStart = com.mateof24.command.ConditionEvaluator
+                        .evaluate(t.getConditionExpression(), server, t)
+                        .orElse(false);
+            }
+            if (shouldStart) {
+                TimerManager.getInstance().startTimer(t.getName());
+                TimerManager.getInstance().getTimer(t.getName()).ifPresent(started ->
+                        syncTimerToClients(server, started));
+                return;
             }
         }
     }

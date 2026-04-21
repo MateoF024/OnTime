@@ -41,6 +41,9 @@ public class OnTime {
         forgeEventBus.addListener(this::onServerStarted);
         forgeEventBus.addListener(this::onServerStopping);
         forgeEventBus.addListener(this::onPlayerJoin);
+        forgeEventBus.addListener(this::onPlayerDeath);
+        forgeEventBus.addListener(this::onDimensionChange);
+        forgeEventBus.addListener(this::onAdvancementEarned);
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
@@ -131,6 +134,35 @@ public class OnTime {
                         }
                     } catch (Exception e) {
                         LOGGER.warn("OnTime IMC entrypoint failed from mod: {}", msg.senderModId(), e);
+                    }
+                });
+    }
+
+    private void onPlayerDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
+        if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer)) return;
+        fireTrigger("player_death", null);
+    }
+    private void onDimensionChange(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerChangedDimensionEvent event) {
+        fireTrigger("dimension_change", event.getTo().location().toString());
+    }
+    private void onAdvancementEarned(net.neoforged.neoforge.event.entity.player.AdvancementEarnEvent event) {
+        fireTrigger("advancement", event.getAdvancement().id().toString());
+    }
+    private static void fireTrigger(String type, String param) {
+        com.mateof24.manager.TimerManager.getInstance().getActiveTimer().ifPresent(t -> {
+            String trigger = t.getTriggerType();
+            if (trigger == null) return;
+            if (trigger.equals(type) || (param != null && trigger.equals(type + ":" + param))) {
+                com.mateof24.trigger.TriggerRegistry.fire();
+            }
+        });
+        com.mateof24.manager.TimerManager.getInstance().getAllTimers().values().stream()
+                .filter(t -> !t.isRunning() && "start".equals(t.getTriggerAction()))
+                .forEach(t -> {
+                    String trigger = t.getTriggerType();
+                    if (trigger == null) return;
+                    if (trigger.equals(type) || (param != null && trigger.equals(type + ":" + param))) {
+                        com.mateof24.trigger.TriggerRegistry.fire();
                     }
                 });
     }

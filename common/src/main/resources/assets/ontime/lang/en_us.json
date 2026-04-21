@@ -148,5 +148,11 @@
   "ontime.command.webpanel.start_failed": "§cFailed to start WebPanel on port %s. Port may be in use.",
   "ontime.command.webpanel.info": "§aWebPanel running at §f%s §7(%s connected)",
   "ontime.help.webpanel.desc": "Start, stop or inspect the live web dashboard for timer management",
-  "ontime.command.expr.invalid": "§cInvalid expression: §f%s"
+  "ontime.command.expr.invalid": "§cInvalid expression: §f%s",
+  "ontime.command.condition.expr.set": "§aTimer §f'%s' §acondition set: §f%s §a(action: §f%s§a)",
+  "ontime.command.trigger.set": "§aTimer §f'%s' §atrigger set to §f%s §a(action: §f%s§a)",
+  "ontime.command.trigger.cleared": "§aTimer §f'%s' §atrigger cleared",
+  "ontime.command.trigger.current": "Timer §f'%s' §7trigger: §f%s §7action: §f%s",
+  "ontime.command.trigger.none": "Timer §f'%s' §7has no trigger set",
+  "ontime.help.trigger.desc": "Set an event trigger that starts or finishes a timer (player_death, dimension_change, advancement, ftb_quest, ftb_reward)"
 }

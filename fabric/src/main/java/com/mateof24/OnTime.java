@@ -28,6 +28,7 @@ public class OnTime implements ModInitializer {
         ModConfig.getInstance().load();
         PlayerPreferences.load();
         Services.PLATFORM.registerPackets();
+        com.mateof24.trigger.FabricTriggerHandler.register();
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 TimerCommands.register(dispatcher));
@@ -37,6 +38,8 @@ public class OnTime implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             serverInstance = server;
             ModConfig.onSaveHook = () -> Services.PLATFORM.sendDisplayConfigPacketToAll(serverInstance);
+            com.mateof24.integration.FTBQuestsIntegration.tryInit();
+            com.mateof24.integration.WorldProtectorIntegration.tryInit();
 
             TimerManager.getInstance().loadTimers();
             if (ModConfig.getInstance().isWebSocketEnabled()) {
