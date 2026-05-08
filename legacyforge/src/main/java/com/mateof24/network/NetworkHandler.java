@@ -54,7 +54,7 @@ public class NetworkHandler {
                                           long currentTicks, long targetTicks,
                                           boolean countUp, boolean running, boolean silent) {
         CHANNEL.send(PacketDistributor.ALL.noArg(),
-                new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent, server.getTickCount()));
+                new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent));
     }
 
     public static void syncDisplayConfigToClient(ServerPlayer player, ModConfig cfg) {

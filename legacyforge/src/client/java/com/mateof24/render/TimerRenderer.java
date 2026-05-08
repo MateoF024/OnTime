@@ -13,8 +13,10 @@ public class TimerRenderer {
         Minecraft mc = Minecraft.getInstance();
         if (mc.options.hideGui || mc.options.renderDebug) return;
 
-        String timeText = ClientTimerState.getFormattedTime();
-        int textColor = ClientTimerState.getColorForPercentage(ClientTimerState.getPercentage());
+        long ticks = ClientTimerState.getInterpolatedTicks();
+        String timeText = ClientTimerState.formatTicks(ticks);
+        float percentage = ClientTimerState.percentageOf(ticks);
+        int textColor = ClientTimerState.getColorForPercentage(percentage);
 
         int screenWidth = mc.getWindow().getGuiScaledWidth();
         int screenHeight = mc.getWindow().getGuiScaledHeight();

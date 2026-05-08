@@ -10,7 +10,8 @@ classes/
 *.launch
 
 # idea
-
+.claude
+.claude/
 .idea/
 *.iml
 *.ipr

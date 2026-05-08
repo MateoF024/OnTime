@@ -11,7 +11,6 @@ import com.mateof24.tick.TimerTickHandler;
 import com.mateof24.permission.PermissionHelper;
 import com.mateof24.permission.PermissionNodes;
 import com.mateof24.webpanel.TimerWebPanel;
-import com.mateof24.trigger.TriggerRegistry;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -23,7 +22,6 @@ import net.minecraft.network.chat.Component;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.OptionalLong;
 import net.minecraft.commands.arguments.EntityArgument;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import net.minecraft.commands.arguments.ResourceLocationArgument;
@@ -59,16 +57,25 @@ public class TimerCommands {
 
     private static final TimerNameSuggestionProvider TIMER_SUGGESTIONS = new TimerNameSuggestionProvider();
 
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestDimensions(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        net.minecraft.server.MinecraftServer server = ctx.getSource().getServer();
+        if (server != null) {
+            String remaining = builder.getRemaining().toLowerCase();
+            for (net.minecraft.server.level.ServerLevel level : server.getAllLevels()) {
+                String dimId = level.dimension().location().toString();
+                if (dimId.toLowerCase().startsWith(remaining)) builder.suggest(dimId);
+            }
+        }
+        return builder.buildFuture();
+    }
+
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("timer").requires(source ->
                         PermissionHelper.hasPermission(source, "ontime.command", 4))
                 .then(Commands.literal("create")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_CREATE, 4))
-                        .then(Commands.argument("name", StringArgumentType.word()).then(Commands.literal("expr")
-                                                .then(Commands.argument("expression", StringArgumentType.greedyString())
-                                                        .executes(ctx -> createTimerWithExpr(ctx, false))
-                                                )
-                                        )
+                        .then(Commands.argument("name", StringArgumentType.word())
                                 .then(Commands.argument("hours", IntegerArgumentType.integer(0))
                                         .then(Commands.argument("minutes", IntegerArgumentType.integer(0, 59))
                                                 .then(Commands.argument("seconds", IntegerArgumentType.integer(0, 59))
@@ -93,11 +100,7 @@ public class TimerCommands {
                 .then(Commands.literal("set")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SET, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
-                                .suggests(TIMER_SUGGESTIONS).then(Commands.literal("expr")
-                                        .then(Commands.argument("expression", StringArgumentType.greedyString())
-                                                .executes(TimerCommands::setTimerExpr)
-                                        )
-                                )
+                                .suggests(TIMER_SUGGESTIONS)
                                 .then(Commands.argument("hours", IntegerArgumentType.integer(0))
                                         .then(Commands.argument("minutes", IntegerArgumentType.integer(0, 59))
                                                 .then(Commands.argument("seconds", IntegerArgumentType.integer(0, 59))
@@ -128,16 +131,40 @@ public class TimerCommands {
                 .then(Commands.literal("add")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_ADD, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
-                                .suggests(TIMER_SUGGESTIONS).then(Commands.literal("expr")
-                                        .then(Commands.argument("expression", StringArgumentType.greedyString())
-                                                .executes(TimerCommands::addTimerExpr)
-                                        )
-                                )
+                                .suggests(TIMER_SUGGESTIONS)
                                 .then(Commands.argument("hours", IntegerArgumentType.integer(0))
                                         .then(Commands.argument("minutes", IntegerArgumentType.integer(0, 59))
                                                 .then(Commands.argument("seconds", IntegerArgumentType.integer(0, 59))
                                                         .executes(TimerCommands::addTime)
                                                 )
+                                        )
+                                )
+                        )
+                )
+                .then(Commands.literal("expr")
+                        .then(Commands.literal("create")
+                                .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_CREATE, 4))
+                                .then(Commands.argument("name", StringArgumentType.word())
+                                        .then(Commands.argument("expression", StringArgumentType.greedyString())
+                                                .executes(ctx -> createTimerWithExpr(ctx, false))
+                                        )
+                                )
+                        )
+                        .then(Commands.literal("set")
+                                .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SET, 4))
+                                .then(Commands.argument("name", StringArgumentType.word())
+                                        .suggests(TIMER_SUGGESTIONS)
+                                        .then(Commands.argument("expression", StringArgumentType.greedyString())
+                                                .executes(TimerCommands::setTimerExpr)
+                                        )
+                                )
+                        )
+                        .then(Commands.literal("add")
+                                .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_ADD, 4))
+                                .then(Commands.argument("name", StringArgumentType.word())
+                                        .suggests(TIMER_SUGGESTIONS)
+                                        .then(Commands.argument("expression", StringArgumentType.greedyString())
+                                                .executes(TimerCommands::addTimerExpr)
                                         )
                                 )
                         )
@@ -397,25 +424,26 @@ public class TimerCommands {
                                 )
                                 .then(Commands.literal("dimension_change")
                                         .executes(ctx -> setTrigger(ctx, "dimension_change", "finish"))
-                                        .then(Commands.argument("dimension", StringArgumentType.word())
+                                        .then(Commands.argument("dimension", ResourceLocationArgument.id())
+                                                .suggests(TimerCommands::suggestDimensions)
                                                 .executes(ctx -> setTrigger(ctx, "dimension_change:" +
-                                                        StringArgumentType.getString(ctx, "dimension"), "finish"))
+                                                        ResourceLocationArgument.getId(ctx, "dimension"), "finish"))
                                                 .then(Commands.argument("action", StringArgumentType.word())
                                                         .suggests((c, b) -> { b.suggest("finish"); b.suggest("start"); return b.buildFuture(); })
                                                         .executes(ctx -> setTrigger(ctx, "dimension_change:" +
-                                                                        StringArgumentType.getString(ctx, "dimension"),
+                                                                        ResourceLocationArgument.getId(ctx, "dimension"),
                                                                 StringArgumentType.getString(ctx, "action")))
                                                 )
                                         )
                                 )
                                 .then(Commands.literal("advancement")
-                                        .then(Commands.argument("advancement_id", StringArgumentType.word())
+                                        .then(Commands.argument("advancement_id", ResourceLocationArgument.id())
                                                 .executes(ctx -> setTrigger(ctx, "advancement:" +
-                                                        StringArgumentType.getString(ctx, "advancement_id"), "finish"))
+                                                        ResourceLocationArgument.getId(ctx, "advancement_id"), "finish"))
                                                 .then(Commands.argument("action", StringArgumentType.word())
                                                         .suggests((c, b) -> { b.suggest("finish"); b.suggest("start"); return b.buildFuture(); })
                                                         .executes(ctx -> setTrigger(ctx, "advancement:" +
-                                                                        StringArgumentType.getString(ctx, "advancement_id"),
+                                                                        ResourceLocationArgument.getId(ctx, "advancement_id"),
                                                                 StringArgumentType.getString(ctx, "action")))
                                                 )
                                         )
@@ -1355,12 +1383,13 @@ public class TimerCommands {
     private static int createTimerWithExpr(CommandContext<CommandSourceStack> ctx, boolean countUp) {
         String name = StringArgumentType.getString(ctx, "name");
         String expression = StringArgumentType.getString(ctx, "expression");
-        OptionalLong resolved = ExpressionEvaluator.evaluate(expression, ctx.getSource().getServer());
-        if (resolved.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.expr.invalid", expression));
+        ExpressionEvaluator.Result resolved = ExpressionEvaluator.evaluateDetailed(expression, ctx.getSource().getServer());
+        if (resolved.value.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.expr.invalid", expression)
+                    .append(Component.literal(" (" + resolved.error + ")")));
             return 0;
         }
-        long totalSeconds = resolved.getAsLong();
+        long totalSeconds = resolved.value.getAsLong();
         long maxSeconds = ModConfig.getInstance().getMaxTimerSeconds();
         if (totalSeconds > maxSeconds) {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.error.maxtime", formatTime(maxSeconds)));
@@ -1381,12 +1410,13 @@ public class TimerCommands {
     private static int setTimerExpr(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         String expression = StringArgumentType.getString(ctx, "expression");
-        OptionalLong resolved = ExpressionEvaluator.evaluate(expression, ctx.getSource().getServer());
-        if (resolved.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.expr.invalid", expression));
+        ExpressionEvaluator.Result resolved = ExpressionEvaluator.evaluateDetailed(expression, ctx.getSource().getServer());
+        if (resolved.value.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.expr.invalid", expression)
+                    .append(Component.literal(" (" + resolved.error + ")")));
             return 0;
         }
-        long totalSeconds = resolved.getAsLong();
+        long totalSeconds = resolved.value.getAsLong();
         long maxSeconds = ModConfig.getInstance().getMaxTimerSeconds();
         if (totalSeconds > maxSeconds) {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.error.maxtime", formatTime(maxSeconds)));
@@ -1407,12 +1437,13 @@ public class TimerCommands {
     private static int addTimerExpr(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         String expression = StringArgumentType.getString(ctx, "expression");
-        OptionalLong resolved = ExpressionEvaluator.evaluate(expression, ctx.getSource().getServer());
-        if (resolved.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.expr.invalid", expression));
+        ExpressionEvaluator.Result resolved = ExpressionEvaluator.evaluateDetailed(expression, ctx.getSource().getServer());
+        if (resolved.value.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.expr.invalid", expression)
+                    .append(Component.literal(" (" + resolved.error + ")")));
             return 0;
         }
-        long addSeconds = resolved.getAsLong();
+        long addSeconds = resolved.value.getAsLong();
         long maxSeconds = ModConfig.getInstance().getMaxTimerSeconds();
 
         Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
@@ -1438,39 +1469,6 @@ public class TimerCommands {
         }
         ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
         return 0;
-    }
-
-    private static int setConditionExpression(CommandContext<CommandSourceStack> ctx, String expression) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        Optional<Boolean> test = com.mateof24.command.ConditionEvaluator.evaluate(expression, ctx.getSource().getServer(), timerOpt.get());
-        if (test.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.expr.invalid", expression));
-            return 0;
-        }
-        timerOpt.get().setConditionExpression(expression);
-        TimerManager.getInstance().saveTimers();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.condition.expr.set", name, expression), true);
-        return 1;
-    }
-
-    private static int setTrigger(CommandContext<CommandSourceStack> ctx, String type) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        timerOpt.get().setTriggerType(type);
-        TimerManager.getInstance().saveTimers();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.trigger.set", name, type), true);
-        return 1;
     }
 
     private static int setConditionExpression(CommandContext<CommandSourceStack> ctx, String expression, String action) {
@@ -1536,6 +1534,7 @@ public class TimerCommands {
         timerOpt.get().setTriggerType(type);
         timerOpt.get().setTriggerAction(action);
         TimerManager.getInstance().saveTimers();
+        com.mateof24.trigger.FTBQuestsPoller.resetFor(name);
         ctx.getSource().sendSuccess(() ->
                 Component.translatable("ontime.command.trigger.set", name, type, action), true);
         return 1;
@@ -1550,6 +1549,7 @@ public class TimerCommands {
         }
         timerOpt.get().setTriggerType(null);
         TimerManager.getInstance().saveTimers();
+        com.mateof24.trigger.FTBQuestsPoller.resetFor(name);
         ctx.getSource().sendSuccess(() ->
                 Component.translatable("ontime.command.trigger.cleared", name), true);
         return 1;

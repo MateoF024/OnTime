@@ -10,7 +10,7 @@ public class ClientNetworkHandler {
                 context.client().execute(() -> {
                     if (payload.name().isEmpty()) ClientTimerState.clear();
                     else ClientTimerState.updateTimer(payload.name(), payload.currentTicks(), payload.targetTicks(),
-                            payload.countUp(), payload.running(), payload.silent(), payload.serverTick());
+                            payload.countUp(), payload.running(), payload.silent());
                 })
         );
 

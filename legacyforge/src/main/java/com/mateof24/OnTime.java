@@ -51,7 +51,6 @@ public class OnTime {
         serverInstance = event.getServer();
         ModConfig.onSaveHook = () -> Services.PLATFORM.sendDisplayConfigPacketToAll(serverInstance);
         com.mateof24.integration.FTBQuestsIntegration.tryInit();
-        com.mateof24.integration.WorldProtectorIntegration.tryInit();
 
         TimerManager.getInstance().loadTimers();
         if (ModConfig.getInstance().isWebSocketEnabled()) {
@@ -76,6 +75,7 @@ public class OnTime {
     public void onServerStopping(ServerStoppingEvent event) {
         com.mateof24.websocket.TimerWebSocketServer.getInstance().stop();
         com.mateof24.webpanel.TimerWebPanel.getInstance().stop();
+        com.mateof24.trigger.FTBQuestsPoller.resetAll();
         ModConfig.onSaveHook = null;
         serverInstance = null;
 
@@ -142,34 +142,15 @@ public class OnTime {
     @SubscribeEvent
     public void onPlayerDeath(net.minecraftforge.event.entity.living.LivingDeathEvent event) {
         if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer)) return;
-        fireTrigger("player_death", null);
+        com.mateof24.trigger.TriggerDispatcher.dispatch("player_death", null);
     }
     @SubscribeEvent
     public void onDimensionChange(net.minecraftforge.event.entity.player.PlayerEvent.PlayerChangedDimensionEvent event) {
-        fireTrigger("dimension_change", event.getTo().location().toString());
+        com.mateof24.trigger.TriggerDispatcher.dispatch("dimension_change", event.getTo().location().toString());
     }
     @SubscribeEvent
-    public void onAdvancementEarned(net.minecraftforge.event.advancements.AdvancementEarnEvent event) {
-        fireTrigger("advancement", event.getAdvancement().getId().toString());
-    }
-
-    private static void fireTrigger(String type, String param) {
-        com.mateof24.manager.TimerManager.getInstance().getActiveTimer().ifPresent(t -> {
-            String trigger = t.getTriggerType();
-            if (trigger == null) return;
-            if (trigger.equals(type) || (param != null && trigger.equals(type + ":" + param))) {
-                com.mateof24.trigger.TriggerRegistry.fire();
-            }
-        });
-        com.mateof24.manager.TimerManager.getInstance().getAllTimers().values().stream()
-                .filter(t -> !t.isRunning() && "start".equals(t.getTriggerAction()))
-                .forEach(t -> {
-                    String trigger = t.getTriggerType();
-                    if (trigger == null) return;
-                    if (trigger.equals(type) || (param != null && trigger.equals(type + ":" + param))) {
-                        com.mateof24.trigger.TriggerRegistry.fire();
-                    }
-                });
+    public void onAdvancementEarned(net.minecraftforge.event.entity.player.AdvancementEvent.AdvancementEarnEvent event) {
+        com.mateof24.trigger.TriggerDispatcher.dispatch("advancement", event.getAdvancement().getId().toString());
     }
 
 }

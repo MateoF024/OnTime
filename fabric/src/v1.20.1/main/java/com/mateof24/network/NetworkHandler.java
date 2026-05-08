@@ -26,7 +26,6 @@ public class NetworkHandler {
         buf.writeBoolean(countUp);
         buf.writeBoolean(running);
         buf.writeBoolean(silent);
-        buf.writeLong(server.getTickCount());
 
         for (var player : server.getPlayerList().getPlayers()) {
             ServerPlayNetworking.send(player, TIMER_SYNC_ID, buf);

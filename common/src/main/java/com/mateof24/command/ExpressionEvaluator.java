@@ -11,6 +11,21 @@ public class ExpressionEvaluator {
     private int pos;
     private final MinecraftServer server;
 
+    private static final int MAX_INPUT_LENGTH = 512;
+
+    public static class Result {
+        public final OptionalLong value;
+        public final String error;
+
+        private Result(OptionalLong value, String error) {
+            this.value = value;
+            this.error = error;
+        }
+
+        public static Result ok(long v) { return new Result(OptionalLong.of(v), null); }
+        public static Result fail(String err) { return new Result(OptionalLong.empty(), err); }
+    }
+
     private ExpressionEvaluator(String input, MinecraftServer server) {
         this.input = input.trim();
         this.pos = 0;
@@ -18,15 +33,24 @@ public class ExpressionEvaluator {
     }
 
     public static OptionalLong evaluate(String expression, MinecraftServer server) {
-        if (expression == null || expression.isBlank()) return OptionalLong.empty();
+        return evaluateDetailed(expression, server).value;
+    }
+
+    public static Result evaluateDetailed(String expression, MinecraftServer server) {
+        if (expression == null || expression.isBlank()) return Result.fail("expression is empty");
+        if (expression.length() > MAX_INPUT_LENGTH) return Result.fail("expression too long (max " + MAX_INPUT_LENGTH + ")");
         try {
             ExpressionEvaluator eval = new ExpressionEvaluator(expression, server);
             long result = eval.parseExpression();
             eval.skipSpaces();
-            if (eval.pos != eval.input.length()) return OptionalLong.empty();
-            return OptionalLong.of(Math.max(0, result));
-        } catch (Exception e) {
-            return OptionalLong.empty();
+            if (eval.pos != eval.input.length()) {
+                return Result.fail("unexpected character at position " + eval.pos + ": '" + eval.input.charAt(eval.pos) + "'");
+            }
+            return Result.ok(Math.max(0, result));
+        } catch (ArithmeticException e) {
+            return Result.fail("arithmetic error: " + e.getMessage());
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage() != null ? e.getMessage() : "parse error");
         }
     }
 
@@ -50,39 +74,55 @@ public class ExpressionEvaluator {
             skipSpaces();
             if (pos >= input.length()) break;
             char c = input.charAt(pos);
-            if (c != '*' && c != '/') break;
+            if (c != '*' && c != '/' && c != '%') break;
             pos++;
             long right = parseFactor();
-            if (c == '/' && right == 0) throw new ArithmeticException("Division by zero");
-            result = c == '*' ? result * right : result / right;
+            switch (c) {
+                case '*' -> result = result * right;
+                case '/' -> {
+                    if (right == 0) throw new ArithmeticException("division by zero");
+                    result = result / right;
+                }
+                case '%' -> {
+                    if (right == 0) throw new ArithmeticException("modulo by zero");
+                    result = result % right;
+                }
+            }
         }
         return result;
     }
 
     private long parseFactor() {
         skipSpaces();
-        if (pos >= input.length()) throw new RuntimeException("Unexpected end of expression");
+        if (pos >= input.length()) throw new RuntimeException("unexpected end of expression");
 
-        if (input.charAt(pos) == '(') {
+        char c = input.charAt(pos);
+
+        if (c == '(') {
             pos++;
             long result = parseExpression();
             skipSpaces();
             if (pos >= input.length() || input.charAt(pos) != ')')
-                throw new RuntimeException("Missing closing parenthesis");
+                throw new RuntimeException("missing closing parenthesis at position " + pos);
             pos++;
             return result;
         }
 
-        if (input.charAt(pos) == '-') {
+        if (c == '-') {
             pos++;
             return -parseFactor();
         }
 
-        if (Character.isDigit(input.charAt(pos))) return parseNumber();
+        if (c == '+') {
+            pos++;
+            return parseFactor();
+        }
 
-        if (Character.isLetter(input.charAt(pos)) || input.charAt(pos) == '_') return parseVariable();
+        if (Character.isDigit(c)) return parseNumber();
 
-        throw new RuntimeException("Unexpected character: " + input.charAt(pos));
+        if (Character.isLetter(c) || c == '_') return parseVariable();
+
+        throw new RuntimeException("unexpected character '" + c + "' at position " + pos);
     }
 
     private long parseNumber() {
@@ -101,14 +141,14 @@ public class ExpressionEvaluator {
             case "score" -> parseScoreCall();
             case "ftb_quest_completed"  -> parseFtbQuestCall(true);
             case "ftb_reward_claimed"   -> parseFtbQuestCall(false);
-            default -> throw new RuntimeException("Unknown variable: " + name);
+            default -> throw new RuntimeException("unknown variable '" + name + "'");
         };
     }
 
     private long parseScoreCall() {
         skipSpaces();
         if (pos >= input.length() || input.charAt(pos) != '(')
-            throw new RuntimeException("Expected '(' after score");
+            throw new RuntimeException("expected '(' after score");
         pos++;
         skipSpaces();
 
@@ -117,7 +157,7 @@ public class ExpressionEvaluator {
         String objective = input.substring(start, pos).trim();
 
         if (pos >= input.length() || input.charAt(pos) != ',')
-            throw new RuntimeException("Expected ',' in score()");
+            throw new RuntimeException("expected ',' in score()");
         pos++;
         skipSpaces();
 
@@ -126,7 +166,7 @@ public class ExpressionEvaluator {
         String holder = input.substring(start, pos).trim();
 
         if (pos >= input.length() || input.charAt(pos) != ')')
-            throw new RuntimeException("Expected ')' in score()");
+            throw new RuntimeException("expected ')' in score()");
         pos++;
 
         if (server == null || objective.isEmpty() || holder.isEmpty()) return 0;
@@ -140,13 +180,13 @@ public class ExpressionEvaluator {
     private long parseFtbQuestCall(boolean isQuest) {
         skipSpaces();
         if (pos >= input.length() || input.charAt(pos) != '(')
-            throw new RuntimeException("Expected ( after ftb function");
+            throw new RuntimeException("expected '(' after ftb function");
         pos++;
         int start = pos;
         while (pos < input.length() && input.charAt(pos) != ')') pos++;
         String hexId = input.substring(start, pos).trim();
         if (pos >= input.length() || input.charAt(pos) != ')')
-            throw new RuntimeException("Expected ) in ftb function");
+            throw new RuntimeException("expected ')' in ftb function");
         pos++;
         if (server == null || hexId.isEmpty()) return 0;
         if (!com.mateof24.integration.FTBQuestsIntegration.isInstalled()) return 0;

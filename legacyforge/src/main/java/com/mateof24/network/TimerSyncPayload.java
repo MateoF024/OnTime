@@ -12,17 +12,15 @@ public class TimerSyncPayload {
     private final boolean countUp;
     private final boolean running;
     private final boolean silent;
-    private final long serverTick;
 
     public TimerSyncPayload(String name, long currentTicks, long targetTicks,
-                            boolean countUp, boolean running, boolean silent, long serverTick) {
+                            boolean countUp, boolean running, boolean silent) {
         this.name = name;
         this.currentTicks = currentTicks;
         this.targetTicks = targetTicks;
         this.countUp = countUp;
         this.running = running;
         this.silent = silent;
-        this.serverTick = serverTick;
     }
 
     public static void encode(TimerSyncPayload msg, FriendlyByteBuf buf) {
@@ -32,7 +30,6 @@ public class TimerSyncPayload {
         buf.writeBoolean(msg.countUp);
         buf.writeBoolean(msg.running);
         buf.writeBoolean(msg.silent);
-        buf.writeLong(msg.serverTick);
     }
 
     public static TimerSyncPayload decode(FriendlyByteBuf buf) {
@@ -42,9 +39,8 @@ public class TimerSyncPayload {
         boolean countUp = buf.readBoolean();
         boolean running = buf.readBoolean();
         boolean silent = buf.readBoolean();
-        long serverTick = buf.readLong();
 
-        return new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent, serverTick);
+        return new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent);
     }
 
     public static void handle(TimerSyncPayload msg, Supplier<NetworkEvent.Context> ctx) {
@@ -58,8 +54,7 @@ public class TimerSyncPayload {
                         msg.targetTicks,
                         msg.countUp,
                         msg.running,
-                        msg.silent,
-                        msg.serverTick
+                        msg.silent
                 );
             }
         });
@@ -72,5 +67,4 @@ public class TimerSyncPayload {
     public boolean countUp() { return countUp; }
     public boolean running() { return running; }
     public boolean silent() { return silent; }
-    public long serverTick() { return serverTick; }
 }

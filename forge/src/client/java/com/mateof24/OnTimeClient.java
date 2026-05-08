@@ -35,6 +35,7 @@ public class OnTimeClient {
     private static void onClientTick(LevelTickEvent.Post event) {
         if (event.getLevel().isClientSide()) {
             ClientTimerState.tick();
+            com.mateof24.integration.JadeClientHook.updateFromTimer();
         }
     }
 }

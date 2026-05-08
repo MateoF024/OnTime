@@ -24,11 +24,18 @@ public class TimerTickHandler {
     private static int startConditionCheckCounter = 0;
     private static final int START_CHECK_INTERVAL = 20;
 
+    // Scoreboard updates only need to happen when the displayed second changes (1 Hz),
+    // not every server tick (20 Hz). -1 forces a write on the first tick of a new timer.
+    private static long lastBroadcastedScoreboardSecond = -1L;
+    private static String lastBroadcastedScoreboardTimer = "";
+
     public static void cancelCooldown() {
         cooldownRemaining = 0;
         inRepeatCooldown = false;
         pendingSequenceTimerName = null;
-        com.mateof24.trigger.TriggerRegistry.reset();
+        lastBroadcastedScoreboardSecond = -1L;
+        lastBroadcastedScoreboardTimer = "";
+        com.mateof24.trigger.TriggerRegistry.resetAll();
     }
 
     public static boolean hasPendingCooldown() {
@@ -36,6 +43,7 @@ public class TimerTickHandler {
     }
 
     public static void tick(MinecraftServer server) {
+        com.mateof24.trigger.FTBQuestsPoller.poll(server);
         startConditionCheckCounter++;
         if (startConditionCheckCounter >= START_CHECK_INTERVAL) {
             startConditionCheckCounter = 0;
@@ -51,7 +59,7 @@ public class TimerTickHandler {
             if (opt.isPresent()) {
                 Timer t = opt.get();
                 t.setRunning(true);
-                TimerManager.getInstance().saveTimers();
+                TimerManager.getInstance().saveActiveTimer();
                 syncTimerToClients(server, t);
             }
             return;
@@ -69,6 +77,8 @@ public class TimerTickHandler {
                 TimerManager.getInstance().getTimer(next).ifPresent(t -> syncTimerToClients(server, t));
             } else {
                 Services.PLATFORM.clearScoreboardTimer(server);
+                lastBroadcastedScoreboardSecond = -1L;
+                lastBroadcastedScoreboardTimer = "";
                 Services.PLATFORM.sendTimerSyncPacket(server, "", 0, 0, false, false, false);
             }
             return;
@@ -82,8 +92,9 @@ public class TimerTickHandler {
 
         boolean finished = activeTimer.tick();
 
-        if (!finished && "finish".equals(activeTimer.getTriggerType() != null ? activeTimer.getTriggerAction() : "finish")) {
-            if (com.mateof24.trigger.TriggerRegistry.consumeTrigger()) finished = true;
+        if (!finished && activeTimer.getTriggerType() != null
+                && "finish".equals(activeTimer.getTriggerAction())) {
+            if (com.mateof24.trigger.TriggerRegistry.consumeFor(activeTimer.getName())) finished = true;
         }
 
         if (!finished && activeTimer.hasCondition() && "finish".equals(activeTimer.getScoreConditionAction())) {
@@ -106,10 +117,16 @@ public class TimerTickHandler {
             syncTimerToClients(server, activeTimer);
         }
 
-        Services.PLATFORM.updateScoreboardTimer(server,
-                activeTimer.getName(),
-                activeTimer.getCurrentTicks() / 20L,
-                activeTimer.getTargetTicks() / 20L);
+        long currentSecond = activeTimer.getCurrentTicks() / 20L;
+        if (currentSecond != lastBroadcastedScoreboardSecond
+                || !activeTimer.getName().equals(lastBroadcastedScoreboardTimer)) {
+            Services.PLATFORM.updateScoreboardTimer(server,
+                    activeTimer.getName(),
+                    currentSecond,
+                    activeTimer.getTargetTicks() / 20L);
+            lastBroadcastedScoreboardSecond = currentSecond;
+            lastBroadcastedScoreboardTimer = activeTimer.getName();
+        }
 
         if (syncCounter == 0) {
             com.mateof24.event.TimerEventBus.fireOnTick(toInfo(activeTimer));
@@ -124,7 +141,6 @@ public class TimerTickHandler {
         }
 
         if (finished) {
-            TimerManager.getInstance().reloadCommandsFromDisk();
             TimerLogger.logFinish(activeTimer);
             com.mateof24.event.TimerEventBus.fireOnFinish(toInfo(activeTimer));
             executeTimerCommand(server, activeTimer);
@@ -133,14 +149,14 @@ public class TimerTickHandler {
                 activeTimer.incrementRepeatsDone();
                 activeTimer.reset();
                 long cd = activeTimer.getRepeatCooldownTicks();
-                TimerManager.getInstance().saveTimers();
                 if (cd > 0) {
+                    TimerManager.getInstance().saveActiveTimer();
                     cooldownRemaining = cd;
                     inRepeatCooldown = true;
                     syncTimerToClients(server, activeTimer);
                 } else {
                     activeTimer.setRunning(true);
-                    TimerManager.getInstance().saveTimers();
+                    TimerManager.getInstance().saveActiveTimer();
                     syncTimerToClients(server, activeTimer);
                 }
             } else {
@@ -148,8 +164,9 @@ public class TimerTickHandler {
                 long seqCd = activeTimer.getSequenceCooldownTicks();
                 activeTimer.resetRepeatsDone();
                 activeTimer.reset();
+                Timer finishedTimer = activeTimer;
                 TimerManager.getInstance().clearActiveTimer();
-                TimerManager.getInstance().saveTimers();
+                TimerManager.getInstance().saveTimer(finishedTimer);
 
                 if (nextTimerName != null && TimerManager.getInstance().hasTimer(nextTimerName)) {
                     if (seqCd > 0) {
@@ -163,6 +180,8 @@ public class TimerTickHandler {
                     }
                 } else {
                     Services.PLATFORM.clearScoreboardTimer(server);
+                    lastBroadcastedScoreboardSecond = -1L;
+                    lastBroadcastedScoreboardTimer = "";
                     Services.PLATFORM.sendTimerSyncPacket(server, "", 0, 0, false, false, false);
                 }
             }
@@ -176,7 +195,7 @@ public class TimerTickHandler {
             if (t.isRunning()) continue;
             boolean shouldStart = false;
             if (t.getTriggerType() != null && "start".equals(t.getTriggerAction())) {
-                if (com.mateof24.trigger.TriggerRegistry.consumeTrigger()) shouldStart = true;
+                if (com.mateof24.trigger.TriggerRegistry.consumeFor(t.getName())) shouldStart = true;
             }
             if (!shouldStart && t.hasCondition() && "start".equals(t.getScoreConditionAction())) {
                 shouldStart = checkScoreboardCondition(server, t);

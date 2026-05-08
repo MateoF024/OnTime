@@ -13,8 +13,10 @@ public class TimerRenderer {
         Minecraft mc = Minecraft.getInstance();
         if (mc.options.hideGui || mc.options.renderDebug) return;
 
-        String timeText = ClientTimerState.getFormattedTime();
-        int textColor = ClientTimerState.getColorForPercentage(ClientTimerState.getPercentage());
+        long ticks = ClientTimerState.getInterpolatedTicks();
+        String timeText = ClientTimerState.formatTicks(ticks);
+        float percentage = ClientTimerState.percentageOf(ticks);
+        int textColor = ClientTimerState.getColorForPercentage(percentage);
 
         int screenWidth = mc.getWindow().getGuiScaledWidth();
         int screenHeight = mc.getWindow().getGuiScaledHeight();
@@ -37,7 +39,7 @@ public class TimerRenderer {
 
         if (com.mateof24.render.TimerRendererRegistry.hasCustomRenderer()) {
             com.mateof24.render.TimerRendererRegistry.getCustomRenderer()
-                    .render(graphics, 0f, timeText, ClientTimerState.getPercentage(), x, y, scale);
+                    .render(graphics, 0f, timeText, percentage, x, y, scale);
             return;
         }
 

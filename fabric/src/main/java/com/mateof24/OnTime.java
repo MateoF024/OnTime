@@ -39,7 +39,6 @@ public class OnTime implements ModInitializer {
             serverInstance = server;
             ModConfig.onSaveHook = () -> Services.PLATFORM.sendDisplayConfigPacketToAll(serverInstance);
             com.mateof24.integration.FTBQuestsIntegration.tryInit();
-            com.mateof24.integration.WorldProtectorIntegration.tryInit();
 
             TimerManager.getInstance().loadTimers();
             if (ModConfig.getInstance().isWebSocketEnabled()) {
@@ -82,6 +81,7 @@ public class OnTime implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             com.mateof24.websocket.TimerWebSocketServer.getInstance().stop();
             com.mateof24.webpanel.TimerWebPanel.getInstance().stop();
+            com.mateof24.trigger.FTBQuestsPoller.resetAll();
             ModConfig.onSaveHook = null;
             serverInstance = null;
 

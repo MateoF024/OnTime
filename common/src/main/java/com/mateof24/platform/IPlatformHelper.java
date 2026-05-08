@@ -11,8 +11,6 @@ public interface IPlatformHelper {
     void sendTimerSyncPacket(MinecraftServer server, String name, long currentTicks, long targetTicks, boolean countUp, boolean running, boolean silent);
     void sendVisibilityPacket(ServerPlayer player, boolean visible);
     void sendSilentPacket(ServerPlayer player, boolean silent);
-    void sendPositionPacket(ServerPlayer player, String presetName);
-    void sendPositionPacketToAll(MinecraftServer server, String presetName);
     default void sendDisplayConfigPacket(ServerPlayer player) {}
     default void sendDisplayConfigPacketToAll(MinecraftServer server) {}
     void registerPackets();
@@ -20,7 +18,4 @@ public interface IPlatformHelper {
     void updateScoreboardTimer(MinecraftServer server, String timerName, long currentSeconds, long targetSeconds);
     void clearScoreboardTimer(MinecraftServer server);
     default long getScoreboardValue(MinecraftServer server, String objective, String holder) { return 0; }
-    default boolean isAnyPlayerInRegion(MinecraftServer server, String regionId) {
-        return com.mateof24.integration.WorldProtectorIntegration.isAnyPlayerInRegion(server, regionId);
-    }
 }

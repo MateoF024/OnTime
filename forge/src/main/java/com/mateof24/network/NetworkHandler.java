@@ -24,7 +24,7 @@ public class NetworkHandler {
         context.enqueueWork(() -> {
             if (payload.name().isEmpty()) ClientTimerState.clear();
             else ClientTimerState.updateTimer(payload.name(), payload.currentTicks(), payload.targetTicks(),
-                    payload.countUp(), payload.running(), payload.silent(), payload.serverTick());
+                    payload.countUp(), payload.running(), payload.silent());
         });
     }
 
@@ -49,14 +49,14 @@ public class NetworkHandler {
                                           long currentTicks, long targetTicks,
                                           boolean countUp, boolean running, boolean silent) {
         PacketDistributor.sendToAllPlayers(new TimerSyncPayload(
-                name, currentTicks, targetTicks, countUp, running, silent, server.getTickCount()));
+                name, currentTicks, targetTicks, countUp, running, silent));
     }
 
     public static void syncTimerToClient(ServerPlayer player, String name,
                                          long currentTicks, long targetTicks,
-                                         boolean countUp, boolean running, boolean silent, long serverTick) {
+                                         boolean countUp, boolean running, boolean silent) {
         PacketDistributor.sendToPlayer(player, new TimerSyncPayload(
-                name, currentTicks, targetTicks, countUp, running, silent, serverTick));
+                name, currentTicks, targetTicks, countUp, running, silent));
     }
 
     public static void syncVisibilityToClient(ServerPlayer player, boolean visible) {

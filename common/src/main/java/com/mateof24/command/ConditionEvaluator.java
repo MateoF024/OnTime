@@ -81,17 +81,6 @@ public class ConditionEvaluator {
             return result;
         }
 
-        if (peekWord("player_in_region")) {
-            pos += "player_in_region".length();
-            skipSpaces();
-            if (pos >= input.length() || input.charAt(pos) != '(') throw new RuntimeException("Expected (");
-            pos++;
-            String regionId = parseStringArg();
-            if (pos >= input.length() || input.charAt(pos) != ')') throw new RuntimeException("Expected )");
-            pos++;
-            return checkPlayerInRegion(regionId);
-        }
-
         return parseComparison();
     }
 
@@ -179,13 +168,6 @@ public class ConditionEvaluator {
         throw new RuntimeException("Expected comparator at pos " + pos);
     }
 
-    private String parseStringArg() {
-        skipSpaces();
-        int start = pos;
-        while (pos < input.length() && input.charAt(pos) != ')' && input.charAt(pos) != ',') pos++;
-        return input.substring(start, pos).trim();
-    }
-
     private boolean peekWord(String word) {
         if (pos + word.length() > input.length()) return false;
         if (!input.startsWith(word, pos)) return false;
@@ -197,12 +179,6 @@ public class ConditionEvaluator {
 
     private boolean peek(String s) {
         return input.startsWith(s, pos);
-    }
-
-    private boolean checkPlayerInRegion(String regionId) {
-        if (server == null || regionId.isEmpty()) return false;
-        if (!com.mateof24.integration.WorldProtectorIntegration.isInstalled()) return false;
-        return com.mateof24.integration.WorldProtectorIntegration.isAnyPlayerInRegion(server, regionId);
     }
 
     private void skipSpaces() {

@@ -12,8 +12,7 @@ public record TimerSyncPayload(
         long targetTicks,
         boolean countUp,
         boolean running,
-        boolean silent,
-        long serverTick
+        boolean silent
 ) implements CustomPacketPayload {
 
     public static final Type<TimerSyncPayload> TYPE = new Type<>(
@@ -29,9 +28,8 @@ public record TimerSyncPayload(
             boolean countUp = buffer.readBoolean();
             boolean running = buffer.readBoolean();
             boolean silent = buffer.readBoolean();
-            long serverTick = buffer.readLong();
 
-            return new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent, serverTick);
+            return new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent);
         }
 
         @Override
@@ -42,7 +40,6 @@ public record TimerSyncPayload(
             buffer.writeBoolean(payload.countUp());
             buffer.writeBoolean(payload.running());
             buffer.writeBoolean(payload.silent());
-            buffer.writeLong(payload.serverTick());
         }
 
         private void encodeString(ByteBuf buffer, String str) {

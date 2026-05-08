@@ -37,12 +37,6 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
     }
 
     @Override
-    public void sendPositionPacket(ServerPlayer player, String presetName) {}
-
-    @Override
-    public void sendPositionPacketToAll(MinecraftServer server, String presetName) {}
-
-    @Override
     public void sendDisplayConfigPacket(ServerPlayer player) {
         NetworkHandler.syncDisplayConfigToClient(player, ModConfig.getInstance());
     }

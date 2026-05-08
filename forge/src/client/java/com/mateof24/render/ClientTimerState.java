@@ -8,18 +8,25 @@ import net.minecraft.sounds.SoundSource;
 
 public class ClientTimerState {
     private static String timerName = "";
-    private static long currentTicks = 0;
     private static long targetTicks = 0;
     private static boolean countUp = false;
     private static boolean running = false;
-    private static long serverTick = 0;
-    private static long clientTickAtSync = 0;
-    private static long lastSecond = -1;
-    private static long pausedTicks = 0;
-    private static boolean wasPaused = false;
     private static boolean silent = false;
     private static boolean visible = true;
     private static boolean playerSilent = false;
+
+    // Anchor for nanoTime-based prediction. Using wall-clock time instead of
+    // mc.level.getGameTime() avoids the ±1 second jitter that happens when
+    // sync packets arrive 1-2 ticks early/late on the client tick clock.
+    private static long currentTicksAtSync = 0;
+    private static long realTimeAtSyncNanos = 0;
+    private static boolean hasSync = false;
+
+    private static long pauseStartedAtNanos = 0;
+    private static long pausedTicksSnapshot = 0;
+    private static boolean wasPaused = false;
+
+    private static long lastSecond = -1;
 
     private static int displayX = -1;
     private static int displayY = 4;
@@ -34,6 +41,9 @@ public class ClientTimerState {
     private static float displaySoundVolume = 1.0f;
     private static float displaySoundPitch = 2.0f;
 
+    private static final long NANOS_PER_TICK = 50_000_000L;
+    private static final long SNAP_THRESHOLD_TICKS = 20;
+
     public static void updateDisplayConfig(int x, int y, String preset, float scale,
                                            int colorHigh, int colorMid, int colorLow,
                                            int thresholdMid, int thresholdLow,
@@ -45,14 +55,45 @@ public class ClientTimerState {
     }
 
     public static void updateTimer(String name, long current, long target, boolean up,
-                                   boolean run, boolean sil, long servTick) {
-        boolean isFirstUpdate = timerName.isEmpty() || !timerName.equals(name);
-        timerName = name; currentTicks = current; targetTicks = target;
-        countUp = up; running = run; silent = sil; serverTick = servTick;
-        clientTickAtSync = Minecraft.getInstance().level != null
-                ? Minecraft.getInstance().level.getGameTime() : 0;
-        if (isFirstUpdate || !running) lastSecond = current / 20L;
-        pausedTicks = 0; wasPaused = false;
+                                   boolean run, boolean sil) {
+        long now = System.nanoTime();
+        boolean firstSync = !hasSync;
+        boolean nameChanged = !timerName.equals(name);
+        boolean wasRunning = running;
+
+        timerName = name;
+        targetTicks = target;
+        countUp = up;
+        silent = sil;
+
+        boolean shouldSnap = firstSync || nameChanged || !run || !wasRunning;
+
+        if (shouldSnap) {
+            currentTicksAtSync = current;
+            realTimeAtSyncNanos = now;
+            if (firstSync || nameChanged || !run) lastSecond = current / 20L;
+        } else {
+            long predicted = computeTicksAt(now);
+            long diff = current - predicted;
+            long absDiff = Math.abs(diff);
+
+            if (absDiff > SNAP_THRESHOLD_TICKS) {
+                currentTicksAtSync = current;
+                realTimeAtSyncNanos = now;
+                lastSecond = current / 20L;
+            } else if (absDiff == 0) {
+                currentTicksAtSync = current;
+                realTimeAtSyncNanos = now;
+            } else {
+                long step = Long.signum(diff);
+                currentTicksAtSync = predicted + step;
+                realTimeAtSyncNanos = now;
+            }
+        }
+
+        running = run;
+        wasPaused = false;
+        hasSync = true;
     }
 
     public static void tick() {
@@ -60,28 +101,30 @@ public class ClientTimerState {
         boolean isPaused = mc.isPaused();
 
         if (isPaused) {
-            if (!wasPaused) { pausedTicks = currentTicks; wasPaused = true; }
+            if (!wasPaused) {
+                pausedTicksSnapshot = computeTicksAt(System.nanoTime());
+                pauseStartedAtNanos = System.nanoTime();
+                wasPaused = true;
+            }
             return;
         }
 
         if (wasPaused) {
-            currentTicks = pausedTicks;
-            long currentGameTime = mc.level != null ? mc.level.getGameTime() : 0;
-            long elapsedDuringPause = currentGameTime - clientTickAtSync;
-            clientTickAtSync = currentGameTime - elapsedDuringPause;
+            long pauseDuration = System.nanoTime() - pauseStartedAtNanos;
+            realTimeAtSyncNanos += pauseDuration;
             wasPaused = false;
         }
 
         if (!running || !visible) return;
 
-        long currentSecond = getInterpolatedTicks() / 20L;
+        long currentSecond = computeTicksAt(System.nanoTime()) / 20L;
         if (!silent && !playerSilent && currentSecond != lastSecond && lastSecond != -1) {
             if (mc.player != null && mc.level != null) playTimerSound();
         }
         lastSecond = currentSecond;
     }
 
-    protected static ResourceLocation parseSound(String id) {
+    private static ResourceLocation parseSound(String id) {
         return ResourceLocation.parse(id);
     }
 
@@ -98,22 +141,36 @@ public class ClientTimerState {
         }
     }
 
-    public static long getInterpolatedTicks() {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.isPaused() && wasPaused) return pausedTicks;
-        if (!running) return currentTicks;
-        long currentClientTick = mc.level != null ? mc.level.getGameTime() : 0;
-        long ticksSinceSync = Math.max(0, Math.min(currentClientTick - clientTickAtSync, 40));
-        if (countUp) return Math.min(currentTicks + ticksSinceSync, targetTicks);
-        else return Math.max(currentTicks - ticksSinceSync, 0);
+    private static long computeTicksAt(long nowNanos) {
+        if (!hasSync) return 0;
+        if (wasPaused) return pausedTicksSnapshot;
+        if (!running) return currentTicksAtSync;
+        long elapsedTicks = (nowNanos - realTimeAtSyncNanos) / NANOS_PER_TICK;
+        if (elapsedTicks < 0) elapsedTicks = 0;
+        if (countUp) return Math.min(currentTicksAtSync + elapsedTicks, targetTicks);
+        return Math.max(currentTicksAtSync - elapsedTicks, 0);
     }
 
-    public static String getFormattedTime() {
-        long totalSeconds = getInterpolatedTicks() / 20L;
+    public static long getInterpolatedTicks() {
+        return computeTicksAt(System.nanoTime());
+    }
+
+    public static String formatTicks(long ticks) {
+        long totalSeconds = ticks / 20L;
         long hours = totalSeconds / 3600, minutes = (totalSeconds % 3600) / 60, seconds = totalSeconds % 60;
         return hours > 0 ? String.format("%02d:%02d:%02d", hours, minutes, seconds)
                 : String.format("%02d:%02d", minutes, seconds);
     }
+
+    public static float percentageOf(long ticks) {
+        if (targetTicks == 0) return 100f;
+        float percentage = (ticks * 100f) / targetTicks;
+        return countUp ? 100f - percentage : percentage;
+    }
+
+    public static String getFormattedTime() { return formatTicks(getInterpolatedTicks()); }
+
+    public static float getPercentage() { return percentageOf(getInterpolatedTicks()); }
 
     public static int getColorForPercentage(float percentage) {
         if (percentage >= displayThresholdMid) return displayColorHigh;
@@ -124,15 +181,20 @@ public class ClientTimerState {
     public static boolean shouldDisplay() { return !timerName.isEmpty() && visible; }
 
     public static void clear() {
-        timerName = ""; currentTicks = 0; targetTicks = 0; countUp = false; running = false;
-        serverTick = 0; clientTickAtSync = 0; lastSecond = -1;
-        pausedTicks = 0; wasPaused = false; silent = false; visible = true; playerSilent = false;
-    }
-
-    public static float getPercentage() {
-        if (targetTicks == 0) return 100f;
-        float percentage = (getInterpolatedTicks() * 100f) / targetTicks;
-        return countUp ? 100f - percentage : percentage;
+        timerName = "";
+        targetTicks = 0;
+        countUp = false;
+        running = false;
+        silent = false;
+        visible = true;
+        playerSilent = false;
+        currentTicksAtSync = 0;
+        realTimeAtSyncNanos = 0;
+        hasSync = false;
+        pauseStartedAtNanos = 0;
+        pausedTicksSnapshot = 0;
+        wasPaused = false;
+        lastSecond = -1;
     }
 
     public static TimerPositionPreset getPositionPreset() { return TimerPositionPreset.fromString(displayPreset); }

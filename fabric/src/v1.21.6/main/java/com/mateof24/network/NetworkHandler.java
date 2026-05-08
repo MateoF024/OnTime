@@ -26,7 +26,7 @@ public class NetworkHandler {
 
     public static void syncTimerToClients(MinecraftServer server, String name, long currentTicks,
                                           long targetTicks, boolean countUp, boolean running, boolean silent) {
-        TimerSyncPayload payload = new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent, server.getTickCount());
+        TimerSyncPayload payload = new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent);
         for (var player : server.getPlayerList().getPlayers()) {
             ServerPlayNetworking.send(player, payload);
         }
@@ -104,18 +104,18 @@ public class NetworkHandler {
     }
 
     public record TimerSyncPayload(String name, long currentTicks, long targetTicks,
-                                   boolean countUp, boolean running, boolean silent, long serverTick)
+                                   boolean countUp, boolean running, boolean silent)
             implements CustomPacketPayload {
         public static final Type<TimerSyncPayload> TYPE = new Type<>(TIMER_SYNC_ID);
         public static final StreamCodec<FriendlyByteBuf, TimerSyncPayload> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeUtf(p.name()); buf.writeLong(p.currentTicks()); buf.writeLong(p.targetTicks());
                     buf.writeBoolean(p.countUp()); buf.writeBoolean(p.running());
-                    buf.writeBoolean(p.silent()); buf.writeLong(p.serverTick());
+                    buf.writeBoolean(p.silent());
                 },
                 buf -> new TimerSyncPayload(
                         buf.readUtf(), buf.readLong(), buf.readLong(),
-                        buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readLong()
+                        buf.readBoolean(), buf.readBoolean(), buf.readBoolean()
                 )
         );
         @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }

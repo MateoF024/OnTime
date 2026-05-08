@@ -1,20 +1,28 @@
 package com.mateof24.trigger;
 
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class TriggerRegistry {
 
-    private static final AtomicBoolean triggerFired = new AtomicBoolean(false);
+    private static final Set<String> firedTimers = ConcurrentHashMap.newKeySet();
 
-    public static void fire() {
-        triggerFired.set(true);
+    public static void fireFor(String timerName) {
+        if (timerName == null || timerName.isEmpty()) return;
+        firedTimers.add(timerName);
     }
 
-    public static boolean consumeTrigger() {
-        return triggerFired.getAndSet(false);
+    public static boolean consumeFor(String timerName) {
+        if (timerName == null || timerName.isEmpty()) return false;
+        return firedTimers.remove(timerName);
     }
 
-    public static void reset() {
-        triggerFired.set(false);
+    public static void resetFor(String timerName) {
+        if (timerName == null || timerName.isEmpty()) return;
+        firedTimers.remove(timerName);
+    }
+
+    public static void resetAll() {
+        firedTimers.clear();
     }
 }

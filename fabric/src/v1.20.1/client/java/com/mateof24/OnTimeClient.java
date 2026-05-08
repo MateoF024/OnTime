@@ -13,7 +13,13 @@ public class OnTimeClient implements ClientModInitializer {
     public void onInitializeClient() {
         ClientNetworkHandler.registerClientPackets();
         HudRenderCallback.EVENT.register((guiGraphics, tickDelta) -> TimerRenderer.render(guiGraphics, tickDelta));
-        ClientTickEvents.END_CLIENT_TICK.register(client -> ClientTimerState.tick());
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ClientTimerState.clear());
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            ClientTimerState.tick();
+            com.mateof24.integration.JadeClientHook.updateFromTimer();
+        });
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            ClientTimerState.clear();
+            com.mateof24.integration.JadeOverlayManager.resetOnDisconnect();
+        });
     }
 }

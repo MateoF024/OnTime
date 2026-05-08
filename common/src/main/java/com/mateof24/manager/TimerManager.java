@@ -53,8 +53,6 @@ public class TimerManager {
     }
 
     public boolean startTimer(String name) {
-        reloadFromDisk();
-
         Timer timer = timers.get(name);
         if (timer == null) {
             return false;
@@ -143,6 +141,28 @@ public class TimerManager {
     public void saveTimers() {
         String activeTimerName = activeTimer != null ? activeTimer.getName() : null;
         TimerStorage.saveTimers(timers, activeTimerName);
+    }
+
+    /**
+     * Cheap save: writes only the active timer's file plus the active-state pointer.
+     * Use during the tick path where only the active timer's running/currentTicks/
+     * repeatsDone changes — avoids the per-tick re-write of every timer file.
+     */
+    public void saveActiveTimer() {
+        if (activeTimer != null) {
+            TimerStorage.saveTimer(activeTimer);
+        }
+        TimerStorage.saveActiveState(activeTimer != null ? activeTimer.getName() : null);
+    }
+
+    /**
+     * Cheap save: writes a single timer's file plus the active-state pointer.
+     * Use when one timer's state changes outside the active-timer hot path.
+     */
+    public void saveTimer(Timer timer) {
+        if (timer == null) return;
+        TimerStorage.saveTimer(timer);
+        TimerStorage.saveActiveState(activeTimer != null ? activeTimer.getName() : null);
     }
 
     public void loadTimers() {

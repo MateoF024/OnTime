@@ -42,8 +42,11 @@ public class ModConfig {
     private float timerSoundVolume = 1.0f;
     private float timerSoundPitch = 2.0f;
     private boolean webSocketEnabled = false;
-    private int webSocketPort = 8765;
-    private int webPanelPort = 8080;
+    // Defaults adjacent to Minecraft's port range (25565 main, 25575 RCON) so
+    // they group naturally in firewall/port-forwarding rules and avoid the
+    // heavy collision footprint of 8080 (Pl3xMap, Tomcat, Spring Boot, etc.).
+    private int webSocketPort = 25581;
+    private int webPanelPort = 25580;
 
 
     // Función para cargar parámetros
