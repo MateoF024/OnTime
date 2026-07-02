@@ -33,6 +33,10 @@ bin/
 
 run/
 
+# local reference jars (not part of the repo)
+
+Libs/
+
 # java
 
 hs_err_*.log
