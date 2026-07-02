@@ -1,32 +1,23 @@
 plugins {
-    id 'fabric-loom' version '1.13-SNAPSHOT'
+    id 'java-library'
+    // See common/build.gradle for why both Loom variants are declared.
+    id 'net.fabricmc.fabric-loom-remap' version '1.17.13' apply false
+    id 'net.fabricmc.fabric-loom' version '1.17.13' apply false
 }
+
+apply plugin: (rootProject.ext.unobfuscatedMc ? 'net.fabricmc.fabric-loom' : 'net.fabricmc.fabric-loom-remap')
 
 def minecraftVer = project.minecraft_version
+// Family resolution lives in the root build.gradle (single source of truth).
+def versionType = rootProject.ext.versionType
+def vKey = rootProject.ext.vKey
+def requireFamilyProperty = rootProject.ext.requireFamilyProperty
 
-// NOTE: the v1.21.6 family must be checked BEFORE v1.21.1, otherwise
-// startsWith("1.21.1") also matches "1.21.10" and picks the wrong family.
-String versionType
-if (minecraftVer.startsWith("1.20.1")) {
-    versionType = "v1.20.1"
-} else if (minecraftVer.startsWith("1.21.6") || minecraftVer.startsWith("1.21.7") ||
-        minecraftVer.startsWith("1.21.8") || minecraftVer.startsWith("1.21.9") ||
-        minecraftVer.startsWith("1.21.10")) {
-    versionType = "v1.21.6"
-} else if (minecraftVer.startsWith("1.21.1") || minecraftVer.startsWith("1.21.2") ||
-        minecraftVer.startsWith("1.21.3") || minecraftVer.startsWith("1.21.4") ||
-        minecraftVer.startsWith("1.21.5")) {
-    versionType = "v1.21.1"
-} else {
-    versionType = "v1.21.1"
-}
-
-def vKey = versionType.replace('.', '_')
-
-def fabricApiVer      = project.findProperty("fabric_api_${vKey}")
-def clothVer          = project.findProperty("cloth_${vKey}")
-def modmenuVer        = project.findProperty("modmenu_${vKey}")
+def fabricApiVer      = requireFamilyProperty("fabric_api_${vKey}")
+def clothVer          = requireFamilyProperty("cloth_${vKey}")
+def modmenuVer        = requireFamilyProperty("modmenu_${vKey}")
 def placeholderApiVer = project.findProperty("placeholder_api_${vKey}")
+def minecraftRange    = requireFamilyProperty("mc_range_fabric_${vKey}")
 
 base {
     archivesName = "${project.archives_base_name}+fabric+${minecraftVer}"
@@ -81,16 +72,11 @@ sourceSets {
     }
 }
 
-repositories {
-    mavenCentral()
-    maven { url = 'https://maven.shedaniel.me/' }
-    maven { url = 'https://maven.terraformersmc.com/' }
-    maven { url = 'https://maven.nucleoid.xyz/' }
-}
-
 dependencies {
     minecraft "com.mojang:minecraft:${minecraftVer}"
-    mappings loom.officialMojangMappings()
+    if (!rootProject.ext.unobfuscatedMc) {
+        mappings loom.officialMojangMappings()
+    }
 
     modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVer}"
@@ -108,11 +94,6 @@ dependencies {
     include project(':common')
 }
 
-def minecraftRange = project.findProperty("mc_range_fabric_${vKey}")
-if (minecraftRange == null) {
-    throw new GradleException("Missing property 'mc_range_fabric_${vKey}' in gradle.properties (required to declare the supported Minecraft range in fabric.mod.json)")
-}
-
 processResources {
     inputs.property "version", mod_version
     inputs.property "minecraft_range", minecraftRange
@@ -128,6 +109,32 @@ tasks.named('processClientResources') {
 tasks.withType(Jar) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
+
+// Sanity check: the final jar must declare the version from gradle.properties
+// and the exact Minecraft range of its family. Guards against the 3.0.0
+// incident where a jar shipped with stale hand-maintained metadata.
+def verifyLoaderMetadata = tasks.register('verifyLoaderMetadata') {
+    dependsOn tasks.named('remapJar')
+    def expectedVersion = project.mod_version
+    def expectedRange = minecraftRange
+    doLast {
+        def jarFile = tasks.named('remapJar').get().archiveFile.get().asFile
+        def fmj = new java.util.zip.ZipFile(jarFile).withCloseable { zip ->
+            def entry = zip.getEntry('fabric.mod.json')
+            if (entry == null) {
+                throw new GradleException("verifyLoaderMetadata: fabric.mod.json missing from ${jarFile.name}")
+            }
+            new groovy.json.JsonSlurper().parse(zip.getInputStream(entry))
+        }
+        if (fmj.version != expectedVersion) {
+            throw new GradleException("verifyLoaderMetadata: ${jarFile.name} declares version '${fmj.version}', expected '${expectedVersion}'")
+        }
+        if (fmj.depends.minecraft != expectedRange) {
+            throw new GradleException("verifyLoaderMetadata: ${jarFile.name} declares minecraft '${fmj.depends.minecraft}', expected '${expectedRange}'")
+        }
+    }
+}
+tasks.named('check') { dependsOn verifyLoaderMetadata }
 
 java {
 }

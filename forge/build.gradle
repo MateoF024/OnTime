@@ -1,30 +1,18 @@
 plugins {
     id 'java-library'
-    id 'net.neoforged.moddev' version '2.0.139'
+    id 'net.neoforged.moddev' version '2.0.141'
 }
 
 def minecraftVer = project.minecraft_version
+// Family resolution lives in the root build.gradle (single source of truth).
+def versionType = rootProject.ext.versionType
+def vKey = rootProject.ext.vKey
+def helpSystemVer = rootProject.ext.helpSystemVer
+def requireFamilyProperty = rootProject.ext.requireFamilyProperty
 
-// NOTE: the v1.21.6 family must be checked BEFORE v1.21.1, otherwise
-// startsWith("1.21.1") also matches "1.21.10" and picks the wrong family.
-String versionType
-if (minecraftVer.startsWith("1.21.6") || minecraftVer.startsWith("1.21.7") ||
-        minecraftVer.startsWith("1.21.8") || minecraftVer.startsWith("1.21.9") ||
-        minecraftVer.startsWith("1.21.10")) {
-    versionType = "v1.21.6"
-} else if (minecraftVer.startsWith("1.21.1") || minecraftVer.startsWith("1.21.2") ||
-        minecraftVer.startsWith("1.21.3") || minecraftVer.startsWith("1.21.4") ||
-        minecraftVer.startsWith("1.21.5")) {
-    versionType = "v1.21.1"
-} else {
-    versionType = "v1.21.6"
-}
-
-def vKey = versionType.replace('.', '_')
-def helpSystemVer = (versionType == "v1.21.6") ? "v2" : "v1"
-
-def neoforgeVer = project.findProperty("neoforge_${vKey}")
-def clothVer    = project.findProperty("cloth_${vKey}")
+def neoforgeVer    = requireFamilyProperty("neoforge_${vKey}")
+def clothVer       = requireFamilyProperty("cloth_${vKey}")
+def minecraftRange = requireFamilyProperty("mc_range_neoforge_${vKey}")
 
 base {
     archivesName = "${project.archives_base_name}+neoforge+${minecraftVer}"
@@ -32,12 +20,6 @@ base {
 
 version = project.mod_version
 group = project.maven_group
-
-repositories {
-    mavenCentral()
-    maven { url = 'https://maven.neoforged.net/releases' }
-    maven { url = 'https://maven.shedaniel.me/' }
-}
 
 neoForge {
     version = neoforgeVer
@@ -81,11 +63,6 @@ sourceSets {
     }
 }
 
-def minecraftRange = project.findProperty("mc_range_neoforge_${vKey}")
-if (minecraftRange == null) {
-    throw new GradleException("Missing property 'mc_range_neoforge_${vKey}' in gradle.properties (required to declare the supported Minecraft range in neoforge.mods.toml)")
-}
-
 processResources {
     from('../common/src/main/resources') {
         include 'assets/**'
@@ -106,13 +83,9 @@ dependencies {
     implementation("me.shedaniel.cloth:cloth-config-neoforge:${clothVer}")
 }
 
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
-}
-
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(rootProject.ext.javaRelease)
     }
 }
 
@@ -129,3 +102,29 @@ tasks.named('jar', Jar).configure {
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
+
+// Sanity check: the final jar must declare the version from gradle.properties
+// and the exact Minecraft range of its family. Guards against the 3.0.0
+// incident where the NeoForge jar shipped identifying itself as 2.1.0.
+def verifyLoaderMetadata = tasks.register('verifyLoaderMetadata') {
+    dependsOn tasks.named('jar')
+    def expectedVersion = project.mod_version
+    def expectedRange = minecraftRange
+    doLast {
+        def jarFile = tasks.named('jar').get().archiveFile.get().asFile
+        def toml = new java.util.zip.ZipFile(jarFile).withCloseable { zip ->
+            def entry = zip.getEntry('META-INF/neoforge.mods.toml')
+            if (entry == null) {
+                throw new GradleException("verifyLoaderMetadata: META-INF/neoforge.mods.toml missing from ${jarFile.name}")
+            }
+            zip.getInputStream(entry).getText('UTF-8')
+        }
+        if (!toml.contains("version=\"${expectedVersion}\"")) {
+            throw new GradleException("verifyLoaderMetadata: ${jarFile.name} does not declare version=\"${expectedVersion}\"")
+        }
+        if (!toml.contains("versionRange=\"${expectedRange}\"")) {
+            throw new GradleException("verifyLoaderMetadata: ${jarFile.name} does not declare minecraft versionRange=\"${expectedRange}\"")
+        }
+    }
+}
+tasks.named('check') { dependsOn verifyLoaderMetadata }

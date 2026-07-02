@@ -1,7 +1,6 @@
 pluginManagement {
     repositories {
         maven { url = 'https://maven.fabricmc.net/' }
-        maven { url = 'https://maven.minecraftforge.net/' }
         maven { url = 'https://maven.neoforged.net/releases/' }
         gradlePluginPortal()
         mavenCentral()
@@ -9,25 +8,12 @@ pluginManagement {
 }
 
 plugins {
-    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
 rootProject.name = 'ontime'
 
-def minecraftVer = settings.extensions.extraProperties.has('minecraft_version')
-        ? settings.extensions.extraProperties.get('minecraft_version')
-        : new File(rootDir, 'gradle.properties').with { f ->
-    def props = new Properties()
-    f.withInputStream { props.load(it) }
-    props.getProperty('minecraft_version')
-}
-
+// 1.20.1 (Fabric + Forge/legacyforge) lives on the '1.20.1-maintenance' branch.
 include('common')
-
-if (minecraftVer.startsWith("1.20.1")) {
-    include('fabric')
-    include('legacyforge')
-} else {
-    include('fabric')
-    include('forge')
-}
+include('fabric')
+include('forge')
