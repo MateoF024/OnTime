@@ -21,7 +21,7 @@ public class PermissionHelper {
     private static class DefaultPermissionProvider implements IPermissionProvider {
         @Override
         public boolean hasPermission(CommandSourceStack source, String node, int fallbackLevel) {
-            return source.hasPermission(fallbackLevel);
+            return com.mateof24.compat.VanillaCompat.hasPermissionLevel(source, fallbackLevel);
         }
     }
 }

@@ -39,6 +39,14 @@ ext.versionType = vt
 ext.vKey = vt.replace('.', '_')
 // HelpSystem variant: v1 = pre-1.21.6 ClickEvent/HoverEvent API, v2 = 1.21.6+.
 ext.helpSystemVer = (vt == "v1.21.1") ? "v1" : "v2"
+// VanillaCompat variant (common/src/<compatVer>/java): the vanilla API surface
+// used by common code that drifts across MC versions (permissions, identifier
+// arguments, synthetic command sources, ...).
+//   compat1 = MC 1.21.1-1.21.10 (int permission levels, ResourceLocation)
+//   compat2 = MC 1.21.11 (PermissionSet/PermissionCheck, Identifier)   [Fase 3]
+//   compat3 = MC 26.x                                                  [Fase 4/5]
+ext.compatVer = (vt == "v1.21.1" || vt == "v1.21.6") ? "compat1"
+        : (vt == "v1.21.11") ? "compat2" : "compat3"
 // 26.x requires Java 25; 1.21.x requires Java 21.
 ext.javaRelease = vt.startsWith("v26") ? 25 : 21
 // 26.1+ ships unobfuscated: Loom's non-remapping plugin must be used.

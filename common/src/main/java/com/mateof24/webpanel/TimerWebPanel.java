@@ -170,7 +170,7 @@ public class TimerWebPanel {
         mcServer.execute(() -> {
             mcServer.sendSystemMessage(message);
             for (ServerPlayer player : mcServer.getPlayerList().getPlayers()) {
-                if (player.hasPermissions(4)) player.sendSystemMessage(message);
+                if (com.mateof24.compat.VanillaCompat.hasPermissionLevel(player, 4)) player.sendSystemMessage(message);
             }
         });
     }

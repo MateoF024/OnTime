@@ -7,8 +7,6 @@ import com.mateof24.storage.TimerLogger;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.phys.Vec2;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.Optional;
 
@@ -227,8 +225,7 @@ public class TimerTickHandler {
         try {
             ServerLevel overworld = server.getLevel(ServerLevel.OVERWORLD);
             if (overworld == null) return;
-            CommandSourceStack source = new CommandSourceStack(server, Vec3.ZERO, Vec2.ZERO, overworld, 4,
-                    "OnTime", net.minecraft.network.chat.Component.literal("OnTime"), server, null);
+            CommandSourceStack source = com.mateof24.compat.VanillaCompat.createCommandSource(server, overworld, "OnTime");
             server.getCommands().performPrefixedCommand(source, processedCommand);
         } catch (Exception e) {
             com.mateof24.OnTimeConstants.LOGGER.error("Failed to execute timer command: " + processedCommand, e);

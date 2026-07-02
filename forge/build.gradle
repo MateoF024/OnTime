@@ -47,6 +47,7 @@ sourceSets {
                     'src/main/java',
                     '../common/src/main/java',
                     "../common/src/${helpSystemVer}/java",
+                    "../common/src/${rootProject.ext.compatVer}/java",
                     'src/client/java',
                     "src/${versionType}/main/java",
                     "src/${versionType}/client/java"

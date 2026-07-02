@@ -22,7 +22,8 @@ sourceSets {
         java {
             srcDirs = [
                     'src/main/java',
-                    "src/${helpSystemVer}/java"
+                    "src/${helpSystemVer}/java",
+                    "src/${rootProject.ext.compatVer}/java"
             ]
         }
     }
