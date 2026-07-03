@@ -58,10 +58,14 @@ sourceSets {
 
     client {
         java {
+            // client-pre26 holds client code that only compiles against
+            // obfuscated-era MC (GuiGraphics and friends; 26.1 replaced them
+            // with GuiGraphicsExtractor). 26.x families ship their own
+            // variants in their version source set.
             srcDirs = [
                     'src/client/java',
                     "src/${versionType}/client/java"
-            ]
+            ] + (rootProject.ext.unobfuscatedMc ? [] : ['src/client-pre26/java'])
         }
         resources {
             srcDirs = [
@@ -74,31 +78,47 @@ sourceSets {
 
 dependencies {
     minecraft "com.mojang:minecraft:${minecraftVer}"
+
     if (!rootProject.ext.unobfuscatedMc) {
         mappings loom.officialMojangMappings()
+
+        modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
+        modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVer}"
+        modApi("me.shedaniel.cloth:cloth-config-fabric:${clothVer}") {
+            exclude(group: "net.fabricmc.fabric-api")
+        }
+        modImplementation("com.terraformersmc:modmenu:${modmenuVer}")
+        if (placeholderApiVer) {
+            modCompileOnly "eu.pb4:placeholder-api:${placeholderApiVer}"
+        }
+        implementation project(path: ':common', configuration: 'namedElements')
+    } else {
+        // The non-remapping plugin (26.1+) drops the mod* configurations and
+        // 'namedElements'; mods are plain dependencies (see
+        // FabricMC/fabric-example-mod, branch 26.1).
+        implementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
+        implementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVer}"
+        api("me.shedaniel.cloth:cloth-config-fabric:${clothVer}") {
+            exclude(group: "net.fabricmc.fabric-api")
+        }
+        implementation("com.terraformersmc:modmenu:${modmenuVer}")
+        if (placeholderApiVer) {
+            compileOnly "eu.pb4:placeholder-api:${placeholderApiVer}"
+        }
+        implementation project(':common')
     }
 
-    modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVer}"
-
-    modApi("me.shedaniel.cloth:cloth-config-fabric:${clothVer}") {
-        exclude(group: "net.fabricmc.fabric-api")
-    }
-    modImplementation("com.terraformersmc:modmenu:${modmenuVer}")
-
-    if (placeholderApiVer) {
-        modCompileOnly "eu.pb4:placeholder-api:${placeholderApiVer}"
-    }
-
-    implementation project(path: ':common', configuration: 'namedElements')
     include project(':common')
 }
 
 processResources {
+    def javaRequirement = ">=${rootProject.ext.javaRelease}".toString()
     inputs.property "version", mod_version
     inputs.property "minecraft_range", minecraftRange
+    inputs.property "java_requirement", javaRequirement
     filesMatching("fabric.mod.json") {
-        expand "version": mod_version, "minecraft_range": minecraftRange
+        expand "version": mod_version, "minecraft_range": minecraftRange,
+                "java_requirement": javaRequirement
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
@@ -113,12 +133,15 @@ tasks.withType(Jar) {
 // Sanity check: the final jar must declare the version from gradle.properties
 // and the exact Minecraft range of its family. Guards against the 3.0.0
 // incident where a jar shipped with stale hand-maintained metadata.
+// Under the non-remapping plugin (26.1+) the final artifact comes from 'jar';
+// under fabric-loom-remap it is 'remapJar'.
+def finalJarTaskName = rootProject.ext.unobfuscatedMc ? 'jar' : 'remapJar'
 def verifyLoaderMetadata = tasks.register('verifyLoaderMetadata') {
-    dependsOn tasks.named('remapJar')
+    dependsOn tasks.named(finalJarTaskName)
     def expectedVersion = project.mod_version
     def expectedRange = minecraftRange
     doLast {
-        def jarFile = tasks.named('remapJar').get().archiveFile.get().asFile
+        def jarFile = tasks.named(finalJarTaskName).get().archiveFile.get().asFile
         def fmj = new java.util.zip.ZipFile(jarFile).withCloseable { zip ->
             def entry = zip.getEntry('fabric.mod.json')
             if (entry == null) {
@@ -137,4 +160,7 @@ def verifyLoaderMetadata = tasks.register('verifyLoaderMetadata') {
 tasks.named('check') { dependsOn verifyLoaderMetadata }
 
 java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(rootProject.ext.javaRelease)
+    }
 }

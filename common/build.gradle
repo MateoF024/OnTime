@@ -34,8 +34,12 @@ dependencies {
     if (!rootProject.ext.unobfuscatedMc) {
         // 26.1+ ships unobfuscated with official names; no mappings step.
         mappings loom.officialMojangMappings()
+        modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
+    } else {
+        // The non-remapping plugin drops the mod* configurations; mods are
+        // plain dependencies (see FabricMC/fabric-example-mod, branch 26.1).
+        implementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
     }
-    modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
     compileOnly 'com.google.code.gson:gson:2.10.1'
 }
 

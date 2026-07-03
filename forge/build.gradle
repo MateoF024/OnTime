@@ -43,6 +43,8 @@ neoForge {
 sourceSets {
     main {
         java {
+            // client-pre26: see fabric/build.gradle — obfuscated-era client
+            // code that 26.x families replace in their version source set.
             srcDirs = [
                     'src/main/java',
                     '../common/src/main/java',
@@ -51,14 +53,17 @@ sourceSets {
                     'src/client/java',
                     "src/${versionType}/main/java",
                     "src/${versionType}/client/java"
-            ]
+            ] + (rootProject.ext.unobfuscatedMc ? [] : ['src/client-pre26/java'])
         }
+        // Family dirs first: with DuplicatesStrategy.EXCLUDE the first
+        // occurrence wins, letting a family override a shared resource
+        // (e.g. the 26.x mixins.json with compatibilityLevel JAVA_25).
         resources {
             srcDirs = [
-                    'src/main/resources',
-                    'src/client/resources',
                     "src/${versionType}/main/resources",
-                    "src/${versionType}/client/resources"
+                    "src/${versionType}/client/resources",
+                    'src/main/resources',
+                    'src/client/resources'
             ]
         }
     }
