@@ -1,5 +1,14 @@
 # OnTime Mod - Changelog
 
+## Version 3.0.2 (unreleased)
+
+### 🐛 Fixed
+
+- **`/timer` commands failed when run from command blocks.** Command blocks execute at vanilla permission level 2, but every OnTime command required level 4, so command blocks (and, with some permission mods, the server console) were rejected. Non-player sources — server console, command blocks, datapack functions, RCON — now always pass the permission check. Players are unaffected: they still need OP (or the corresponding permission node when a permission provider such as LuckPerms is installed).
+  - Note for mod developers: a custom `IPermissionProvider` registered through the OnTime API is no longer consulted for non-player sources.
+
+---
+
 ## Version 3.0.1
 
 Metadata hotfix — no gameplay changes.
