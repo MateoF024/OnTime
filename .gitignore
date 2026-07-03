@@ -37,6 +37,13 @@ run/
 
 Libs/
 
+# internal working docs (not part of the repo)
+
+Wiki/
+Logs/
+roadmap.md
+git_explicacion.md
+
 # java
 
 hs_err_*.log
