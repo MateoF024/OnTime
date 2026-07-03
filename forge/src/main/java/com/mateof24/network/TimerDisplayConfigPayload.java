@@ -1,10 +1,10 @@
 package com.mateof24.network;
 
 import com.mateof24.OnTimeConstants;
+import com.mateof24.compat.VanillaCompat;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
 
 public record TimerDisplayConfigPayload(
         int timerX, int timerY, String positionPreset, float scale,
@@ -13,9 +13,8 @@ public record TimerDisplayConfigPayload(
         String soundId, float soundVolume, float soundPitch
 ) implements CustomPacketPayload {
 
-    public static final Type<TimerDisplayConfigPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(OnTimeConstants.MOD_ID, "timer_display_config")
-    );
+    public static final Type<TimerDisplayConfigPayload> TYPE =
+            VanillaCompat.payloadType(OnTimeConstants.MOD_ID, "timer_display_config");
 
     public static final StreamCodec<ByteBuf, TimerDisplayConfigPayload> STREAM_CODEC = new StreamCodec<>() {
         @Override

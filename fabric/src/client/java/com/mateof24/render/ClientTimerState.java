@@ -1,10 +1,8 @@
 package com.mateof24.render;
 
+import com.mateof24.compat.VanillaClientCompat;
 import com.mateof24.config.TimerPositionPreset;
 import net.minecraft.client.Minecraft;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundSource;
 
 public class ClientTimerState {
     private static String timerName = "";
@@ -128,21 +126,8 @@ public class ClientTimerState {
         lastSecond = currentSecond;
     }
 
-    private static ResourceLocation parseSound(String id) {
-        return ResourceLocation.tryParse(id);
-    }
-
     private static void playTimerSound() {
-        Minecraft mc = Minecraft.getInstance();
-        try {
-            SoundEvent soundEvent = SoundEvent.createVariableRangeEvent(parseSound(displaySoundId));
-            mc.level.playLocalSound(mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                    soundEvent, SoundSource.MASTER, displaySoundVolume, displaySoundPitch, false);
-        } catch (Exception e) {
-            mc.level.playLocalSound(mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                    net.minecraft.sounds.SoundEvents.NOTE_BLOCK_HAT.value(),
-                    SoundSource.MASTER, 0.75F, 2.0F, false);
-        }
+        VanillaClientCompat.playLocalTimerSound(displaySoundId, displaySoundVolume, displaySoundPitch);
     }
 
     private static long computeTicksAt(long nowNanos) {

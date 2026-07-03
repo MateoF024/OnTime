@@ -6,15 +6,18 @@ import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.SharedSuggestionProvider;
-import net.minecraft.commands.arguments.ResourceLocationArgument;
+import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.LevelBasedPermissionSet;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 
@@ -26,8 +29,10 @@ import java.util.concurrent.CompletableFuture;
  * source set ({@code common/src/<compatVer>/java}, selected by the root
  * build.gradle) and every implementation must expose the same signatures.
  *
- * <p>compat1 — MC 1.21.1-1.21.10: int-based permission levels,
- * {@code ResourceLocation} naming.</p>
+ * <p>compat2 — MC 1.21.11: {@code PermissionSet}/{@code PermissionCheck}
+ * permissions (the int-level API was removed), {@code ResourceLocation}
+ * renamed to {@code Identifier}, {@code ResourceKey#location()} renamed to
+ * {@code identifier()}.</p>
  */
 public final class VanillaCompat {
 
@@ -38,19 +43,22 @@ public final class VanillaCompat {
     // ------------------------------------------------------------------
 
     public static boolean hasPermissionLevel(CommandSourceStack source, int level) {
-        return source.hasPermission(level);
+        return source.permissions().hasPermission(
+                new Permission.HasCommandLevel(PermissionLevel.byId(level)));
     }
 
     public static boolean hasPermissionLevel(ServerPlayer player, int level) {
-        return player.hasPermissions(level);
+        return player.permissions().hasPermission(
+                new Permission.HasCommandLevel(PermissionLevel.byId(level)));
     }
 
     /**
      * Synthetic command source used to execute a timer's finish command with
-     * OP level 4 and "OnTime" as the display name.
+     * OP level 4 and "OnTime" as the display name. {@code OWNER} is the
+     * PermissionSet equivalent of the old int level 4.
      */
     public static CommandSourceStack createCommandSource(MinecraftServer server, ServerLevel level, String name) {
-        return new CommandSourceStack(server, Vec3.ZERO, Vec2.ZERO, level, 4,
+        return new CommandSourceStack(server, Vec3.ZERO, Vec2.ZERO, level, LevelBasedPermissionSet.OWNER,
                 name, Component.literal(name), server, null);
     }
 
@@ -60,12 +68,12 @@ public final class VanillaCompat {
 
     /** Brigadier argument type for namespaced ids ({@code namespace:path}). */
     public static ArgumentType<?> idArgument() {
-        return ResourceLocationArgument.id();
+        return IdentifierArgument.id();
     }
 
     /** Reads an argument created with {@link #idArgument()} as a plain string. */
     public static String getIdArgument(CommandContext<CommandSourceStack> ctx, String argName) {
-        return ResourceLocationArgument.getId(ctx, argName).toString();
+        return IdentifierArgument.getId(ctx, argName).toString();
     }
 
     /** Suggests every registered sound event id. */
@@ -75,16 +83,16 @@ public final class VanillaCompat {
 
     /** The {@code namespace:path} id of a server level's dimension. */
     public static String dimensionId(ServerLevel level) {
-        return level.dimension().location().toString();
+        return level.dimension().identifier().toString();
     }
 
     /** The {@code namespace:path} id of a registry key. */
     public static String keyId(ResourceKey<?> key) {
-        return key.location().toString();
+        return key.identifier().toString();
     }
 
     /** A custom packet payload type for the given namespaced id. */
     public static <T extends CustomPacketPayload> CustomPacketPayload.Type<T> payloadType(String namespace, String path) {
-        return new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(namespace, path));
+        return new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(namespace, path));
     }
 }

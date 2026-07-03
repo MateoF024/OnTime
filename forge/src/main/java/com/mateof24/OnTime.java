@@ -141,7 +141,7 @@ public class OnTime {
         com.mateof24.trigger.TriggerDispatcher.dispatch("player_death", null);
     }
     private void onDimensionChange(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerChangedDimensionEvent event) {
-        com.mateof24.trigger.TriggerDispatcher.dispatch("dimension_change", event.getTo().location().toString());
+        com.mateof24.trigger.TriggerDispatcher.dispatch("dimension_change", com.mateof24.compat.VanillaCompat.keyId(event.getTo()));
     }
     private void onAdvancementEarned(net.neoforged.neoforge.event.entity.player.AdvancementEvent.AdvancementEarnEvent event) {
         com.mateof24.trigger.TriggerDispatcher.dispatch("advancement", event.getAdvancement().id().toString());
