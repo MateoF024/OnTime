@@ -38,9 +38,7 @@ public class PlayerPreferences {
             root.add("timerVisibility", vis);
             root.add("timerSilent", sil);
 
-            try (FileWriter writer = new FileWriter(PREFS_FILE.toFile())) {
-                GSON.toJson(root, writer);
-            }
+            AtomicJsonIO.write(GSON, PREFS_FILE, root);
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to save player preferences", e);
         }
@@ -48,7 +46,7 @@ public class PlayerPreferences {
 
     public static void load() {
         if (!Files.exists(PREFS_FILE)) return;
-        try (FileReader reader = new FileReader(PREFS_FILE.toFile())) {
+        try (Reader reader = AtomicJsonIO.newReader(PREFS_FILE)) {
             JsonObject root = GSON.fromJson(reader, JsonObject.class);
             if (root == null) return;
             loadBooleans(root, "timerVisibility", timerVisibility);

@@ -33,7 +33,7 @@ public class TimerManager {
 
         Timer timer = new Timer(name, hours, minutes, seconds, countUp);
         timers.put(name, timer);
-        saveTimers();
+        saveTimer(timer);
         return true;
     }
 
@@ -48,7 +48,8 @@ public class TimerManager {
         }
 
         timers.remove(name);
-        saveTimers();
+        TimerStorage.deleteTimer(name);
+        TimerStorage.saveActiveState(activeTimer != null ? activeTimer.getName() : null);
         return true;
     }
 
@@ -58,13 +59,17 @@ public class TimerManager {
             return false;
         }
 
-        if (activeTimer != null) {
-            activeTimer.setRunning(false);
+        Timer previous = activeTimer;
+        if (previous != null) {
+            previous.setRunning(false);
         }
 
         timer.setRunning(true);
         activeTimer = timer;
-        saveTimers();
+        if (previous != null && previous != timer) {
+            TimerStorage.saveTimer(previous);
+        }
+        saveActiveTimer();
 
         getTimer(name).ifPresent(t ->
                 com.mateof24.event.TimerEventBus.fireOnStart(toInfo(t)));
@@ -77,7 +82,7 @@ public class TimerManager {
         }
 
         activeTimer.setRunning(false);
-        saveTimers();
+        saveActiveTimer();
         return true;
     }
 
@@ -88,7 +93,7 @@ public class TimerManager {
         }
 
         timer.setTime(hours, minutes, seconds);
-        saveTimers();
+        saveTimer(timer);
         return true;
     }
 
@@ -99,7 +104,7 @@ public class TimerManager {
         }
 
         timer.addTime(hours, minutes, seconds);
-        saveTimers();
+        saveTimer(timer);
         return true;
     }
 
@@ -107,14 +112,14 @@ public class TimerManager {
         Timer timer = timers.get(name);
         if (timer == null) return false;
         timer.setCommand(command);
-        saveTimers();
+        saveTimer(timer);
         return true;
     }
 
     public boolean addTimer(Timer timer) {
         if (timers.containsKey(timer.getName())) return false;
         timers.put(timer.getName(), timer);
-        saveTimers();
+        saveTimer(timer);
         return true;
     }
 
@@ -132,6 +137,17 @@ public class TimerManager {
 
     public Map<String, Timer> getAllTimers() {
         return new HashMap<>(timers);
+    }
+
+    /**
+     * Live unmodifiable view over the timers — no per-call copy, for the
+     * periodic polls (tick conditions, triggers, FTBQ poller, /timer list).
+     * Server thread only, and callers must not add/remove timers while
+     * iterating (starting/pausing an existing timer is fine: that mutates
+     * timer state, not the map structure).
+     */
+    public java.util.Collection<Timer> timersView() {
+        return java.util.Collections.unmodifiableCollection(timers.values());
     }
 
     public void clearActiveTimer() {
@@ -223,7 +239,7 @@ public class TimerManager {
         if (activeTimer != null && !timers.containsValue(activeTimer)) {
             OnTimeConstants.LOGGER.warn("Active timer '{}' not found in timers map, clearing", activeTimer.getName());
             activeTimer = null;
-            saveTimers();
+            TimerStorage.saveActiveState(null);
             return false;
         }
         return true;

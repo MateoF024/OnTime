@@ -55,7 +55,7 @@ public class ModConfig {
             save();
             return;
         }
-        try (FileReader reader = new FileReader(CONFIG_FILE.toFile())) {
+        try (java.io.Reader reader = com.mateof24.storage.AtomicJsonIO.newReader(CONFIG_FILE)) {
             JsonObject root = GSON.fromJson(reader, JsonObject.class);
             if (root == null) return;
             if (root.has("timerX")) {
@@ -112,9 +112,7 @@ public class ModConfig {
             root.addProperty("webSocketEnabled", webSocketEnabled);
             root.addProperty("webSocketPort", webSocketPort);
             root.addProperty("webPanelPort", webPanelPort);
-            try (FileWriter writer = new FileWriter(CONFIG_FILE.toFile())) {
-                GSON.toJson(root, writer);
-            }
+            com.mateof24.storage.AtomicJsonIO.write(GSON, CONFIG_FILE, root);
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to save config", e);
         }

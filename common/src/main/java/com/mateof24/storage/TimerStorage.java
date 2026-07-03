@@ -6,11 +6,16 @@ import com.mateof24.platform.Services;
 import com.mateof24.timer.Timer;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 
 public class TimerStorage {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+
+    private static void writeJsonAtomic(Path target, JsonElement json) throws IOException {
+        AtomicJsonIO.write(GSON, target, json);
+    }
     private static final Path CONFIG_DIR = Services.PLATFORM.getConfigDir().resolve("ontime");
     private static final Path TIMERS_DIR = CONFIG_DIR.resolve("timers");
     private static final Path EXPORTS_DIR = CONFIG_DIR.resolve("exports");
@@ -53,11 +58,18 @@ public class TimerStorage {
         try {
             Files.createDirectories(TIMERS_DIR);
             Path file = TIMERS_DIR.resolve(sanitize(timer.getName()) + ".json");
-            try (FileWriter writer = new FileWriter(file.toFile())) {
-                GSON.toJson(timer.toJson(), writer);
-            }
+            writeJsonAtomic(file, timer.toJson());
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to save timer '{}'", timer.getName(), e);
+        }
+    }
+
+    /** Granular counterpart of the orphan cleanup in {@link #saveTimers}. */
+    public static void deleteTimer(String name) {
+        try {
+            Files.deleteIfExists(TIMERS_DIR.resolve(sanitize(name) + ".json"));
+        } catch (IOException e) {
+            OnTimeConstants.LOGGER.error("Failed to delete timer file for '{}'", name, e);
         }
     }
 
@@ -68,9 +80,7 @@ public class TimerStorage {
             if (activeTimerName != null && !activeTimerName.isEmpty()) {
                 json.addProperty("activeTimer", activeTimerName);
             }
-            try (FileWriter writer = new FileWriter(ACTIVE_FILE.toFile())) {
-                GSON.toJson(json, writer);
-            }
+            writeJsonAtomic(ACTIVE_FILE, json);
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to save active timer state", e);
         }
@@ -89,8 +99,8 @@ public class TimerStorage {
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(TIMERS_DIR, "*.json")) {
             for (Path file : stream) {
                 String filename = file.getFileName().toString();
-                if (filename.startsWith("_")) continue;
-                try (FileReader reader = new FileReader(file.toFile())) {
+                if (filename.startsWith("_") || filename.endsWith(".tmp")) continue;
+                try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
                     JsonObject json = GSON.fromJson(reader, JsonObject.class);
                     if (json != null) {
                         Timer timer = Timer.fromJson(json);
@@ -105,7 +115,7 @@ public class TimerStorage {
         }
 
         if (Files.exists(ACTIVE_FILE)) {
-            try (FileReader reader = new FileReader(ACTIVE_FILE.toFile())) {
+            try (Reader reader = Files.newBufferedReader(ACTIVE_FILE, StandardCharsets.UTF_8)) {
                 JsonObject json = GSON.fromJson(reader, JsonObject.class);
                 if (json != null && json.has("activeTimer") && !json.get("activeTimer").isJsonNull()) {
                     activeTimerName = json.get("activeTimer").getAsString();
@@ -132,7 +142,7 @@ public class TimerStorage {
         if (!isEmpty) return;
 
         OnTimeConstants.LOGGER.info("OnTime: migrating timers.json to per-file storage...");
-        try (FileReader reader = new FileReader(LEGACY_FILE.toFile())) {
+        try (Reader reader = Files.newBufferedReader(LEGACY_FILE, StandardCharsets.UTF_8)) {
             JsonObject root = GSON.fromJson(reader, JsonObject.class);
             if (root == null) return;
 
@@ -163,9 +173,7 @@ public class TimerStorage {
         try {
             Files.createDirectories(EXPORTS_DIR);
             Path dest = EXPORTS_DIR.resolve(sanitize(name) + ".json");
-            try (FileWriter writer = new FileWriter(dest.toFile())) {
-                GSON.toJson(timer.toJson(), writer);
-            }
+            writeJsonAtomic(dest, timer.toJson());
             return true;
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to export timer '{}'", name, e);
@@ -180,7 +188,7 @@ public class TimerStorage {
     public static Timer importTimerFromExports(String filename) {
         Path source = EXPORTS_DIR.resolve(sanitize(filename) + ".json");
         if (!Files.exists(source)) return null;
-        try (FileReader reader = new FileReader(source.toFile())) {
+        try (Reader reader = Files.newBufferedReader(source, StandardCharsets.UTF_8)) {
             JsonObject json = GSON.fromJson(reader, JsonObject.class);
             if (json == null) return null;
             return Timer.fromJson(json);

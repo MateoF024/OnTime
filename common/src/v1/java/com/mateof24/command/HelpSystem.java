@@ -10,6 +10,14 @@ import net.minecraft.network.chat.MutableComponent;
 import java.util.ArrayList;
 import java.util.List;
 
+/*
+ * SYNC NOTE: common/src/v1 and common/src/v2 keep separate copies of this
+ * class on purpose (ClickEvent/HoverEvent API drift at 1.21.6); apply logic
+ * changes to both. The legacy § codes in the decorative headers are kept
+ * deliberately: they rely on the color-code style reset, are still fully
+ * supported through 26.2, and replicating them with Style would change the
+ * rendered output. Revisit only if Mojang actually removes § parsing.
+ */
 public class HelpSystem {
 
     private static final int COMMANDS_PER_PAGE = 8;

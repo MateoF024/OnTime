@@ -189,7 +189,7 @@ public class TimerTickHandler {
     private static void checkStartConditions(MinecraftServer server) {
         if (TimerManager.getInstance().getActiveTimer().isPresent()) return;
         if (inRepeatCooldown || pendingSequenceTimerName != null) return;
-        for (Timer t : TimerManager.getInstance().getAllTimers().values()) {
+        for (Timer t : TimerManager.getInstance().timersView()) {
             if (t.isRunning()) continue;
             boolean shouldStart = false;
             if (t.getTriggerType() != null && "start".equals(t.getTriggerAction())) {

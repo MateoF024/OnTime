@@ -1,5 +1,36 @@
 # OnTime Mod - Changelog
 
+## Version 4.0.0
+
+Support for three new Minecraft versions, plus internal robustness work. No timer/config file formats changed and the public API is source-compatible on 1.21.x — worlds and integrations coming from 3.0.x just work.
+
+### 🆕 New Minecraft versions
+
+| Family | Loaders | Java |
+|---|---|---|
+| 1.21.11 | Fabric + NeoForge | 21 |
+| 26.1.x | Fabric + NeoForge | 25 |
+| 26.2.x | Fabric + NeoForge | 25 |
+
+- 1.21.1–1.21.4 and 1.21.6–1.21.10 remain supported (Java 21). 1.21.5 remains unsupported.
+- 1.20.1 (Fabric + Forge) stays on the 3.0.x line, maintained separately.
+- Fixes the crash when 3.0.0 jars were forced onto 1.21.11+ (Mojang reworked the command permission system; OnTime now uses the new `PermissionSet` API there).
+
+### ⚠️ Breaking changes
+
+- **For mod developers, 26.x only:** `ITimerRenderer.render` receives `GuiGraphicsExtractor` instead of `GuiGraphics` — Mojang removed `GuiGraphics` in 26.1, so custom timer renderers must be compiled per family. On 1.21.x the signature is unchanged.
+- **Strict Minecraft ranges:** every jar declares the exact range it supports and refuses to load elsewhere (intentional — previously it crashed at world load instead).
+- Custom `IPermissionProvider`s are no longer consulted for non-player command sources (console, command blocks, functions, RCON always pass — see 3.0.2 below, included in this release).
+
+### 🛠️ Improvements
+
+- **Crash-safe saves:** all JSON files (timers, config, preferences, history) are written to a temp file and atomically moved, so a crash mid-write can no longer corrupt them. All file I/O is now explicitly UTF-8 on every platform.
+- **Less disk churn:** single-timer operations now rewrite only that timer's file instead of every timer file.
+- **Smoother ticks:** the WebSocket feed now sends from its own thread — a slow TCP client can no longer stall the server tick — and several per-tick polls stopped copying the timer map.
+- More command feedback is localizable (en/es_ar/es_es/es_mx).
+
+---
+
 ## Version 3.0.2 (unreleased)
 
 ### 🐛 Fixed

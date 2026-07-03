@@ -95,7 +95,7 @@ final class LifecycleCommands {
             // Mensaje adicional si se asignó comando
             if (command != null && !command.isEmpty()) {
                 ctx.getSource().sendSuccess(() ->
-                        Component.literal("§7Command set: §f" + command), false);
+                        Component.translatable("ontime.command.command_set", command), false);
             }
 
             return 1;

@@ -6,7 +6,6 @@ import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -19,7 +18,7 @@ final class InfoCommands {
     private InfoCommands() {}
 
     static int listTimers(CommandContext<CommandSourceStack> ctx) {
-        Map<String, Timer> timers = TimerManager.getInstance().getAllTimers();
+        java.util.Collection<Timer> timers = TimerManager.getInstance().timersView();
 
         if (timers.isEmpty()) {
             ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.list.empty"), false);
@@ -30,7 +29,7 @@ final class InfoCommands {
 
         Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
 
-        for (Timer timer : timers.values()) {
+        for (Timer timer : timers) {
             Component statusComponent = Component.translatable(
                     timer.isRunning() ? "ontime.list.status.running" : "ontime.list.status.stopped"
             );
@@ -38,10 +37,10 @@ final class InfoCommands {
             String type = timer.isCountUp() ? "↑" : "↓";
             String silent = timer.isSilent() ? " §7[S]" : "";
 
-            String message = String.format("%s §f%s §7%s - §f%s%s%s",
-                    statusComponent.getString(), timer.getName(), type, timer.getFormattedTime(), active, silent);
+            Component message = Component.translatable("ontime.command.list.entry",
+                    statusComponent, timer.getName(), type, timer.getFormattedTime(), active, silent);
 
-            ctx.getSource().sendSuccess(() -> Component.literal(message), false);
+            ctx.getSource().sendSuccess(() -> message, false);
         }
 
         return 1;

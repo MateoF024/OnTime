@@ -61,7 +61,7 @@ final class DisplayCommands {
 
     static int toggleSilentSelf(CommandContext<CommandSourceStack> ctx) {
         if (!(ctx.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
-            ctx.getSource().sendFailure(Component.literal("§cThis command can only be used by players"));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.players_only"));
             return 0;
         }
 
@@ -118,14 +118,14 @@ final class DisplayCommands {
 
             return count;
         } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
-            ctx.getSource().sendFailure(Component.literal("§cInvalid target selector"));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.invalid_selector"));
             return 0;
         }
     }
 
     static int toggleHideSelf(CommandContext<CommandSourceStack> ctx) {
         if (!(ctx.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
-            ctx.getSource().sendFailure(Component.literal("§cThis command can only be used by players"));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.players_only"));
             return 0;
         }
 
@@ -182,7 +182,7 @@ final class DisplayCommands {
 
             return count;
         } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
-            ctx.getSource().sendFailure(Component.literal("§cInvalid target selector"));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.invalid_selector"));
             return 0;
         }
     }
