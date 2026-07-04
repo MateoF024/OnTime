@@ -7,6 +7,7 @@ import com.mateof24.event.TimerEventBus;
 
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -17,6 +18,10 @@ public class TimerWebSocketServer {
     private ServerSocket serverSocket;
     private final CopyOnWriteArrayList<PrintWriter> clients = new CopyOnWriteArrayList<>();
     private ExecutorService executor;
+    // Single sender thread: broadcasts are handed off from the server thread
+    // (a slow TCP client with a full buffer must never block the tick) while
+    // still delivering events to every client in order.
+    private ExecutorService sendExecutor;
     private boolean running = false;
     private int port;
 
@@ -31,6 +36,11 @@ public class TimerWebSocketServer {
         if (running) return;
         this.port = port;
         executor = Executors.newCachedThreadPool();
+        sendExecutor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "OnTime-WebSocket-Send");
+            t.setDaemon(true);
+            return t;
+        });
         executor.submit(this::acceptLoop);
 
         TimerEventBus.registerOnStart(info -> broadcast(buildPayload("START", info)));
@@ -50,6 +60,7 @@ public class TimerWebSocketServer {
         clients.forEach(PrintWriter::close);
         clients.clear();
         if (executor != null) executor.shutdownNow();
+        if (sendExecutor != null) sendExecutor.shutdownNow();
         OnTimeConstants.LOGGER.info("OnTime WebSocket server stopped");
     }
 
@@ -59,7 +70,8 @@ public class TimerWebSocketServer {
             while (running) {
                 try {
                     Socket client = serverSocket.accept();
-                    PrintWriter writer = new PrintWriter(client.getOutputStream(), true);
+                    PrintWriter writer = new PrintWriter(
+                            new OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8), true);
                     clients.add(writer);
                     executor.submit(() -> clientLoop(client, writer));
                 } catch (IOException e) {
@@ -84,10 +96,16 @@ public class TimerWebSocketServer {
     }
 
     private void broadcast(String message) {
-        clients.removeIf(w -> {
-            w.println(message);
-            return w.checkError();
-        });
+        // Called on the server thread via TimerEventBus — only enqueue here.
+        if (!running || sendExecutor == null) return;
+        try {
+            sendExecutor.submit(() -> clients.removeIf(w -> {
+                w.println(message);
+                return w.checkError();
+            }));
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // stop() raced the event; nothing to deliver.
+        }
     }
 
     private String buildPayload(String event, TimerInfo info) {

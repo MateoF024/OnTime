@@ -9,7 +9,7 @@ public final class TriggerDispatcher {
 
     public static void dispatch(String type, String param) {
         if (type == null || type.isEmpty()) return;
-        for (Timer t : TimerManager.getInstance().getAllTimers().values()) {
+        for (Timer t : TimerManager.getInstance().timersView()) {
             String trigger = t.getTriggerType();
             if (trigger == null) continue;
             String action = t.getTriggerAction();

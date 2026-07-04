@@ -24,7 +24,7 @@ public class TimerLogger {
             JsonArray history = new JsonArray();
 
             if (Files.exists(LOG_FILE)) {
-                try (FileReader reader = new FileReader(LOG_FILE.toFile())) {
+                try (Reader reader = AtomicJsonIO.newReader(LOG_FILE)) {
                     JsonElement element = GSON.fromJson(reader, JsonElement.class);
                     if (element != null && element.isJsonArray()) {
                         history = element.getAsJsonArray();
@@ -46,9 +46,7 @@ public class TimerLogger {
 
             history.add(entry);
 
-            try (FileWriter writer = new FileWriter(LOG_FILE.toFile())) {
-                GSON.toJson(history, writer);
-            }
+            AtomicJsonIO.write(GSON, LOG_FILE, history);
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to write timer history", e);
         }

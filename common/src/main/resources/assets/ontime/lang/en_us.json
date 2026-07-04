@@ -1,4 +1,8 @@
 {
+  "ontime.command.players_only": "§cThis command can only be used by players",
+  "ontime.command.invalid_selector": "§cInvalid target selector",
+  "ontime.command.command_set": "§7Command set: §f%s",
+  "ontime.command.list.entry": "%s §f%s §7%s - §f%s%s%s",
   "ontime.command.create.success": "§aTimer §f'%s' §acreated with time §f%s §aas §f%s",
   "ontime.command.create.exists": "§cTimer §f'%s' §calready exists",
   "ontime.command.set.success": "§aTimer §f'%s' §aset to §f%s",

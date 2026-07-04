@@ -1,4 +1,8 @@
 {
+  "ontime.command.players_only": "§cEste comando solo puede ser usado por jugadores",
+  "ontime.command.invalid_selector": "§cSelector de objetivo no válido",
+  "ontime.command.command_set": "§7Comando establecido: §f%s",
+  "ontime.command.list.entry": "%s §f%s §7%s - §f%s%s%s",
   "ontime.command.create.success": "§aContador §f'%s' §acreado con tiempo §f%s §acomo §f%s",
   "ontime.command.create.exists": "§cEl contador §f'%s' §cya existe",
   "ontime.command.set.success": "§aContador §f'%s' §aestablecido en §f%s",

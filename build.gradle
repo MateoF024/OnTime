@@ -30,11 +30,16 @@ subprojects {
         }
      }
     afterEvaluate {
+        // Final jars are classified by loader, matching main:
+        // build/libs/fabric/ and build/libs/forge/ ('legacyforge'
+        // builds the Forge 1.20.1 jar).
+        def loaderDir = (project.name == 'legacyforge') ? 'forge'
+                : (project.name == 'forge') ? 'neoforge' : project.name
         tasks.withType(AbstractArchiveTask).configureEach {
             if (project.name != 'common'
                     && !name.toLowerCase().contains('source')
                     && !archiveClassifier.getOrElse('').toLowerCase().contains('dev')) {
-                destinationDirectory = rootProject.layout.buildDirectory.dir("libs")
+                destinationDirectory = rootProject.layout.buildDirectory.dir("libs/${loaderDir}")
             }
         }
     }

@@ -549,7 +549,7 @@ public class TimerCommands {
             // Mensaje adicional si se asignó comando
             if (command != null && !command.isEmpty()) {
                 ctx.getSource().sendSuccess(() ->
-                        Component.literal("§7Command set: §f" + command), false);
+                        Component.translatable("ontime.command.command_set", command), false);
             }
 
             return 1;
@@ -744,7 +744,7 @@ public class TimerCommands {
 
     private static int toggleSilentSelf(CommandContext<CommandSourceStack> ctx) {
         if (!(ctx.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
-            ctx.getSource().sendFailure(Component.literal("§cThis command can only be used by players"));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.players_only"));
             return 0;
         }
 
@@ -801,7 +801,7 @@ public class TimerCommands {
 
             return count;
         } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
-            ctx.getSource().sendFailure(Component.literal("§cInvalid target selector"));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.invalid_selector"));
             return 0;
         }
     }
@@ -823,7 +823,7 @@ public class TimerCommands {
     }
 
     private static int listTimers(CommandContext<CommandSourceStack> ctx) {
-        Map<String, Timer> timers = TimerManager.getInstance().getAllTimers();
+        java.util.Collection<Timer> timers = TimerManager.getInstance().timersView();
 
         if (timers.isEmpty()) {
             ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.list.empty"), false);
@@ -834,7 +834,7 @@ public class TimerCommands {
 
         Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
 
-        for (Timer timer : timers.values()) {
+        for (Timer timer : timers) {
             Component statusComponent = Component.translatable(
                     timer.isRunning() ? "ontime.list.status.running" : "ontime.list.status.stopped"
             );
@@ -842,10 +842,10 @@ public class TimerCommands {
             String type = timer.isCountUp() ? "↑" : "↓";
             String silent = timer.isSilent() ? " §7[S]" : "";
 
-            String message = String.format("%s §f%s §7%s - §f%s%s%s",
-                    statusComponent.getString(), timer.getName(), type, timer.getFormattedTime(), active, silent);
+            Component message = Component.translatable("ontime.command.list.entry",
+                    statusComponent, timer.getName(), type, timer.getFormattedTime(), active, silent);
 
-            ctx.getSource().sendSuccess(() -> Component.literal(message), false);
+            ctx.getSource().sendSuccess(() -> message, false);
         }
 
         return 1;
@@ -853,7 +853,7 @@ public class TimerCommands {
 
     private static int toggleHideSelf(CommandContext<CommandSourceStack> ctx) {
         if (!(ctx.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
-            ctx.getSource().sendFailure(Component.literal("§cThis command can only be used by players"));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.players_only"));
             return 0;
         }
 
@@ -910,7 +910,7 @@ public class TimerCommands {
 
             return count;
         } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
-            ctx.getSource().sendFailure(Component.literal("§cInvalid target selector"));
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.invalid_selector"));
             return 0;
         }
     }

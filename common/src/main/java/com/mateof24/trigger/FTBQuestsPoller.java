@@ -29,7 +29,7 @@ public final class FTBQuestsPoller {
         FTBQuestsIntegration.tryInit();
         if (!FTBQuestsIntegration.isReady()) return;
 
-        for (Timer t : TimerManager.getInstance().getAllTimers().values()) {
+        for (Timer t : TimerManager.getInstance().timersView()) {
             String trigger = t.getTriggerType();
             if (trigger == null) continue;
 
