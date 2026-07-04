@@ -7,7 +7,7 @@
   "authors": [
     "MateoF24"
   ],
-  "license": "CC0-1.0",
+  "license": "MIT",
   "icon": "assets/ontime/icon.png",
   "environment": "*",
   "entrypoints": {
