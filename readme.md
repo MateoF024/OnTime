@@ -157,4 +157,4 @@ Available in **English**, **Spanish (AR / ES / MX)**.
 
 ***
 
-Created by **MateoF24** — Licensed under CC0
+Created by **MateoF24** — Licensed under MIT

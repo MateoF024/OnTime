@@ -9,8 +9,7 @@
 - Minecraft 26.2 support
 
 ### Changed
-
-- 1.20.1 and 1.21.1-1.21.10 remain supported and move to 4.0.0 (1.21.5 remains unsupported)
+- License changed from CC0 to MIT
 - For mod developers, 26.x only: `ITimerRenderer.render` receives `GuiGraphicsExtractor` instead of `GuiGraphics`
 - For mod developers: custom permission providers are no longer consulted for non-player command sources
 
