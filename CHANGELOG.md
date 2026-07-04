@@ -13,7 +13,7 @@ Support for three new Minecraft versions, plus internal robustness work. No time
 | 26.2.x | Fabric + NeoForge | 25 |
 
 - 1.21.1–1.21.4 and 1.21.6–1.21.10 remain supported (Java 21). 1.21.5 remains unsupported.
-- 1.20.1 (Fabric + Forge) stays on the 3.0.x line, maintained separately.
+- 1.20.1 (Fabric + Forge) is updated to 4.0.0 as well (Java 17), built from the `1.20.1-maintenance` branch. It receives every improvement below — only the new-Minecraft-version work doesn't apply to it.
 - Fixes the crash when 3.0.0 jars were forced onto 1.21.11+ (Mojang reworked the command permission system; OnTime now uses the new `PermissionSet` API there).
 
 ### ⚠️ Breaking changes
@@ -31,7 +31,7 @@ Support for three new Minecraft versions, plus internal robustness work. No time
 
 ---
 
-## Version 3.0.2 (unreleased)
+## Version 3.0.2 (not released separately — shipped as part of 4.0.0)
 
 ### 🐛 Fixed
 
