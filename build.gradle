@@ -84,12 +84,78 @@ subprojects {
     }
 
     afterEvaluate {
+        // Final jars are classified by loader: build/libs/fabric/ and
+        // build/libs/neoforge/ (the 'forge' subproject builds NeoForge).
+        def loaderDir = (project.name == 'forge') ? 'neoforge' : project.name
         tasks.withType(AbstractArchiveTask).configureEach {
             if (project.name != 'common'
                     && !name.toLowerCase().contains('source')
                     && !archiveClassifier.getOrElse('').toLowerCase().contains('dev')) {
-                destinationDirectory = rootProject.layout.buildDirectory.dir("libs")
+                destinationDirectory = rootProject.layout.buildDirectory.dir("libs/${loaderDir}")
             }
         }
     }
+}
+
+// ============================================================
+//  Build-matrix orchestration.
+//
+//  The version family is fixed at configuration time by
+//  'minecraft_version', so a single Gradle invocation can only
+//  build one family. Each task below runs a nested Gradle build
+//  with -Pminecraft_version=<selector> and the 'build' task
+//  (which includes verifyLoaderMetadata), producing BOTH loaders
+//  of that family into build/libs/<loader>/.
+//
+//    gradlew buildMc26_2    -> only that family (both loaders)
+//    gradlew buildAll       -> wipes build/libs, then the whole
+//                              matrix (5 families x 2 loaders)
+// ============================================================
+def buildMatrix = [
+        buildMc1_21_1 : '1.21.1',
+        buildMc1_21_10: '1.21.10',
+        buildMc1_21_11: '1.21.11',
+        buildMc26_1   : '26.1.2',
+        buildMc26_2   : '26.2',
+]
+
+// The nested build is launched through the wrapper's main class with the
+// current JVM — no cmd/gradlew.bat indirection, works on any OS and with
+// spaces in the project path.
+def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+def gradlewCmd = [
+        new File(System.getProperty('java.home'), isWindows ? 'bin/java.exe' : 'bin/java').absolutePath,
+        '-cp', new File(rootDir, 'gradle/wrapper/gradle-wrapper.jar').absolutePath,
+        'org.gradle.wrapper.GradleWrapperMain'
+]
+
+def cleanLibs = tasks.register('cleanLibs', Delete) {
+    group = 'ontime'
+    description = 'Deletes build/libs (all classified jars).'
+    delete rootProject.layout.buildDirectory.dir('libs')
+}
+
+def matrixTasks = buildMatrix.collect { taskName, selector ->
+    tasks.register(taskName, Exec) {
+        group = 'ontime'
+        description = "Builds the ${selector} jars (Fabric + NeoForge) into build/libs/<loader>/."
+        workingDir = rootDir
+        commandLine(gradlewCmd + ["-Pminecraft_version=${selector}", 'build'])
+        // Only ordering: cleanLibs runs solely when explicitly requested
+        // (directly or via buildAll).
+        mustRunAfter cleanLibs
+    }
+}
+// Deterministic oldest-to-newest order (they never run in parallel:
+// all live in the root project).
+for (int i = 1; i < matrixTasks.size(); i++) {
+    def prev = matrixTasks[i - 1]
+    matrixTasks[i].configure { mustRunAfter prev }
+}
+
+tasks.register('buildAll') {
+    group = 'ontime'
+    description = 'Wipes build/libs and builds every supported version x loader into build/libs/<loader>/.'
+    dependsOn cleanLibs
+    dependsOn matrixTasks
 }
