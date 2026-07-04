@@ -2,7 +2,7 @@
 
 ## Version 4.0.0
 
-Support for three new Minecraft versions, plus internal robustness work. No timer/config file formats changed and the public API is source-compatible on 1.21.x — worlds and integrations coming from 3.0.x just work.
+The first release since 3.0.0: support for three new Minecraft versions, several fixes, and internal robustness work. No timer/config file formats changed and the public API is source-compatible on 1.21.x — worlds and integrations coming from 3.0.0 just work.
 
 ### 🆕 New Minecraft versions
 
@@ -13,14 +13,28 @@ Support for three new Minecraft versions, plus internal robustness work. No time
 | 26.2.x | Fabric + NeoForge | 25 |
 
 - 1.21.1–1.21.4 and 1.21.6–1.21.10 remain supported (Java 21). 1.21.5 remains unsupported.
-- 1.20.1 (Fabric + Forge) is updated to 4.0.0 as well (Java 17), built from the `1.20.1-maintenance` branch. It receives every improvement below — only the new-Minecraft-version work doesn't apply to it.
+- 1.20.1 (Fabric + Forge, Java 17) is updated to 4.0.0 as well, built from the `1.20.1-maintenance` branch. It receives every fix and improvement below — only the new-Minecraft-version work doesn't apply to it.
 - Fixes the crash when 3.0.0 jars were forced onto 1.21.11+ (Mojang reworked the command permission system; OnTime now uses the new `PermissionSet` API there).
 
 ### ⚠️ Breaking changes
 
 - **For mod developers, 26.x only:** `ITimerRenderer.render` receives `GuiGraphicsExtractor` instead of `GuiGraphics` — Mojang removed `GuiGraphics` in 26.1, so custom timer renderers must be compiled per family. On 1.21.x the signature is unchanged.
-- **Strict Minecraft ranges:** every jar declares the exact range it supports and refuses to load elsewhere (intentional — previously it crashed at world load instead).
-- Custom `IPermissionProvider`s are no longer consulted for non-player command sources (console, command blocks, functions, RCON always pass — see 3.0.2 below, included in this release).
+- **Strict Minecraft ranges:** every jar now declares the exact range it supports and the loader refuses to run it elsewhere. 3.0.0's Fabric jar declared `minecraft >= 1.20.1` with no upper bound, so it could be forced onto versions where it crashed at world load. The ranges:
+  - Fabric/Forge 1.20.1 → `1.20.1` only
+  - Fabric/NeoForge 1.21.1 → `1.21.1 – 1.21.4` (1.21.5 unsupported)
+  - Fabric/NeoForge 1.21.6 → `1.21.6 – 1.21.10`
+  - Fabric/NeoForge 1.21.11 → `1.21.11` only
+  - Fabric/NeoForge 26.1 → `26.1.x`
+  - Fabric/NeoForge 26.2 → `26.2.x`
+- Custom `IPermissionProvider`s are no longer consulted for non-player command sources (console, command blocks, functions, RCON always pass — see the command-block fix below).
+
+### 🐛 Fixed
+
+- **`/timer` commands failed when run from command blocks.** Command blocks execute at vanilla permission level 2, but every OnTime command required level 4, so command blocks (and, with some permission mods, the server console) were rejected. Non-player sources — server console, command blocks, datapack functions, RCON — now always pass the permission check. Players are unaffected: they still need OP (or the corresponding permission node when a permission provider such as LuckPerms is installed).
+  - Note for mod developers: a custom `IPermissionProvider` registered through the OnTime API is no longer consulted for non-player sources.
+- **NeoForge builds reported the wrong mod version.** OnTime 3.0.0 for NeoForge identified itself as `2.1.0` because the version in `neoforge.mods.toml` was maintained by hand. All loader metadata (mod version and supported Minecraft range) is now generated from the build configuration, so this class of error can't happen again.
+  - Note for mod developers: if your mod depends on OnTime with `versionRange="[3.0.0,)"` on NeoForge, that check failed against the mislabeled 3.0.0 jar. It works correctly from 4.0.0 onward.
+- Removed a stray `\n` escape from the NeoForge mod description.
 
 ### 🛠️ Improvements
 
@@ -28,34 +42,6 @@ Support for three new Minecraft versions, plus internal robustness work. No time
 - **Less disk churn:** single-timer operations now rewrite only that timer's file instead of every timer file.
 - **Smoother ticks:** the WebSocket feed now sends from its own thread — a slow TCP client can no longer stall the server tick — and several per-tick polls stopped copying the timer map.
 - More command feedback is localizable (en/es_ar/es_es/es_mx).
-
----
-
-## Version 3.0.2 (not released separately — shipped as part of 4.0.0)
-
-### 🐛 Fixed
-
-- **`/timer` commands failed when run from command blocks.** Command blocks execute at vanilla permission level 2, but every OnTime command required level 4, so command blocks (and, with some permission mods, the server console) were rejected. Non-player sources — server console, command blocks, datapack functions, RCON — now always pass the permission check. Players are unaffected: they still need OP (or the corresponding permission node when a permission provider such as LuckPerms is installed).
-  - Note for mod developers: a custom `IPermissionProvider` registered through the OnTime API is no longer consulted for non-player sources.
-
----
-
-## Version 3.0.1
-
-Metadata hotfix — no gameplay changes.
-
-### 🐛 Fixed
-
-- **NeoForge builds reported the wrong mod version.** OnTime 3.0.0 for NeoForge identified itself as `2.1.0` because the version in `neoforge.mods.toml` was maintained by hand. All loader metadata (mod version and supported Minecraft range) is now generated from the build configuration, so this class of error can't happen again.
-  - Note for mod developers: if your mod depends on OnTime with `versionRange="[3.0.0,)"` on NeoForge, that check failed against the mislabeled 3.0.0 jar. It works correctly from 3.0.1 onward.
-- **The mod could be installed on unsupported Minecraft versions.** The Fabric jar declared `minecraft >= 1.20.1` with no upper bound, so it could be forced onto 1.21.11+ where it crashes on world load (Mojang reworked the command permission system in 1.21.11). Every jar now declares the exact range it supports and the loader will refuse to run it elsewhere:
-  - Fabric/Forge 1.20.1 → `1.20.1` only
-  - Fabric/NeoForge 1.21.1 → `1.21.1 – 1.21.4`
-  - Fabric/NeoForge 1.21.6 → `1.21.6 – 1.21.10`
-  - 1.21.5 remains unsupported.
-- Removed a stray `\n` escape from the NeoForge mod description.
-
-> Support for Minecraft 1.21.11, 26.1 and 26.2 is in development for OnTime 4.0.0.
 
 ---
 
