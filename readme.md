@@ -141,8 +141,6 @@ A powerful and flexible timer mod for Minecraft. Create custom timers with on-sc
 /timer help [page|command]
 ```
 
-> All commands require operator permission level 4 (or a LuckPerms node if installed).
-
 ***
 
 ## 🌐 Localization
@@ -157,4 +155,4 @@ Available in **English**, **Spanish (AR / ES / MX)**.
 
 ***
 
-Created by **MateoF24** — Licensed under CC0
+Created by **MateoF24** — Licensed under MIT
