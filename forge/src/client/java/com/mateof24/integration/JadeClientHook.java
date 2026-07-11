@@ -64,7 +64,7 @@ public final class JadeClientHook {
 
         for (int slot = 0; slot < 4; slot++) {
             if (titles[slot] == null) continue;
-            int titleX = com.mateof24.render.TitleLayout.posX(slot, x, textW, titleWs[slot], gap, screenW);
+            int titleX = com.mateof24.render.TitleLayout.posX(slot, x, textW, titleWs, gap, screenW);
             int titleY = com.mateof24.render.TitleLayout.posY(slot, y, textH, titleHs[slot], gap, screenH);
             left = Math.min(left, titleX);
             top = Math.min(top, titleY);

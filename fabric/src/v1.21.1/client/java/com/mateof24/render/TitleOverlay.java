@@ -46,7 +46,7 @@ public final class TitleOverlay {
 
         for (int slot = 0; slot < 4; slot++) {
             if (titles[slot] == null) continue;
-            int x = TitleLayout.posX(slot, timerX, timerWidth, widths[slot], gap, screenWidth);
+            int x = TitleLayout.posX(slot, timerX, timerWidth, widths, gap, screenWidth);
             int y = TitleLayout.posY(slot, timerY, timerHeight, heights[slot], gap, screenHeight);
             if (scale != 1.0f) {
                 PoseStack pose = graphics.pose();

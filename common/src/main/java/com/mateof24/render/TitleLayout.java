@@ -21,13 +21,26 @@ public final class TitleLayout {
 
     private TitleLayout() {}
 
+    /**
+     * X of one title. widths[] holds every slot's width (0 = unset): the
+     * above/below titles center over the WHOLE left+counter+right block,
+     * not just the counter, so the composition reads as one unit.
+     */
     public static int posX(int slot, int timerX, int timerWidth,
-                           int titleWidth, int gap, int screenWidth) {
-        int x = switch (slot) {
-            case LEFT -> timerX - gap - titleWidth;
-            case RIGHT -> timerX + timerWidth + gap;
-            default -> timerX + (timerWidth - titleWidth) / 2;
-        };
+                           int[] widths, int gap, int screenWidth) {
+        int titleWidth = widths[slot];
+        int x;
+        if (slot == LEFT) {
+            x = timerX - gap - titleWidth;
+        } else if (slot == RIGHT) {
+            x = timerX + timerWidth + gap;
+        } else {
+            int leftExtent = widths[LEFT] > 0 ? widths[LEFT] + gap : 0;
+            int rightExtent = widths[RIGHT] > 0 ? widths[RIGHT] + gap : 0;
+            int blockX = timerX - leftExtent;
+            int blockWidth = leftExtent + timerWidth + rightExtent;
+            x = blockX + (blockWidth - titleWidth) / 2;
+        }
         return clamp(x, 0, Math.max(0, screenWidth - titleWidth));
     }
 
