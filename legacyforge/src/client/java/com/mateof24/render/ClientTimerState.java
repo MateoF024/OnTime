@@ -42,6 +42,14 @@ public class ClientTimerState {
     private static float displaySoundPitch = 2.0f;
 
     private static final long NANOS_PER_TICK = 50_000_000L;
+    // Titles of the synced timer (4.0.0): raw server strings plus a lazily
+    // parsed Component cache keyed by the raw string. Slot order matches
+    // TitleLayout: 0=above 1=below 2=left 3=right.
+    private static final String[] titleRaw = {"", "", "", ""};
+    private static final net.minecraft.network.chat.Component[] titleParsed =
+            new net.minecraft.network.chat.Component[4];
+    private static final String[] titleParsedFrom = {null, null, null, null};
+
     private static final long SNAP_THRESHOLD_TICKS = 20;
 
     public static void updateDisplayConfig(int x, int y, String preset, float scale,
@@ -52,6 +60,79 @@ public class ClientTimerState {
         displayColorHigh = colorHigh; displayColorMid = colorMid; displayColorLow = colorLow;
         displayThresholdMid = thresholdMid; displayThresholdLow = thresholdLow;
         displaySoundId = soundId; displaySoundVolume = soundVolume; displaySoundPitch = soundPitch;
+    }
+
+    public static void updateTitles(String above, String below, String left, String right) {
+        titleRaw[TitleLayout.ABOVE] = above != null ? above : "";
+        titleRaw[TitleLayout.BELOW] = below != null ? below : "";
+        titleRaw[TitleLayout.LEFT] = left != null ? left : "";
+        titleRaw[TitleLayout.RIGHT] = right != null ? right : "";
+    }
+
+    public static boolean hasTitles() {
+        return !titleRaw[0].isEmpty() || !titleRaw[1].isEmpty()
+                || !titleRaw[2].isEmpty() || !titleRaw[3].isEmpty();
+    }
+
+    /**
+     * Parsed title of the given TitleLayout slot (null when unset). Parsing
+     * is cached by the raw string; an invalid spec (should not happen — the
+     * server validates on set) falls back to the literal text.
+     */
+    public static net.minecraft.network.chat.Component titleComponent(int slot) {
+        String raw = titleRaw[slot];
+        if (raw.isEmpty()) return null;
+        if (!raw.equals(titleParsedFrom[slot])) {
+            net.minecraft.network.chat.Component parsed = null;
+            try {
+                parsed = com.mateof24.util.TitleParser.parseTitle(raw);
+            } catch (Throwable ignored) {}
+            titleParsed[slot] = parsed != null ? parsed
+                    : net.minecraft.network.chat.Component.literal(raw);
+            titleParsedFrom[slot] = raw;
+        }
+        return titleParsed[slot];
+    }
+
+    /**
+     * Occupied rect of the timer INCLUDING the title block, as
+     * {left, top, right, bottom}. Mirrors TitleOverlay.renderAndShift's
+     * layout exactly (shift + per-slot placement), so overlap consumers
+     * (boss bar displacement) clear the real final composition. With no
+     * titles this is just the counter rect the caller passed in.
+     */
+    public static int[] occupiedRectWithTitles(int timerX, int timerY, int timerWidth, int timerHeight,
+                                               float scale, int screenWidth, int screenHeight,
+                                               net.minecraft.client.gui.Font font) {
+        if (!hasTitles()) {
+            return new int[]{timerX, timerY, timerX + timerWidth, timerY + timerHeight};
+        }
+        int gap = Math.max(1, (int) (TitleLayout.GAP * scale));
+        net.minecraft.network.chat.Component[] titles = new net.minecraft.network.chat.Component[4];
+        int[] widths = new int[4];
+        int[] heights = new int[4];
+        for (int slot = 0; slot < 4; slot++) {
+            titles[slot] = titleComponent(slot);
+            if (titles[slot] == null) continue;
+            widths[slot] = (int) (font.width(titles[slot]) * scale);
+            heights[slot] = (int) (font.lineHeight * scale);
+        }
+        timerX += TitleLayout.timerShiftX(timerX, timerWidth, widths, gap, screenWidth);
+        timerY += TitleLayout.timerShiftY(timerY, timerHeight, heights, gap, screenHeight);
+        int left = timerX;
+        int top = timerY;
+        int right = timerX + timerWidth;
+        int bottom = timerY + timerHeight;
+        for (int slot = 0; slot < 4; slot++) {
+            if (titles[slot] == null) continue;
+            int titleX = TitleLayout.posX(slot, timerX, timerWidth, widths, gap, screenWidth);
+            int titleY = TitleLayout.posY(slot, timerY, timerHeight, heights[slot], gap, screenHeight);
+            left = Math.min(left, titleX);
+            top = Math.min(top, titleY);
+            right = Math.max(right, titleX + widths[slot]);
+            bottom = Math.max(bottom, titleY + heights[slot]);
+        }
+        return new int[]{left, top, right, bottom};
     }
 
     public static void updateTimer(String name, long current, long target, boolean up,
@@ -179,6 +260,7 @@ public class ClientTimerState {
 
     public static void clear() {
         timerName = "";
+        updateTitles("", "", "", "");
         targetTicks = 0;
         countUp = false;
         running = false;

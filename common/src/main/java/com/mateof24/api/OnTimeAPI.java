@@ -81,6 +81,86 @@ public class OnTimeAPI {
         return TimerManager.getInstance().setTimerCommand(name, command);
     }
 
+    // ---- Scheduled commands (4.0.0) ----
+
+    /**
+     * Adds a command fired when the timer's displayed time crosses
+     * {@code atSeconds} (remaining time for countdown timers, elapsed time
+     * for count-up timers). Must satisfy 0 < atSeconds < duration.
+     * Commands at the same instant run in the order they were added.
+     */
+    public boolean addScheduledCommand(String name, long atSeconds, String command) {
+        Optional<Timer> timer = TimerManager.getInstance().getTimer(name);
+        if (timer.isEmpty()) return false;
+        long targetSeconds = timer.get().getTargetTicks() / 20L;
+        if (atSeconds <= 0 || atSeconds >= targetSeconds) return false;
+        return TimerManager.getInstance().addScheduledCommand(name, atSeconds, command);
+    }
+
+    /**
+     * Adds a command to the finish sequence, executed after the legacy
+     * single finish command ({@link #setTimerCommand}) in insertion order.
+     */
+    public boolean addFinishCommand(String name, String command) {
+        return TimerManager.getInstance().addFinishCommand(name, command);
+    }
+
+    /** Removes every scheduled and finish command (the legacy command is untouched). */
+    public boolean clearScheduledCommands(String name) {
+        return TimerManager.getInstance().clearScheduledCommands(name);
+    }
+
+    /** Snapshot of the timed commands: seconds → commands in execution order (time-ascending keys). */
+    public Map<Long, java.util.List<String>> getScheduledCommands(String name) {
+        return TimerManager.getInstance().getTimer(name).map(t -> {
+            Map<Long, java.util.List<String>> out = new java.util.LinkedHashMap<>();
+            for (Timer.CommandEvent e : t.getCommandEvents()) {
+                out.put(e.getAtSeconds(), java.util.List.copyOf(e.getCommands()));
+            }
+            return out;
+        }).orElseGet(java.util.LinkedHashMap::new);
+    }
+
+    /** Snapshot of the finish sequence (excludes the legacy single command). */
+    public java.util.List<String> getFinishCommands(String name) {
+        return TimerManager.getInstance().getTimer(name)
+                .map(t -> java.util.List.copyOf(t.getFinishCommands()))
+                .orElseGet(java.util.List::of);
+    }
+
+    // ---- Counter titles (4.0.0) ----
+
+    /**
+     * Sets (rawText non-empty) or clears (null/empty) one of the four
+     * decorative titles rendered around the timer. Position is one of
+     * "above"/"below"/"left"/"right". Accepts plain text or a tellraw-style
+     * JSON component; returns false for an unknown position, invalid JSON or
+     * a missing timer. Clients pick the change up on the next 1 Hz sync.
+     */
+    public boolean setTimerTitle(String name, String position, String rawText) {
+        if (rawText != null && !rawText.isEmpty()
+                && com.mateof24.util.TitleParser.parseTitle(rawText) == null) {
+            return false;
+        }
+        return TimerManager.getInstance().setTimerTitle(name, position, rawText);
+    }
+
+    public boolean clearTimerTitles(String name) {
+        return TimerManager.getInstance().clearTimerTitles(name);
+    }
+
+    /** Raw title specs by position ("above"/"below"/"left"/"right"); unset slots are absent. */
+    public Map<String, String> getTimerTitles(String name) {
+        return TimerManager.getInstance().getTimer(name).map(t -> {
+            Map<String, String> out = new java.util.LinkedHashMap<String, String>();
+            for (String position : new String[]{"above", "below", "left", "right"}) {
+                String raw = t.getTitle(position);
+                if (raw != null) out.put(position, raw);
+            }
+            return out;
+        }).orElseGet(java.util.LinkedHashMap::new);
+    }
+
     public boolean setTimerRepeat(String name, boolean repeat, int count) {
         return TimerManager.getInstance().getTimer(name).map(t -> {
             t.setRepeat(repeat);

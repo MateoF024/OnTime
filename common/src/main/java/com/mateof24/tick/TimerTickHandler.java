@@ -29,12 +29,44 @@ public class TimerTickHandler {
     private static long lastBroadcastedScoreboardSecond = -1L;
     private static String lastBroadcastedScoreboardTimer = "";
 
+    // Scheduled-command progress (4.0.0). Tracks the last displayed second so
+    // events fire exactly once when the second boundary is crossed by natural
+    // ticking. Not persisted: after a restart the baseline is re-taken, so
+    // already-passed thresholds are not re-fired.
+    private static long lastCommandSecond = -1L;
+    private static String lastCommandTimer = "";
+
+    // Command pacing (4.0.0): when config commandDelayTicks > 0, commands of
+    // a same-moment sequence are queued here (placeholders ALREADY resolved,
+    // so {time}/{seconds} reflect the trigger instant) and drained one per
+    // delay window instead of all in one tick.
+    private static final java.util.ArrayDeque<String> pendingCommands = new java.util.ArrayDeque<>();
+    private static long commandDelayRemaining = 0L;
+
+    /**
+     * Re-baselines the scheduled-command tracker without firing anything.
+     * Called on manual time jumps (/timer set|add) and on stop: a jump over
+     * a threshold must NOT fire it — only natural ticking does.
+     */
+    public static void resetCommandProgress() {
+        lastCommandSecond = -1L;
+        lastCommandTimer = "";
+    }
+
+    /** Drops queued (delay-paced) commands. Used by /timer stop via cancelCooldown. */
+    public static void clearPendingCommands() {
+        pendingCommands.clear();
+        commandDelayRemaining = 0L;
+    }
+
     public static void cancelCooldown() {
         cooldownRemaining = 0;
         inRepeatCooldown = false;
         pendingSequenceTimerName = null;
         lastBroadcastedScoreboardSecond = -1L;
         lastBroadcastedScoreboardTimer = "";
+        resetCommandProgress();
+        clearPendingCommands();
         com.mateof24.trigger.TriggerRegistry.resetAll();
     }
 
@@ -43,6 +75,7 @@ public class TimerTickHandler {
     }
 
     public static void tick(MinecraftServer server) {
+        drainPendingCommands(server);
         com.mateof24.trigger.FTBQuestsPoller.poll(server);
         startConditionCheckCounter++;
         if (startConditionCheckCounter >= START_CHECK_INTERVAL) {
@@ -109,6 +142,21 @@ public class TimerTickHandler {
 
         if (!finished && com.mateof24.event.TimerConditionRegistry.hasCondition(activeTimer.getName())) {
             finished = com.mateof24.event.TimerConditionRegistry.evaluate(activeTimer.getName());
+        }
+
+        // Scheduled commands: fire when the displayed second crosses a
+        // threshold. A finish tick resets currentTicks (jump away from zero),
+        // which the crossing test naturally ignores — the baseline just moves.
+        long commandSecond = activeTimer.getCurrentTicks() / 20L;
+        if (!activeTimer.getName().equals(lastCommandTimer)) {
+            lastCommandTimer = activeTimer.getName();
+            lastCommandSecond = commandSecond;
+        } else if (commandSecond != lastCommandSecond) {
+            long previousSecond = lastCommandSecond;
+            lastCommandSecond = commandSecond;
+            if (!finished && activeTimer.hasScheduledCommands()) {
+                fireScheduledCommands(server, activeTimer, previousSecond, commandSecond);
+            }
         }
 
         syncCounter++;
@@ -221,9 +269,72 @@ public class TimerTickHandler {
     }
 
     private static void executeTimerCommand(MinecraftServer server, Timer timer) {
-        String command = timer.getCommand();
-        if (command == null || command.trim().isEmpty()) return;
-        String processedCommand = com.mateof24.command.PlaceholderSystem.replacePlaceholders(command, timer);
+        java.util.List<String> toRun = new java.util.ArrayList<>();
+        String legacy = timer.getCommand();
+        if (legacy != null && !legacy.trim().isEmpty()) toRun.add(legacy);
+        toRun.addAll(timer.getFinishCommands());
+        runCommandList(server, timer, toRun);
+    }
+
+    /**
+     * Fires every command event whose threshold was crossed between the two
+     * displayed seconds (countdown: prev > at >= curr; count-up:
+     * prev < at <= curr). Normal ticking crosses at most one boundary, but a
+     * laggy catch-up can cross several — they fire in time order.
+     */
+    private static void fireScheduledCommands(MinecraftServer server, Timer timer,
+                                              long previousSecond, long currentSecond) {
+        java.util.List<Timer.CommandEvent> crossed = new java.util.ArrayList<>();
+        for (Timer.CommandEvent event : timer.getCommandEvents()) {
+            long at = event.getAtSeconds();
+            boolean hit = timer.isCountUp()
+                    ? (previousSecond < at && at <= currentSecond)
+                    : (previousSecond > at && at >= currentSecond);
+            if (hit) crossed.add(event);
+        }
+        if (crossed.isEmpty()) return;
+        // getCommandEvents() is ascending; countdown visits thresholds high-to-low.
+        if (!timer.isCountUp()) java.util.Collections.reverse(crossed);
+        for (Timer.CommandEvent event : crossed) {
+            runCommandList(server, timer, event.getCommands());
+        }
+    }
+
+    /**
+     * Runs the commands in order; one failing command does not stop the
+     * rest. With config commandDelayTicks > 0 the (placeholder-resolved)
+     * commands are queued instead and drained one per delay window.
+     */
+    private static void runCommandList(MinecraftServer server, Timer timer, java.util.List<String> commands) {
+        if (commands.isEmpty()) return;
+        int delayTicks = com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks();
+        if (delayTicks > 0) {
+            for (String command : commands) {
+                pendingCommands.add(com.mateof24.command.PlaceholderSystem.replacePlaceholders(command, timer));
+            }
+            return;
+        }
+        for (String command : commands) {
+            executeResolvedCommand(server,
+                    com.mateof24.command.PlaceholderSystem.replacePlaceholders(command, timer));
+        }
+    }
+
+    /** One queued command per delay window, preserving enqueue order. */
+    private static void drainPendingCommands(MinecraftServer server) {
+        if (pendingCommands.isEmpty()) return;
+        if (commandDelayRemaining > 0) {
+            commandDelayRemaining--;
+            return;
+        }
+        executeResolvedCommand(server, pendingCommands.poll());
+        if (!pendingCommands.isEmpty()) {
+            commandDelayRemaining = Math.max(1,
+                    com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks());
+        }
+    }
+
+    private static void executeResolvedCommand(MinecraftServer server, String processedCommand) {
         try {
             ServerLevel overworld = server.getLevel(ServerLevel.OVERWORLD);
             if (overworld == null) return;

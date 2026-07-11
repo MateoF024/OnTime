@@ -13,10 +13,17 @@ public class ClientNetworkHandler {
             boolean countUp = buf.readBoolean();
             boolean running = buf.readBoolean();
             boolean silent = buf.readBoolean();
+            String titleAbove = buf.readUtf();
+            String titleBelow = buf.readUtf();
+            String titleLeft = buf.readUtf();
+            String titleRight = buf.readUtf();
 
             client.execute(() -> {
                 if (name.isEmpty()) ClientTimerState.clear();
-                else ClientTimerState.updateTimer(name, currentTicks, targetTicks, countUp, running, silent);
+                else {
+                    ClientTimerState.updateTimer(name, currentTicks, targetTicks, countUp, running, silent);
+                    ClientTimerState.updateTitles(titleAbove, titleBelow, titleLeft, titleRight);
+                }
             });
         });
 

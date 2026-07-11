@@ -47,6 +47,10 @@ public class ModConfig {
     // heavy collision footprint of 8080 (Pl3xMap, Tomcat, Spring Boot, etc.).
     private int webSocketPort = 25581;
     private int webPanelPort = 25580;
+    // Global pause in ticks between commands that run as a sequence at the
+    // SAME moment (a scheduled point or the finish list). 0 = all in one
+    // tick, the pre-4.0.0 behavior.
+    private int commandDelayTicks = 0;
 
 
     // Función para cargar parámetros
@@ -85,6 +89,10 @@ public class ModConfig {
             if (root.has("webSocketEnabled")) webSocketEnabled = root.get("webSocketEnabled").getAsBoolean();
             if (root.has("webSocketPort")) webSocketPort = root.get("webSocketPort").getAsInt();
             if (root.has("webPanelPort")) webPanelPort = root.get("webPanelPort").getAsInt();
+            if (root.has("commandDelayTicks")) {
+                commandDelayTicks = root.get("commandDelayTicks").getAsInt();
+                commandDelayTicks = Math.max(0, Math.min(1200, commandDelayTicks));
+            }
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to load config", e);
         }
@@ -112,6 +120,7 @@ public class ModConfig {
             root.addProperty("webSocketEnabled", webSocketEnabled);
             root.addProperty("webSocketPort", webSocketPort);
             root.addProperty("webPanelPort", webPanelPort);
+            root.addProperty("commandDelayTicks", commandDelayTicks);
             com.mateof24.storage.AtomicJsonIO.write(GSON, CONFIG_FILE, root);
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to save config", e);
@@ -239,4 +248,10 @@ public class ModConfig {
     public void setWebSocketPort(int port) { this.webSocketPort = port; save(); }
     public int getWebPanelPort() { return webPanelPort; }
     public void setWebPanelPort(int port) { this.webPanelPort = port; save(); }
+
+    public int getCommandDelayTicks() { return commandDelayTicks; }
+    public void setCommandDelayTicks(int ticks) {
+        this.commandDelayTicks = Math.max(0, Math.min(1200, ticks));
+        save();
+    }
 }

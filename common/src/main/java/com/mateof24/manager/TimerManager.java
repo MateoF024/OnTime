@@ -93,6 +93,9 @@ public class TimerManager {
         }
 
         timer.setTime(hours, minutes, seconds);
+        // Manual jump: re-baseline scheduled commands so skipped-over
+        // thresholds don't fire (only natural ticking fires them).
+        com.mateof24.tick.TimerTickHandler.resetCommandProgress();
         saveTimer(timer);
         return true;
     }
@@ -104,6 +107,7 @@ public class TimerManager {
         }
 
         timer.addTime(hours, minutes, seconds);
+        com.mateof24.tick.TimerTickHandler.resetCommandProgress();
         saveTimer(timer);
         return true;
     }
@@ -112,6 +116,55 @@ public class TimerManager {
         Timer timer = timers.get(name);
         if (timer == null) return false;
         timer.setCommand(command);
+        saveTimer(timer);
+        return true;
+    }
+
+    public boolean addScheduledCommand(String name, long atSeconds, String command) {
+        Timer timer = timers.get(name);
+        if (timer == null) return false;
+        if (!timer.addScheduledCommand(atSeconds, command)) return false;
+        saveTimer(timer);
+        return true;
+    }
+
+    public boolean addFinishCommand(String name, String command) {
+        Timer timer = timers.get(name);
+        if (timer == null) return false;
+        if (!timer.addFinishCommand(command)) return false;
+        saveTimer(timer);
+        return true;
+    }
+
+    public boolean removeScheduledEntry(String name, int index) {
+        Timer timer = timers.get(name);
+        if (timer == null) return false;
+        if (!timer.removeScheduledEntry(index)) return false;
+        saveTimer(timer);
+        return true;
+    }
+
+    public boolean clearScheduledCommands(String name) {
+        Timer timer = timers.get(name);
+        if (timer == null) return false;
+        timer.clearScheduledCommands();
+        saveTimer(timer);
+        return true;
+    }
+
+    /** Sets (raw non-empty) or clears (null/empty) one title slot. */
+    public boolean setTimerTitle(String name, String position, String raw) {
+        Timer timer = timers.get(name);
+        if (timer == null) return false;
+        if (!timer.setTitle(position, raw)) return false;
+        saveTimer(timer);
+        return true;
+    }
+
+    public boolean clearTimerTitles(String name) {
+        Timer timer = timers.get(name);
+        if (timer == null) return false;
+        timer.clearTitles();
         saveTimer(timer);
         return true;
     }

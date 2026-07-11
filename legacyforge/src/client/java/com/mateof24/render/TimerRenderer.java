@@ -37,6 +37,10 @@ public class TimerRenderer {
             if (x == -1) x = (screenWidth - textWidth) / 2;
         }
 
+        int[] titleAdjusted = TitleOverlay.renderAndShift(graphics, x, y, textWidth, textHeight, scale, screenWidth, screenHeight);
+        x = titleAdjusted[0];
+        y = titleAdjusted[1];
+
         int shadowColor = 0xFF000000;
         int mainColor = 0xFF000000 | textColor;
 

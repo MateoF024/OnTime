@@ -26,6 +26,15 @@ public class NetworkHandler {
         buf.writeBoolean(countUp);
         buf.writeBoolean(running);
         buf.writeBoolean(silent);
+        // Counter titles (4.0.0) ride the sync packet and are resolved HERE
+        // by timer name, so every existing send site stays title-correct.
+        com.mateof24.timer.TimerTitles titles = com.mateof24.manager.TimerManager.getInstance()
+                .getTimer(name).map(com.mateof24.timer.TimerTitles::of)
+                .orElse(com.mateof24.timer.TimerTitles.EMPTY);
+        buf.writeUtf(titles.above());
+        buf.writeUtf(titles.below());
+        buf.writeUtf(titles.left());
+        buf.writeUtf(titles.right());
 
         for (var player : server.getPlayerList().getPlayers()) {
             ServerPlayNetworking.send(player, TIMER_SYNC_ID, buf);

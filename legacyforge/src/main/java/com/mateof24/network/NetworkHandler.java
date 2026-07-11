@@ -53,8 +53,14 @@ public class NetworkHandler {
     public static void syncTimerToClients(MinecraftServer server, String name,
                                           long currentTicks, long targetTicks,
                                           boolean countUp, boolean running, boolean silent) {
+        // Counter titles (4.0.0) ride the sync packet and are resolved HERE
+        // by timer name, so every existing send site stays title-correct.
+        com.mateof24.timer.TimerTitles titles = com.mateof24.manager.TimerManager.getInstance()
+                .getTimer(name).map(com.mateof24.timer.TimerTitles::of)
+                .orElse(com.mateof24.timer.TimerTitles.EMPTY);
         CHANNEL.send(PacketDistributor.ALL.noArg(),
-                new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent));
+                new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent,
+                        titles.above(), titles.below(), titles.left(), titles.right()));
     }
 
     public static void syncDisplayConfigToClient(ServerPlayer player, ModConfig cfg) {

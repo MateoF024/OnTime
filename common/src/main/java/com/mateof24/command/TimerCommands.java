@@ -15,6 +15,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -264,6 +265,60 @@ public class TimerCommands {
                                         .executes(ctx -> updateTimerCommand(ctx,
                                                 StringArgumentType.getString(ctx, "command")))
                                 )
+                        )
+                )
+                .then(Commands.literal("commands")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_COMMAND, 4))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(TimerCommands::listScheduledCommands)
+                                .then(Commands.literal("add")
+                                        .then(Commands.literal("finish")
+                                                .then(Commands.argument("command", StringArgumentType.greedyString())
+                                                        .executes(ctx -> addFinishCommand(ctx,
+                                                                StringArgumentType.getString(ctx, "command")))
+                                                )
+                                        )
+                                        .then(Commands.argument("hours", IntegerArgumentType.integer(0))
+                                                .then(Commands.argument("minutes", IntegerArgumentType.integer(0, 59))
+                                                        .then(Commands.argument("seconds", IntegerArgumentType.integer(0, 59))
+                                                                .then(Commands.argument("command", StringArgumentType.greedyString())
+                                                                        .executes(ctx -> addScheduledCommand(ctx,
+                                                                                IntegerArgumentType.getInteger(ctx, "hours"),
+                                                                                IntegerArgumentType.getInteger(ctx, "minutes"),
+                                                                                IntegerArgumentType.getInteger(ctx, "seconds"),
+                                                                                StringArgumentType.getString(ctx, "command")))
+                                                                )
+                                                        )
+                                                )
+                                        )
+                                )
+                                .then(Commands.literal("list")
+                                        .executes(TimerCommands::listScheduledCommands)
+                                )
+                                .then(Commands.literal("remove")
+                                        .then(Commands.argument("index", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> removeScheduledCommand(ctx,
+                                                        IntegerArgumentType.getInteger(ctx, "index")))
+                                        )
+                                )
+                                .then(Commands.literal("clear")
+                                        .executes(TimerCommands::clearScheduledCommands)
+                                )
+                        )
+                )
+                .then(Commands.literal("title")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_TITLE, 4))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(TimerCommands::viewTitles)
+                                .then(Commands.literal("clear")
+                                        .executes(TimerCommands::clearAllTitles)
+                                )
+                                .then(titlePosition("above"))
+                                .then(titlePosition("below"))
+                                .then(titlePosition("left"))
+                                .then(titlePosition("right"))
                         )
                 )
                 .then(Commands.literal("repeat")
@@ -1555,4 +1610,223 @@ public class TimerCommands {
         return 1;
     }
 
+    // ---- /timer title <name> ... (counter titles, 4.0.0) ----
+
+    /** Maximum raw length of a single title spec. */
+    private static final int MAX_TITLE_LENGTH = 256;
+
+    private static final String[] TITLE_POSITIONS = {"above", "below", "left", "right"};
+
+    /**
+     * One position branch of /timer title: <pos> clear | <pos> <text...>.
+     * The 'clear' literal wins over the greedy text (Brigadier priority) —
+     * a literal title saying "clear" needs the JSON form {"text":"clear"}.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> titlePosition(String position) {
+        return Commands.literal(position)
+                .then(Commands.literal("clear")
+                        .executes(ctx -> clearTitle(ctx, position)))
+                .then(Commands.argument("text", StringArgumentType.greedyString())
+                        .executes(ctx -> setTitle(ctx, position,
+                                StringArgumentType.getString(ctx, "text"))));
+    }
+
+    /** Pushes the current sync packet immediately when the edited timer is on screen. */
+    private static void resyncIfActive(CommandContext<CommandSourceStack> ctx, String name) {
+        TimerManager.getInstance().getActiveTimer()
+                .filter(t -> t.getName().equals(name))
+                .ifPresent(t -> Services.PLATFORM.sendTimerSyncPacket(
+                        ctx.getSource().getServer(), t.getName(), t.getCurrentTicks(),
+                        t.getTargetTicks(), t.isCountUp(), t.isRunning(), t.isSilent()));
+    }
+
+    private static int setTitle(CommandContext<CommandSourceStack> ctx, String position, String text) {
+        String name = StringArgumentType.getString(ctx, "name");
+        if (!TimerManager.getInstance().hasTimer(name)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        if (text.length() > MAX_TITLE_LENGTH) {
+            ctx.getSource().sendFailure(Component.translatable(
+                    "ontime.command.title.too_long", MAX_TITLE_LENGTH));
+            return 0;
+        }
+        // Validate now so a broken JSON spec is rejected instead of stored.
+        if (com.mateof24.util.TitleParser.parseTitle(text) == null) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.title.invalid_json"));
+            return 0;
+        }
+        TimerManager.getInstance().setTimerTitle(name, position, text);
+        resyncIfActive(ctx, name);
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.title.set", position, name, text), true);
+        return 1;
+    }
+
+    private static int clearTitle(CommandContext<CommandSourceStack> ctx, String position) {
+        String name = StringArgumentType.getString(ctx, "name");
+        if (!TimerManager.getInstance().setTimerTitle(name, position, null)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        resyncIfActive(ctx, name);
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.title.cleared", position, name), true);
+        return 1;
+    }
+
+    private static int clearAllTitles(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        if (!TimerManager.getInstance().clearTimerTitles(name)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        resyncIfActive(ctx, name);
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.title.cleared_all", name), true);
+        return 1;
+    }
+
+    private static int viewTitles(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        Timer timer = timerOpt.get();
+        if (!timer.hasTitles()) {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.title.current.none", name), false);
+            return 1;
+        }
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.title.current.header", name), false);
+        for (String position : TITLE_POSITIONS) {
+            String raw = timer.getTitle(position);
+            if (raw == null) continue;
+            final Component line = Component.translatable("ontime.command.title.current.entry", position, raw);
+            ctx.getSource().sendSuccess(() -> line, false);
+        }
+        return 1;
+    }
+
+    // ---- /timer commands <name> ... (scheduled commands, 4.0.0) ----
+
+    private static String formatSeconds(long totalSeconds) {
+        long hours = totalSeconds / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+        long seconds = totalSeconds % 60;
+        return hours > 0
+                ? String.format("%02d:%02d:%02d", hours, minutes, seconds)
+                : String.format("%02d:%02d", minutes, seconds);
+    }
+
+    private static int addScheduledCommand(CommandContext<CommandSourceStack> ctx,
+                                           int hours, int minutes, int seconds, String command) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        com.mateof24.validation.CommandValidator.ValidationResult validation =
+                com.mateof24.validation.CommandValidator.validate(command);
+        if (!validation.isValid()) {
+            ctx.getSource().sendFailure(validation.getErrorMessage());
+            return 0;
+        }
+        long atSeconds = hours * 3600L + minutes * 60L + seconds;
+        long targetSeconds = timerOpt.get().getTargetTicks() / 20L;
+        if (atSeconds <= 0 || atSeconds >= targetSeconds) {
+            ctx.getSource().sendFailure(Component.translatable(
+                    "ontime.command.commands.invalid_time", formatSeconds(targetSeconds), name));
+            return 0;
+        }
+        if (!TimerManager.getInstance().addScheduledCommand(name, atSeconds, command)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.commands.limit",
+                    name, Timer.MAX_SCHEDULED_ENTRIES, Timer.MAX_COMMANDS_PER_POINT));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable(
+                "ontime.command.commands.added", formatSeconds(atSeconds), name, command), true);
+        return 1;
+    }
+
+    private static int addFinishCommand(CommandContext<CommandSourceStack> ctx, String command) {
+        String name = StringArgumentType.getString(ctx, "name");
+        if (!TimerManager.getInstance().hasTimer(name)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        com.mateof24.validation.CommandValidator.ValidationResult validation =
+                com.mateof24.validation.CommandValidator.validate(command);
+        if (!validation.isValid()) {
+            ctx.getSource().sendFailure(validation.getErrorMessage());
+            return 0;
+        }
+        if (!TimerManager.getInstance().addFinishCommand(name, command)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.commands.limit",
+                    name, Timer.MAX_SCHEDULED_ENTRIES, Timer.MAX_COMMANDS_PER_POINT));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable(
+                "ontime.command.commands.added_finish", name, command), true);
+        return 1;
+    }
+
+    private static int listScheduledCommands(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        Timer timer = timerOpt.get();
+        java.util.List<Timer.ScheduledEntry> entries = timer.scheduledEntries();
+        if (entries.isEmpty()) {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.commands.list.empty", name), false);
+            return 1;
+        }
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.commands.list.header", name), false);
+        int index = 1;
+        for (Timer.ScheduledEntry entry : entries) {
+            final int shownIndex = index++;
+            final Component line = entry.atSeconds() == null
+                    ? Component.translatable("ontime.command.commands.list.finish", shownIndex, entry.command())
+                    : Component.translatable("ontime.command.commands.list.at", shownIndex,
+                            formatSeconds(entry.atSeconds()), entry.command());
+            ctx.getSource().sendSuccess(() -> line, false);
+        }
+        return 1;
+    }
+
+    private static int removeScheduledCommand(CommandContext<CommandSourceStack> ctx, int index) {
+        String name = StringArgumentType.getString(ctx, "name");
+        if (!TimerManager.getInstance().hasTimer(name)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        if (!TimerManager.getInstance().removeScheduledEntry(name, index - 1)) {
+            ctx.getSource().sendFailure(Component.translatable(
+                    "ontime.command.commands.invalid_index", index, name));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.commands.removed", index, name), true);
+        return 1;
+    }
+
+    private static int clearScheduledCommands(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        if (!TimerManager.getInstance().clearScheduledCommands(name)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.commands.cleared", name), true);
+        return 1;
+    }
 }

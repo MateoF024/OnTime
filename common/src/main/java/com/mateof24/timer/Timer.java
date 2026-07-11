@@ -1,8 +1,37 @@
 package com.mateof24.timer;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 public class Timer {
+
+    /** Sanity caps for scheduled commands (4.0.0). */
+    public static final int MAX_SCHEDULED_ENTRIES = 64;
+    public static final int MAX_COMMANDS_PER_POINT = 16;
+
+    /** Commands fired when the displayed time crosses {@code atSeconds} (4.0.0). */
+    public static final class CommandEvent {
+        private final long atSeconds;
+        private final List<String> commands = new ArrayList<>();
+
+        public CommandEvent(long atSeconds) { this.atSeconds = atSeconds; }
+        public long getAtSeconds() { return atSeconds; }
+        public List<String> getCommands() { return commands; }
+    }
+
+    /**
+     * One row of the flattened, user-facing enumeration used by
+     * {@code /timer commands <name> list|remove}: timed entries first
+     * (events sorted by time ascending, commands in insertion order),
+     * then finish commands. {@code atSeconds == null} means "on finish".
+     */
+    public record ScheduledEntry(Long atSeconds, String command) {}
+
     private final String name;
     private long currentTicks;
     private final long targetTicks;
@@ -25,6 +54,17 @@ public class Timer {
     private String conditionExpressionAction = "finish";
     private String scoreConditionAction = "finish";
     private String triggerAction = "finish";
+    // Scheduled commands (4.0.0). commandEvents is kept sorted by atSeconds
+    // ascending; the legacy single 'command' field is untouched by these.
+    private final List<CommandEvent> commandEvents = new ArrayList<>();
+    private final List<String> finishCommands = new ArrayList<>();
+    // Decorative titles around the counter (4.0.0), stored as the RAW string
+    // the user typed (tellraw-style JSON or plain text) — parsing is
+    // version-specific and happens through the compat layer. null = unset.
+    private String titleAbove = null;
+    private String titleBelow = null;
+    private String titleLeft = null;
+    private String titleRight = null;
 
     public Timer(String name, int hours, int minutes, int seconds, boolean countUp) {
         this.name = name;
@@ -113,6 +153,23 @@ public class Timer {
         json.addProperty("conditionExpressionAction", conditionExpressionAction);
         json.addProperty("scoreConditionAction", scoreConditionAction);
         json.addProperty("triggerAction", triggerAction);
+        JsonArray events = new JsonArray();
+        for (CommandEvent event : commandEvents) {
+            JsonObject e = new JsonObject();
+            e.addProperty("atSeconds", event.getAtSeconds());
+            JsonArray cmds = new JsonArray();
+            for (String c : event.getCommands()) cmds.add(c);
+            e.add("commands", cmds);
+            events.add(e);
+        }
+        json.add("commandEvents", events);
+        JsonArray finish = new JsonArray();
+        for (String c : finishCommands) finish.add(c);
+        json.add("finishCommands", finish);
+        json.addProperty("titleAbove", titleAbove != null ? titleAbove : "");
+        json.addProperty("titleBelow", titleBelow != null ? titleBelow : "");
+        json.addProperty("titleLeft", titleLeft != null ? titleLeft : "");
+        json.addProperty("titleRight", titleRight != null ? titleRight : "");
         return json;
     }
 
@@ -154,7 +211,43 @@ public class Timer {
         timer.scoreConditionAction = json.has("scoreConditionAction") ? json.get("scoreConditionAction").getAsString() : "finish";
         timer.triggerAction = json.has("triggerAction") ? json.get("triggerAction").getAsString() : "finish";
 
+        // Scheduled commands (absent in pre-4.0.0 files = empty). Malformed
+        // entries are skipped instead of failing the whole timer.
+        if (json.has("commandEvents") && json.get("commandEvents").isJsonArray()) {
+            for (JsonElement el : json.getAsJsonArray("commandEvents")) {
+                if (!el.isJsonObject()) continue;
+                JsonObject e = el.getAsJsonObject();
+                if (!e.has("atSeconds") || !e.has("commands") || !e.get("commands").isJsonArray()) continue;
+                long at;
+                try { at = e.get("atSeconds").getAsLong(); } catch (Exception ex) { continue; }
+                if (at <= 0) continue;
+                for (JsonElement c : e.getAsJsonArray("commands")) {
+                    try { timer.addScheduledCommand(at, c.getAsString()); } catch (Exception ignored) {}
+                }
+            }
+        }
+        if (json.has("finishCommands") && json.get("finishCommands").isJsonArray()) {
+            for (JsonElement c : json.getAsJsonArray("finishCommands")) {
+                try { timer.addFinishCommand(c.getAsString()); } catch (Exception ignored) {}
+            }
+        }
+
+        timer.titleAbove = readOptionalString(json, "titleAbove");
+        timer.titleBelow = readOptionalString(json, "titleBelow");
+        timer.titleLeft = readOptionalString(json, "titleLeft");
+        timer.titleRight = readOptionalString(json, "titleRight");
+
         return timer;
+    }
+
+    private static String readOptionalString(JsonObject json, String key) {
+        if (!json.has(key) || json.get(key).isJsonNull()) return null;
+        try {
+            String value = json.get(key).getAsString();
+            return value.isEmpty() ? null : value;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public String getName() { return name; }
@@ -208,6 +301,128 @@ public class Timer {
     public void setConditionExpression(String expr) { this.conditionExpression = (expr == null || expr.isEmpty()) ? null : expr; }
     public String getTriggerType() { return triggerType; }
     public void setTriggerType(String type) { this.triggerType = (type == null || type.isEmpty()) ? null : type; }
+
+    /** Live list, sorted by atSeconds ascending. Server thread only. */
+    public List<CommandEvent> getCommandEvents() { return commandEvents; }
+
+    /** Live list, insertion order. Server thread only. */
+    public List<String> getFinishCommands() { return finishCommands; }
+
+    public boolean hasScheduledCommands() {
+        return !commandEvents.isEmpty() || !finishCommands.isEmpty();
+    }
+
+    public int scheduledEntryCount() {
+        int count = finishCommands.size();
+        for (CommandEvent event : commandEvents) count += event.getCommands().size();
+        return count;
+    }
+
+    /**
+     * Adds a command fired when the displayed time crosses {@code atSeconds}
+     * (remaining time for countdown, elapsed time for count-up). Commands at
+     * the same instant run in insertion order. Returns false when a sanity
+     * cap is hit ({@link #MAX_SCHEDULED_ENTRIES} / {@link #MAX_COMMANDS_PER_POINT}).
+     */
+    public boolean addScheduledCommand(long atSeconds, String command) {
+        if (scheduledEntryCount() >= MAX_SCHEDULED_ENTRIES) return false;
+        for (CommandEvent event : commandEvents) {
+            if (event.getAtSeconds() == atSeconds) {
+                if (event.getCommands().size() >= MAX_COMMANDS_PER_POINT) return false;
+                event.getCommands().add(command);
+                return true;
+            }
+        }
+        CommandEvent event = new CommandEvent(atSeconds);
+        event.getCommands().add(command);
+        int pos = 0;
+        while (pos < commandEvents.size() && commandEvents.get(pos).getAtSeconds() < atSeconds) pos++;
+        commandEvents.add(pos, event);
+        return true;
+    }
+
+    public boolean addFinishCommand(String command) {
+        if (scheduledEntryCount() >= MAX_SCHEDULED_ENTRIES) return false;
+        if (finishCommands.size() >= MAX_COMMANDS_PER_POINT) return false;
+        finishCommands.add(command);
+        return true;
+    }
+
+    /** Flattened enumeration shown by list and addressed by remove (see {@link ScheduledEntry}). */
+    public List<ScheduledEntry> scheduledEntries() {
+        List<ScheduledEntry> entries = new ArrayList<>();
+        for (CommandEvent event : commandEvents) {
+            for (String c : event.getCommands()) entries.add(new ScheduledEntry(event.getAtSeconds(), c));
+        }
+        for (String c : finishCommands) entries.add(new ScheduledEntry(null, c));
+        return Collections.unmodifiableList(entries);
+    }
+
+    /** Removes the entry at the given 0-based index of {@link #scheduledEntries()}. */
+    public boolean removeScheduledEntry(int index) {
+        if (index < 0) return false;
+        for (CommandEvent event : commandEvents) {
+            if (index < event.getCommands().size()) {
+                event.getCommands().remove(index);
+                if (event.getCommands().isEmpty()) commandEvents.remove(event);
+                return true;
+            }
+            index -= event.getCommands().size();
+        }
+        if (index < finishCommands.size()) {
+            finishCommands.remove(index);
+            return true;
+        }
+        return false;
+    }
+
+    public void clearScheduledCommands() {
+        commandEvents.clear();
+        finishCommands.clear();
+    }
+
+    public String getTitleAbove() { return titleAbove; }
+    public String getTitleBelow() { return titleBelow; }
+    public String getTitleLeft() { return titleLeft; }
+    public String getTitleRight() { return titleRight; }
+
+    public boolean hasTitles() {
+        return titleAbove != null || titleBelow != null || titleLeft != null || titleRight != null;
+    }
+
+    /**
+     * Sets (raw != null/empty) or clears (null/empty) the title of the given
+     * slot. Positions follow the command literals: above|below|left|right.
+     * Returns false for an unknown position.
+     */
+    public boolean setTitle(String position, String raw) {
+        String value = (raw == null || raw.isEmpty()) ? null : raw;
+        switch (position) {
+            case "above" -> titleAbove = value;
+            case "below" -> titleBelow = value;
+            case "left" -> titleLeft = value;
+            case "right" -> titleRight = value;
+            default -> { return false; }
+        }
+        return true;
+    }
+
+    public String getTitle(String position) {
+        return switch (position) {
+            case "above" -> titleAbove;
+            case "below" -> titleBelow;
+            case "left" -> titleLeft;
+            case "right" -> titleRight;
+            default -> null;
+        };
+    }
+
+    public void clearTitles() {
+        titleAbove = null;
+        titleBelow = null;
+        titleLeft = null;
+        titleRight = null;
+    }
 
     public String getConditionExpressionAction() { return conditionExpressionAction; }
     public void setConditionExpressionAction(String a) { this.conditionExpressionAction = "start".equals(a) ? "start" : "finish"; }
