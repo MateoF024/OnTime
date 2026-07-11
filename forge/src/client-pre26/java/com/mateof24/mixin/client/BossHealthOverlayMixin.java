@@ -33,14 +33,21 @@ public class BossHealthOverlayMixin {
 
         if (timerX == -1) timerX = (screenWidth - timerWidth) / 2;
 
+        // Expand to the full occupied rect: the decorative titles (4.0.0)
+        // shift the counter and extend the block, and the boss bar must
+        // clear ALL of it, not just the counter.
+        int screenHeight = this.minecraft.getWindow().getGuiScaledHeight();
+        int[] occupied = ClientTimerState.occupiedRectWithTitles(timerX, timerY, timerWidth, timerHeight,
+                scale, screenWidth, screenHeight, this.minecraft.font);
+
         int bossBarLeft = (screenWidth - BOSSBAR_WIDTH) / 2;
         int bossBarRight = bossBarLeft + BOSSBAR_WIDTH;
 
-        boolean horizontalOverlap = (timerX + timerWidth) > bossBarLeft && timerX < bossBarRight;
-        boolean verticalOverlap = (timerY + timerHeight) > BOSSBAR_DEFAULT_Y && timerY < (BOSSBAR_DEFAULT_Y + BOSSBAR_HEIGHT);
+        boolean horizontalOverlap = occupied[2] > bossBarLeft && occupied[0] < bossBarRight;
+        boolean verticalOverlap = occupied[3] > BOSSBAR_DEFAULT_Y && occupied[1] < (BOSSBAR_DEFAULT_Y + BOSSBAR_HEIGHT);
 
         if (horizontalOverlap && verticalOverlap) {
-            int bottomEdge = timerY + timerHeight;
+            int bottomEdge = occupied[3];
             if (com.mateof24.platform.Services.PLATFORM.isModLoaded("jade")) {
                 bottomEdge = Math.max(bottomEdge, JADE_ESTIMATED_HEIGHT);
             }
