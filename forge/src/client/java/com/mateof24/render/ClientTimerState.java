@@ -40,6 +40,14 @@ public class ClientTimerState {
     private static float displaySoundPitch = 2.0f;
 
     private static final long NANOS_PER_TICK = 50_000_000L;
+    // Titles of the synced timer (4.0.0): raw server strings plus a lazily
+    // parsed Component cache keyed by the raw string. Slot order matches
+    // TitleLayout: 0=above 1=below 2=left 3=right.
+    private static final String[] titleRaw = {"", "", "", ""};
+    private static final net.minecraft.network.chat.Component[] titleParsed =
+            new net.minecraft.network.chat.Component[4];
+    private static final String[] titleParsedFrom = {null, null, null, null};
+
     private static final long SNAP_THRESHOLD_TICKS = 20;
 
     public static void updateDisplayConfig(int x, int y, String preset, float scale,
@@ -50,6 +58,38 @@ public class ClientTimerState {
         displayColorHigh = colorHigh; displayColorMid = colorMid; displayColorLow = colorLow;
         displayThresholdMid = thresholdMid; displayThresholdLow = thresholdLow;
         displaySoundId = soundId; displaySoundVolume = soundVolume; displaySoundPitch = soundPitch;
+    }
+
+    public static void updateTitles(String above, String below, String left, String right) {
+        titleRaw[TitleLayout.ABOVE] = above != null ? above : "";
+        titleRaw[TitleLayout.BELOW] = below != null ? below : "";
+        titleRaw[TitleLayout.LEFT] = left != null ? left : "";
+        titleRaw[TitleLayout.RIGHT] = right != null ? right : "";
+    }
+
+    public static boolean hasTitles() {
+        return !titleRaw[0].isEmpty() || !titleRaw[1].isEmpty()
+                || !titleRaw[2].isEmpty() || !titleRaw[3].isEmpty();
+    }
+
+    /**
+     * Parsed title of the given TitleLayout slot (null when unset). Parsing
+     * is cached by the raw string; an invalid spec (should not happen — the
+     * server validates on set) falls back to the literal text.
+     */
+    public static net.minecraft.network.chat.Component titleComponent(int slot) {
+        String raw = titleRaw[slot];
+        if (raw.isEmpty()) return null;
+        if (!raw.equals(titleParsedFrom[slot])) {
+            net.minecraft.network.chat.Component parsed = null;
+            try {
+                parsed = com.mateof24.compat.VanillaCompat.parseTitle(raw);
+            } catch (Throwable ignored) {}
+            titleParsed[slot] = parsed != null ? parsed
+                    : net.minecraft.network.chat.Component.literal(raw);
+            titleParsedFrom[slot] = raw;
+        }
+        return titleParsed[slot];
     }
 
     public static void updateTimer(String name, long current, long target, boolean up,
@@ -167,6 +207,7 @@ public class ClientTimerState {
 
     public static void clear() {
         timerName = "";
+        updateTitles("", "", "", "");
         targetTicks = 0;
         countUp = false;
         running = false;

@@ -12,7 +12,11 @@ public record TimerSyncPayload(
         long targetTicks,
         boolean countUp,
         boolean running,
-        boolean silent
+        boolean silent,
+        String titleAbove,
+        String titleBelow,
+        String titleLeft,
+        String titleRight
 ) implements CustomPacketPayload {
 
     public static final Type<TimerSyncPayload> TYPE =
@@ -27,8 +31,13 @@ public record TimerSyncPayload(
             boolean countUp = buffer.readBoolean();
             boolean running = buffer.readBoolean();
             boolean silent = buffer.readBoolean();
+            String titleAbove = decodeString(buffer);
+            String titleBelow = decodeString(buffer);
+            String titleLeft = decodeString(buffer);
+            String titleRight = decodeString(buffer);
 
-            return new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent);
+            return new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent,
+                    titleAbove, titleBelow, titleLeft, titleRight);
         }
 
         @Override
@@ -39,6 +48,10 @@ public record TimerSyncPayload(
             buffer.writeBoolean(payload.countUp());
             buffer.writeBoolean(payload.running());
             buffer.writeBoolean(payload.silent());
+            encodeString(buffer, payload.titleAbove());
+            encodeString(buffer, payload.titleBelow());
+            encodeString(buffer, payload.titleLeft());
+            encodeString(buffer, payload.titleRight());
         }
 
         private void encodeString(ByteBuf buffer, String str) {

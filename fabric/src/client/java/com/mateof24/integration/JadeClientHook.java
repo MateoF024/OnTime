@@ -46,6 +46,22 @@ public final class JadeClientHook {
         int right = x + textW;
         int bottom = y + textH;
 
+        // The decorative titles (4.0.0) are part of the occupied rect, so
+        // Jade is pushed clear of them too.
+        int gap = Math.max(1, (int) (com.mateof24.render.TitleLayout.GAP * scale));
+        for (int slot = 0; slot < 4; slot++) {
+            net.minecraft.network.chat.Component title = ClientTimerState.titleComponent(slot);
+            if (title == null) continue;
+            int titleW = (int) (mc.font.width(title) * scale);
+            int titleH = (int) (mc.font.lineHeight * scale);
+            int titleX = com.mateof24.render.TitleLayout.posX(slot, x, textW, titleW, gap, screenW);
+            int titleY = com.mateof24.render.TitleLayout.posY(slot, y, textH, titleH, gap, screenH);
+            left = Math.min(left, titleX);
+            top = Math.min(top, titleY);
+            right = Math.max(right, titleX + titleW);
+            bottom = Math.max(bottom, titleY + titleH);
+        }
+
         JadeOverlayManager.updateForTimer(left, top, right, bottom, screenW, screenH);
     }
 

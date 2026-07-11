@@ -152,6 +152,23 @@ public class TimerManager {
         return true;
     }
 
+    /** Sets (raw non-empty) or clears (null/empty) one title slot. */
+    public boolean setTimerTitle(String name, String position, String raw) {
+        Timer timer = timers.get(name);
+        if (timer == null) return false;
+        if (!timer.setTitle(position, raw)) return false;
+        saveTimer(timer);
+        return true;
+    }
+
+    public boolean clearTimerTitles(String name) {
+        Timer timer = timers.get(name);
+        if (timer == null) return false;
+        timer.clearTitles();
+        saveTimer(timer);
+        return true;
+    }
+
     public boolean addTimer(Timer timer) {
         if (timers.containsKey(timer.getName())) return false;
         timers.put(timer.getName(), timer);

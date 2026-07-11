@@ -13,6 +13,7 @@ import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -45,6 +46,20 @@ public class TimerCommands {
 
             return builder.buildFuture();
         }
+    }
+
+    /**
+     * One position branch of /timer title: <pos> clear | <pos> <text...>.
+     * The 'clear' literal wins over the greedy text (Brigadier priority) —
+     * a literal title saying "clear" needs the JSON form {"text":"clear"}.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> titlePosition(String position) {
+        return Commands.literal(position)
+                .then(Commands.literal("clear")
+                        .executes(ctx -> BehaviorCommands.clearTitle(ctx, position)))
+                .then(Commands.argument("text", StringArgumentType.greedyString())
+                        .executes(ctx -> BehaviorCommands.setTitle(ctx, position,
+                                StringArgumentType.getString(ctx, "text"))));
     }
 
     static String formatTime(long totalSeconds) {
@@ -302,6 +317,20 @@ public class TimerCommands {
                                 .then(Commands.literal("clear")
                                         .executes(BehaviorCommands::clearScheduledCommands)
                                 )
+                        )
+                )
+                .then(Commands.literal("title")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_TITLE, 4))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(BehaviorCommands::viewTitles)
+                                .then(Commands.literal("clear")
+                                        .executes(BehaviorCommands::clearAllTitles)
+                                )
+                                .then(titlePosition("above"))
+                                .then(titlePosition("below"))
+                                .then(titlePosition("left"))
+                                .then(titlePosition("right"))
                         )
                 )
                 .then(Commands.literal("repeat")

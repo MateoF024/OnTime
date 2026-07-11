@@ -36,6 +36,8 @@ public class TimerRenderer {
             if (x == -1) x = (screenWidth - textWidth) / 2;
         }
 
+        TitleOverlay.render(graphics, x, y, textWidth, textHeight, scale, screenWidth, screenHeight);
+
         if (com.mateof24.render.TimerRendererRegistry.hasCustomRenderer()) {
             com.mateof24.render.TimerRendererRegistry.getCustomRenderer()
                     .render(graphics, 0f, timeText, percentage, x, y, scale);

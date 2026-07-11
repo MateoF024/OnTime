@@ -26,10 +26,24 @@ public class NetworkHandler {
 
     public static void syncTimerToClients(MinecraftServer server, String name, long currentTicks,
                                           long targetTicks, boolean countUp, boolean running, boolean silent) {
-        TimerSyncPayload payload = new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent);
+        TimerSyncPayload payload = buildSyncPayload(name, currentTicks, targetTicks, countUp, running, silent);
         for (var player : server.getPlayerList().getPlayers()) {
             ServerPlayNetworking.send(player, payload);
         }
+    }
+
+    /**
+     * The counter titles (4.0.0) ride the sync packet and are resolved HERE
+     * by timer name, so every existing send site stays title-correct without
+     * plumbing a new parameter through IPlatformHelper.
+     */
+    private static TimerSyncPayload buildSyncPayload(String name, long currentTicks, long targetTicks,
+                                                     boolean countUp, boolean running, boolean silent) {
+        com.mateof24.timer.TimerTitles titles = com.mateof24.manager.TimerManager.getInstance()
+                .getTimer(name).map(com.mateof24.timer.TimerTitles::of)
+                .orElse(com.mateof24.timer.TimerTitles.EMPTY);
+        return new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent,
+                titles.above(), titles.below(), titles.left(), titles.right());
     }
 
     public static void syncVisibilityToClient(ServerPlayer player, boolean visible) {
@@ -104,7 +118,9 @@ public class NetworkHandler {
     }
 
     public record TimerSyncPayload(String name, long currentTicks, long targetTicks,
-                                   boolean countUp, boolean running, boolean silent)
+                                   boolean countUp, boolean running, boolean silent,
+                                   String titleAbove, String titleBelow,
+                                   String titleLeft, String titleRight)
             implements CustomPacketPayload {
         public static final Type<TimerSyncPayload> TYPE = new Type<>(TIMER_SYNC_ID);
         public static final StreamCodec<FriendlyByteBuf, TimerSyncPayload> CODEC = StreamCodec.of(
@@ -112,10 +128,13 @@ public class NetworkHandler {
                     buf.writeUtf(p.name()); buf.writeLong(p.currentTicks()); buf.writeLong(p.targetTicks());
                     buf.writeBoolean(p.countUp()); buf.writeBoolean(p.running());
                     buf.writeBoolean(p.silent());
+                    buf.writeUtf(p.titleAbove()); buf.writeUtf(p.titleBelow());
+                    buf.writeUtf(p.titleLeft()); buf.writeUtf(p.titleRight());
                 },
                 buf -> new TimerSyncPayload(
                         buf.readUtf(), buf.readLong(), buf.readLong(),
-                        buf.readBoolean(), buf.readBoolean(), buf.readBoolean()
+                        buf.readBoolean(), buf.readBoolean(), buf.readBoolean(),
+                        buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf()
                 )
         );
         @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }

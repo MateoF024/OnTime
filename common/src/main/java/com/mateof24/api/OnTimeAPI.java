@@ -128,6 +128,39 @@ public class OnTimeAPI {
                 .orElseGet(java.util.List::of);
     }
 
+    // ---- Counter titles (4.0.0) ----
+
+    /**
+     * Sets (rawText non-empty) or clears (null/empty) one of the four
+     * decorative titles rendered around the timer. Position is one of
+     * "above"/"below"/"left"/"right". Accepts plain text or a tellraw-style
+     * JSON component; returns false for an unknown position, invalid JSON or
+     * a missing timer. Clients pick the change up on the next 1 Hz sync.
+     */
+    public boolean setTimerTitle(String name, String position, String rawText) {
+        if (rawText != null && !rawText.isEmpty()
+                && com.mateof24.compat.VanillaCompat.parseTitle(rawText) == null) {
+            return false;
+        }
+        return TimerManager.getInstance().setTimerTitle(name, position, rawText);
+    }
+
+    public boolean clearTimerTitles(String name) {
+        return TimerManager.getInstance().clearTimerTitles(name);
+    }
+
+    /** Raw title specs by position ("above"/"below"/"left"/"right"); unset slots are absent. */
+    public Map<String, String> getTimerTitles(String name) {
+        return TimerManager.getInstance().getTimer(name).map(t -> {
+            Map<String, String> out = new java.util.LinkedHashMap<String, String>();
+            for (String position : new String[]{"above", "below", "left", "right"}) {
+                String raw = t.getTitle(position);
+                if (raw != null) out.put(position, raw);
+            }
+            return out;
+        }).orElseGet(java.util.LinkedHashMap::new);
+    }
+
     public boolean setTimerRepeat(String name, boolean repeat, int count) {
         return TimerManager.getInstance().getTimer(name).map(t -> {
             t.setRepeat(repeat);

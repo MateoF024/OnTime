@@ -58,6 +58,13 @@ public class Timer {
     // ascending; the legacy single 'command' field is untouched by these.
     private final List<CommandEvent> commandEvents = new ArrayList<>();
     private final List<String> finishCommands = new ArrayList<>();
+    // Decorative titles around the counter (4.0.0), stored as the RAW string
+    // the user typed (tellraw-style JSON or plain text) — parsing is
+    // version-specific and happens through the compat layer. null = unset.
+    private String titleAbove = null;
+    private String titleBelow = null;
+    private String titleLeft = null;
+    private String titleRight = null;
 
     public Timer(String name, int hours, int minutes, int seconds, boolean countUp) {
         this.name = name;
@@ -159,6 +166,10 @@ public class Timer {
         JsonArray finish = new JsonArray();
         for (String c : finishCommands) finish.add(c);
         json.add("finishCommands", finish);
+        json.addProperty("titleAbove", titleAbove != null ? titleAbove : "");
+        json.addProperty("titleBelow", titleBelow != null ? titleBelow : "");
+        json.addProperty("titleLeft", titleLeft != null ? titleLeft : "");
+        json.addProperty("titleRight", titleRight != null ? titleRight : "");
         return json;
     }
 
@@ -221,7 +232,22 @@ public class Timer {
             }
         }
 
+        timer.titleAbove = readOptionalString(json, "titleAbove");
+        timer.titleBelow = readOptionalString(json, "titleBelow");
+        timer.titleLeft = readOptionalString(json, "titleLeft");
+        timer.titleRight = readOptionalString(json, "titleRight");
+
         return timer;
+    }
+
+    private static String readOptionalString(JsonObject json, String key) {
+        if (!json.has(key) || json.get(key).isJsonNull()) return null;
+        try {
+            String value = json.get(key).getAsString();
+            return value.isEmpty() ? null : value;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public String getName() { return name; }
@@ -353,6 +379,49 @@ public class Timer {
     public void clearScheduledCommands() {
         commandEvents.clear();
         finishCommands.clear();
+    }
+
+    public String getTitleAbove() { return titleAbove; }
+    public String getTitleBelow() { return titleBelow; }
+    public String getTitleLeft() { return titleLeft; }
+    public String getTitleRight() { return titleRight; }
+
+    public boolean hasTitles() {
+        return titleAbove != null || titleBelow != null || titleLeft != null || titleRight != null;
+    }
+
+    /**
+     * Sets (raw != null/empty) or clears (null/empty) the title of the given
+     * slot. Positions follow the command literals: above|below|left|right.
+     * Returns false for an unknown position.
+     */
+    public boolean setTitle(String position, String raw) {
+        String value = (raw == null || raw.isEmpty()) ? null : raw;
+        switch (position) {
+            case "above" -> titleAbove = value;
+            case "below" -> titleBelow = value;
+            case "left" -> titleLeft = value;
+            case "right" -> titleRight = value;
+            default -> { return false; }
+        }
+        return true;
+    }
+
+    public String getTitle(String position) {
+        return switch (position) {
+            case "above" -> titleAbove;
+            case "below" -> titleBelow;
+            case "left" -> titleLeft;
+            case "right" -> titleRight;
+            default -> null;
+        };
+    }
+
+    public void clearTitles() {
+        titleAbove = null;
+        titleBelow = null;
+        titleLeft = null;
+        titleRight = null;
     }
 
     public String getConditionExpressionAction() { return conditionExpressionAction; }

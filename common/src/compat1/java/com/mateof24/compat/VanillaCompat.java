@@ -87,4 +87,29 @@ public final class VanillaCompat {
     public static <T extends CustomPacketPayload> CustomPacketPayload.Type<T> payloadType(String namespace, String path) {
         return new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(namespace, path));
     }
+
+    /**
+     * Parses a timer-title spec (4.0.0): tellraw-style JSON component when it
+     * looks like JSON, literal text otherwise. Returns null when the JSON is
+     * invalid — callers decide the fallback (commands reject, renderers show
+     * the raw string). Component.Serializer was already removed within this
+     * compat set's range (present in 1.21.1, gone by 1.21.10), so the
+     * ComponentSerialization codec with plain JsonOps is used here too —
+     * registry-free styles are all a HUD title needs.
+     */
+    public static Component parseTitle(String raw) {
+        if (raw == null || raw.isEmpty()) return null;
+        String trimmed = raw.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            try {
+                com.google.gson.JsonElement el = com.google.gson.JsonParser.parseString(trimmed);
+                return net.minecraft.network.chat.ComponentSerialization.CODEC
+                        .parse(com.mojang.serialization.JsonOps.INSTANCE, el)
+                        .result().orElse(null);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        return Component.literal(raw);
+    }
 }

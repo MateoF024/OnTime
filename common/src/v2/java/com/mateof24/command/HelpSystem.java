@@ -190,6 +190,16 @@ public class HelpSystem {
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
+                "title",
+                "ontime.help.title.desc",
+                "/timer title <name> [above|below|left|right] [text|clear]",
+                "/timer title event above Boss Fight",
+                "/timer title event below {\"text\":\"Hurry up!\",\"color\":\"red\",\"bold\":true}",
+                "/timer title event above clear",
+                "/timer title event clear"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
                 "repeat",
                 "ontime.help.repeat.desc",
                 "/timer repeat <name> [count|-1] [cooldownSeconds]",

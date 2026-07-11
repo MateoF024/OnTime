@@ -531,6 +531,13 @@ public class TimerWebPanel {
         JsonArray finishCommands = new JsonArray();
         for (String c : t.getFinishCommands()) finishCommands.add(c);
         json.add("finishCommands", finishCommands);
+        // Counter titles (4.0.0) — additive, read-only in the panel.
+        JsonObject titles = new JsonObject();
+        titles.addProperty("above", t.getTitleAbove() != null ? t.getTitleAbove() : "");
+        titles.addProperty("below", t.getTitleBelow() != null ? t.getTitleBelow() : "");
+        titles.addProperty("left", t.getTitleLeft() != null ? t.getTitleLeft() : "");
+        titles.addProperty("right", t.getTitleRight() != null ? t.getTitleRight() : "");
+        json.add("titles", titles);
         return json;
     }
 

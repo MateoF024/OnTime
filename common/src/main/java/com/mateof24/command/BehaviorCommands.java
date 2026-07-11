@@ -53,6 +53,93 @@ final class BehaviorCommands {
         return 0;
     }
 
+    // ---- /timer title <name> ... (counter titles, 4.0.0) ----
+
+    /** Maximum raw length of a single title spec. */
+    private static final int MAX_TITLE_LENGTH = 256;
+
+    private static final String[] TITLE_POSITIONS = {"above", "below", "left", "right"};
+
+    /** Pushes the current sync packet immediately when the edited timer is on screen. */
+    private static void resyncIfActive(CommandContext<CommandSourceStack> ctx, String name) {
+        TimerManager.getInstance().getActiveTimer()
+                .filter(t -> t.getName().equals(name))
+                .ifPresent(t -> com.mateof24.platform.Services.PLATFORM.sendTimerSyncPacket(
+                        ctx.getSource().getServer(), t.getName(), t.getCurrentTicks(),
+                        t.getTargetTicks(), t.isCountUp(), t.isRunning(), t.isSilent()));
+    }
+
+    static int setTitle(CommandContext<CommandSourceStack> ctx, String position, String text) {
+        String name = StringArgumentType.getString(ctx, "name");
+        if (!TimerManager.getInstance().hasTimer(name)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        if (text.length() > MAX_TITLE_LENGTH) {
+            ctx.getSource().sendFailure(Component.translatable(
+                    "ontime.command.title.too_long", MAX_TITLE_LENGTH));
+            return 0;
+        }
+        // Validate now so a broken JSON spec is rejected instead of stored.
+        if (com.mateof24.compat.VanillaCompat.parseTitle(text) == null) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.title.invalid_json"));
+            return 0;
+        }
+        TimerManager.getInstance().setTimerTitle(name, position, text);
+        resyncIfActive(ctx, name);
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.title.set", position, name, text), true);
+        return 1;
+    }
+
+    static int clearTitle(CommandContext<CommandSourceStack> ctx, String position) {
+        String name = StringArgumentType.getString(ctx, "name");
+        if (!TimerManager.getInstance().setTimerTitle(name, position, null)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        resyncIfActive(ctx, name);
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.title.cleared", position, name), true);
+        return 1;
+    }
+
+    static int clearAllTitles(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        if (!TimerManager.getInstance().clearTimerTitles(name)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        resyncIfActive(ctx, name);
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.title.cleared_all", name), true);
+        return 1;
+    }
+
+    static int viewTitles(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        Timer timer = timerOpt.get();
+        if (!timer.hasTitles()) {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.title.current.none", name), false);
+            return 1;
+        }
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.title.current.header", name), false);
+        for (String position : TITLE_POSITIONS) {
+            String raw = timer.getTitle(position);
+            if (raw == null) continue;
+            final Component line = Component.translatable("ontime.command.title.current.entry", position, raw);
+            ctx.getSource().sendSuccess(() -> line, false);
+        }
+        return 1;
+    }
+
     // ---- /timer commands <name> ... (scheduled commands, 4.0.0) ----
 
     private static String formatSeconds(long totalSeconds) {

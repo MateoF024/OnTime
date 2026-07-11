@@ -23,8 +23,12 @@ public class NetworkHandler {
     private static void handleTimerSync(TimerSyncPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (payload.name().isEmpty()) ClientTimerState.clear();
-            else ClientTimerState.updateTimer(payload.name(), payload.currentTicks(), payload.targetTicks(),
-                    payload.countUp(), payload.running(), payload.silent());
+            else {
+                ClientTimerState.updateTimer(payload.name(), payload.currentTicks(), payload.targetTicks(),
+                        payload.countUp(), payload.running(), payload.silent());
+                ClientTimerState.updateTitles(payload.titleAbove(), payload.titleBelow(),
+                        payload.titleLeft(), payload.titleRight());
+            }
         });
     }
 
@@ -48,15 +52,29 @@ public class NetworkHandler {
     public static void syncTimerToClients(MinecraftServer server, String name,
                                           long currentTicks, long targetTicks,
                                           boolean countUp, boolean running, boolean silent) {
-        PacketDistributor.sendToAllPlayers(new TimerSyncPayload(
+        PacketDistributor.sendToAllPlayers(buildSyncPayload(
                 name, currentTicks, targetTicks, countUp, running, silent));
     }
 
     public static void syncTimerToClient(ServerPlayer player, String name,
                                          long currentTicks, long targetTicks,
                                          boolean countUp, boolean running, boolean silent) {
-        PacketDistributor.sendToPlayer(player, new TimerSyncPayload(
+        PacketDistributor.sendToPlayer(player, buildSyncPayload(
                 name, currentTicks, targetTicks, countUp, running, silent));
+    }
+
+    /**
+     * The counter titles (4.0.0) ride the sync packet and are resolved HERE
+     * by timer name, so every existing send site stays title-correct without
+     * plumbing a new parameter through IPlatformHelper.
+     */
+    private static TimerSyncPayload buildSyncPayload(String name, long currentTicks, long targetTicks,
+                                                     boolean countUp, boolean running, boolean silent) {
+        com.mateof24.timer.TimerTitles titles = com.mateof24.manager.TimerManager.getInstance()
+                .getTimer(name).map(com.mateof24.timer.TimerTitles::of)
+                .orElse(com.mateof24.timer.TimerTitles.EMPTY);
+        return new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent,
+                titles.above(), titles.below(), titles.left(), titles.right());
     }
 
     public static void syncVisibilityToClient(ServerPlayer player, boolean visible) {

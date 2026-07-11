@@ -170,5 +170,14 @@
   "ontime.command.commands.removed": "§aRemoved scheduled command §f#%s §afrom timer §f'%s'",
   "ontime.command.commands.invalid_index": "§cInvalid index §f%s§c. Use §f/timer commands %s list",
   "ontime.command.commands.cleared": "§aAll scheduled commands cleared for timer §f'%s'",
-  "ontime.help.commands.desc": "Schedule extra commands at intermediate times or on finish (multiple commands per point)"
+  "ontime.help.commands.desc": "Schedule extra commands at intermediate times or on finish (multiple commands per point)",
+  "ontime.command.title.set": "§aTitle §f%s §aset for timer §f'%s'§a: §f%s",
+  "ontime.command.title.cleared": "§aTitle §f%s §acleared for timer §f'%s'",
+  "ontime.command.title.cleared_all": "§aAll titles cleared for timer §f'%s'",
+  "ontime.command.title.invalid_json": "§cInvalid JSON text component. Use plain text or tellraw-style JSON like {\"text\":\"Hi\",\"color\":\"red\",\"bold\":true}",
+  "ontime.command.title.too_long": "§cTitle too long (max %s characters)",
+  "ontime.command.title.current.header": "§e=== Titles for '%s' ===",
+  "ontime.command.title.current.entry": "§7%s: §f%s",
+  "ontime.command.title.current.none": "§7Timer §f'%s' §7has no titles",
+  "ontime.help.title.desc": "Set decorative text above, below, left or right of the timer (plain or tellraw-style JSON)"
 }

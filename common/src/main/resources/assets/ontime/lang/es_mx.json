@@ -164,5 +164,14 @@
   "ontime.command.commands.removed": "§aComando programado §f#%s §aeliminado del timer §f'%s'",
   "ontime.command.commands.invalid_index": "§cÍndice inválido §f%s§c. Usa §f/timer commands %s list",
   "ontime.command.commands.cleared": "§aTodos los comandos programados del timer §f'%s' §afueron eliminados",
-  "ontime.help.commands.desc": "Programa comandos extra en tiempos intermedios o al finalizar (varios comandos por instante)"
+  "ontime.help.commands.desc": "Programa comandos extra en tiempos intermedios o al finalizar (varios comandos por instante)",
+  "ontime.command.title.set": "§aTítulo §f%s §aestablecido para el timer §f'%s'§a: §f%s",
+  "ontime.command.title.cleared": "§aTítulo §f%s §aeliminado del timer §f'%s'",
+  "ontime.command.title.cleared_all": "§aTodos los títulos del timer §f'%s' §afueron eliminados",
+  "ontime.command.title.invalid_json": "§cComponente de texto JSON inválido. Usa texto plano o JSON estilo tellraw como {\"text\":\"Hola\",\"color\":\"red\",\"bold\":true}",
+  "ontime.command.title.too_long": "§cTítulo demasiado largo (máx %s caracteres)",
+  "ontime.command.title.current.header": "§e=== Títulos de '%s' ===",
+  "ontime.command.title.current.entry": "§7%s: §f%s",
+  "ontime.command.title.current.none": "§7El timer §f'%s' §7no tiene títulos",
+  "ontime.help.title.desc": "Define textos decorativos arriba, abajo, a la izquierda o derecha del contador (texto plano o JSON estilo tellraw)"
 }
