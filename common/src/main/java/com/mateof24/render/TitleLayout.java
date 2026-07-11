@@ -46,20 +46,23 @@ public final class TitleLayout {
     }
 
     /**
-     * Horizontal shift for the TIMER so every present side title fits
-     * on-screen instead of being clamped onto the counter: a left title at
-     * the left edge pushes the counter right, a right title at the right
-     * edge pushes it left. widths[] is indexed by slot, 0 = slot unset.
+     * Horizontal shift for the TIMER. The side titles and the counter form
+     * ONE unit: the counter first shifts by (leftExtent - rightExtent)/2 so
+     * the whole left+counter+right block stays centered on the spot the
+     * counter alone occupied (bossbar/actionbar/center presets keep looking
+     * centered). Then the block is kept on-screen: a left title at the left
+     * edge pushes it right, a right title at the right edge pushes it left.
+     * widths[] is indexed by slot, 0 = slot unset.
      */
     public static int timerShiftX(int timerX, int timerWidth, int[] widths, int gap, int screenWidth) {
-        int shift = 0;
-        if (widths[LEFT] > 0) {
-            int needed = widths[LEFT] + gap;
-            if (timerX < needed) shift = needed - timerX;
+        int leftExtent = widths[LEFT] > 0 ? widths[LEFT] + gap : 0;
+        int rightExtent = widths[RIGHT] > 0 ? widths[RIGHT] + gap : 0;
+        int shift = (leftExtent - rightExtent) / 2;
+        if (leftExtent > 0 && timerX + shift < leftExtent) {
+            shift = leftExtent - timerX;
         }
-        if (widths[RIGHT] > 0) {
-            int needed = widths[RIGHT] + gap;
-            int overflow = (timerX + shift + timerWidth + needed) - screenWidth;
+        if (rightExtent > 0) {
+            int overflow = (timerX + shift + timerWidth + rightExtent) - screenWidth;
             if (overflow > 0) shift -= overflow;
         }
         return shift;
@@ -68,16 +71,19 @@ public final class TitleLayout {
     /**
      * Vertical shift for the TIMER: an 'above' title at a top preset takes
      * the counter's spot and pushes the counter down (and 'below' at the
-     * bottom edge pushes it up). heights[] is indexed by slot, 0 = unset.
+     * bottom edge pushes it up). The title always keeps a small breathing
+     * margin (2×gap) from the window edge instead of touching it.
+     * heights[] is indexed by slot, 0 = unset.
      */
     public static int timerShiftY(int timerY, int timerHeight, int[] heights, int gap, int screenHeight) {
+        int edgeMargin = gap * 2;
         int shift = 0;
         if (heights[ABOVE] > 0) {
-            int needed = heights[ABOVE] + gap;
+            int needed = edgeMargin + heights[ABOVE] + gap;
             if (timerY < needed) shift = needed - timerY;
         }
         if (heights[BELOW] > 0) {
-            int needed = heights[BELOW] + gap;
+            int needed = heights[BELOW] + gap + edgeMargin;
             int overflow = (timerY + shift + timerHeight + needed) - screenHeight;
             if (overflow > 0) shift -= overflow;
         }
