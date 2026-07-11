@@ -152,5 +152,17 @@
   "ontime.command.webpanel.start_failed": "§cError al iniciar el panel en el puerto %s. El puerto puede estar en uso.",
   "ontime.command.webpanel.info": "§aPanel web activo en §f%s §7(%s conectado(s))",
   "ontime.help.webpanel.desc": "Inicia, detiene o consulta el panel web en tiempo real para gestionar los timers",
-  "ontime.command.expr.invalid": "§cExpresión inválida: §f%s"
+  "ontime.command.expr.invalid": "§cExpresión inválida: §f%s",
+  "ontime.command.commands.added": "§aComando programado en §f%s §apara el timer §f'%s'§a: §f%s",
+  "ontime.command.commands.added_finish": "§aComando de finalización agregado al timer §f'%s'§a: §f%s",
+  "ontime.command.commands.invalid_time": "§cEl tiempo debe ser mayor a 0 y menor que la duración del timer (§f%s§c). Para comandos de finalización usa §f/timer commands %s add finish <comando>",
+  "ontime.command.commands.limit": "§cLímite de comandos alcanzado para el timer §f'%s' §c(máx §f%s §centradas, §f%s §cpor instante)",
+  "ontime.command.commands.list.header": "§e=== Comandos programados de '%s' ===",
+  "ontime.command.commands.list.empty": "§7El timer §f'%s' §7no tiene comandos programados",
+  "ontime.command.commands.list.at": "§f%s. §7en §f%s §7- §f%s",
+  "ontime.command.commands.list.finish": "§f%s. §7al finalizar §7- §f%s",
+  "ontime.command.commands.removed": "§aComando programado §f#%s §aeliminado del timer §f'%s'",
+  "ontime.command.commands.invalid_index": "§cÍndice inválido §f%s§c. Usa §f/timer commands %s list",
+  "ontime.command.commands.cleared": "§aTodos los comandos programados del timer §f'%s' §afueron eliminados",
+  "ontime.help.commands.desc": "Programa comandos extra en tiempos intermedios o al finalizar (varios comandos por instante)"
 }

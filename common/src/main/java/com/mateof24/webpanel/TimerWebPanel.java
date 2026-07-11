@@ -517,6 +517,20 @@ public class TimerWebPanel {
         json.addProperty("conditionTarget", t.getConditionTarget() != null ? t.getConditionTarget() : "*");
         float pct = t.getTargetTicks() > 0 ? (t.getCurrentTicks() * 100f) / t.getTargetTicks() : 100f;
         json.addProperty("percentage", t.isCountUp() ? 100f - pct : pct);
+        // Scheduled commands (4.0.0) — additive, read-only in the panel.
+        JsonArray commandEvents = new JsonArray();
+        for (Timer.CommandEvent event : t.getCommandEvents()) {
+            JsonObject e = new JsonObject();
+            e.addProperty("atSeconds", event.getAtSeconds());
+            JsonArray cmds = new JsonArray();
+            for (String c : event.getCommands()) cmds.add(c);
+            e.add("commands", cmds);
+            commandEvents.add(e);
+        }
+        json.add("commandEvents", commandEvents);
+        JsonArray finishCommands = new JsonArray();
+        for (String c : t.getFinishCommands()) finishCommands.add(c);
+        json.add("finishCommands", finishCommands);
         return json;
     }
 

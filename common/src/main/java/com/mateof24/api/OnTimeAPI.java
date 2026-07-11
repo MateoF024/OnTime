@@ -81,6 +81,53 @@ public class OnTimeAPI {
         return TimerManager.getInstance().setTimerCommand(name, command);
     }
 
+    // ---- Scheduled commands (4.0.0) ----
+
+    /**
+     * Adds a command fired when the timer's displayed time crosses
+     * {@code atSeconds} (remaining time for countdown timers, elapsed time
+     * for count-up timers). Must satisfy 0 < atSeconds < duration.
+     * Commands at the same instant run in the order they were added.
+     */
+    public boolean addScheduledCommand(String name, long atSeconds, String command) {
+        Optional<Timer> timer = TimerManager.getInstance().getTimer(name);
+        if (timer.isEmpty()) return false;
+        long targetSeconds = timer.get().getTargetTicks() / 20L;
+        if (atSeconds <= 0 || atSeconds >= targetSeconds) return false;
+        return TimerManager.getInstance().addScheduledCommand(name, atSeconds, command);
+    }
+
+    /**
+     * Adds a command to the finish sequence, executed after the legacy
+     * single finish command ({@link #setTimerCommand}) in insertion order.
+     */
+    public boolean addFinishCommand(String name, String command) {
+        return TimerManager.getInstance().addFinishCommand(name, command);
+    }
+
+    /** Removes every scheduled and finish command (the legacy command is untouched). */
+    public boolean clearScheduledCommands(String name) {
+        return TimerManager.getInstance().clearScheduledCommands(name);
+    }
+
+    /** Snapshot of the timed commands: seconds → commands in execution order (time-ascending keys). */
+    public Map<Long, java.util.List<String>> getScheduledCommands(String name) {
+        return TimerManager.getInstance().getTimer(name).map(t -> {
+            Map<Long, java.util.List<String>> out = new java.util.LinkedHashMap<>();
+            for (Timer.CommandEvent e : t.getCommandEvents()) {
+                out.put(e.getAtSeconds(), java.util.List.copyOf(e.getCommands()));
+            }
+            return out;
+        }).orElseGet(java.util.LinkedHashMap::new);
+    }
+
+    /** Snapshot of the finish sequence (excludes the legacy single command). */
+    public java.util.List<String> getFinishCommands(String name) {
+        return TimerManager.getInstance().getTimer(name)
+                .map(t -> java.util.List.copyOf(t.getFinishCommands()))
+                .orElseGet(java.util.List::of);
+    }
+
     public boolean setTimerRepeat(String name, boolean repeat, int count) {
         return TimerManager.getInstance().getTimer(name).map(t -> {
             t.setRepeat(repeat);

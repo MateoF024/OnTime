@@ -180,6 +180,16 @@ public class HelpSystem {
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
+                "commands",
+                "ontime.help.commands.desc",
+                "/timer commands <name> [add <h> <m> <s> <cmd>|add finish <cmd>|list|remove <index>|clear]",
+                "/timer commands event add 0 0 10 say 10 seconds left!",
+                "/timer commands event add finish say The event is over!",
+                "/timer commands event list",
+                "/timer commands event remove 2"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
                 "repeat",
                 "ontime.help.repeat.desc",
                 "/timer repeat <name> [count|-1] [cooldownSeconds]",

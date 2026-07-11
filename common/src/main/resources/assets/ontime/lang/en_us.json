@@ -158,5 +158,17 @@
   "ontime.command.trigger.cleared": "§aTimer §f'%s' §atrigger cleared",
   "ontime.command.trigger.current": "Timer §f'%s' §7trigger: §f%s §7action: §f%s",
   "ontime.command.trigger.none": "Timer §f'%s' §7has no trigger set",
-  "ontime.help.trigger.desc": "Set an event trigger that starts or finishes a timer (player_death, dimension_change, advancement, ftb_quest, ftb_reward)"
+  "ontime.help.trigger.desc": "Set an event trigger that starts or finishes a timer (player_death, dimension_change, advancement, ftb_quest, ftb_reward)",
+  "ontime.command.commands.added": "§aCommand scheduled at §f%s §afor timer §f'%s'§a: §f%s",
+  "ontime.command.commands.added_finish": "§aFinish command added to timer §f'%s'§a: §f%s",
+  "ontime.command.commands.invalid_time": "§cTime must be greater than 0 and less than the timer duration (§f%s§c). For completion commands use §f/timer commands %s add finish <command>",
+  "ontime.command.commands.limit": "§cCommand limit reached for timer §f'%s' §c(max §f%s §centries, §f%s §cper time point)",
+  "ontime.command.commands.list.header": "§e=== Scheduled commands for '%s' ===",
+  "ontime.command.commands.list.empty": "§7Timer §f'%s' §7has no scheduled commands",
+  "ontime.command.commands.list.at": "§f%s. §7at §f%s §7- §f%s",
+  "ontime.command.commands.list.finish": "§f%s. §7on finish §7- §f%s",
+  "ontime.command.commands.removed": "§aRemoved scheduled command §f#%s §afrom timer §f'%s'",
+  "ontime.command.commands.invalid_index": "§cInvalid index §f%s§c. Use §f/timer commands %s list",
+  "ontime.command.commands.cleared": "§aAll scheduled commands cleared for timer §f'%s'",
+  "ontime.help.commands.desc": "Schedule extra commands at intermediate times or on finish (multiple commands per point)"
 }
