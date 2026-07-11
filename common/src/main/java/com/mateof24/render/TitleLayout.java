@@ -44,4 +44,43 @@ public final class TitleLayout {
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
     }
+
+    /**
+     * Horizontal shift for the TIMER so every present side title fits
+     * on-screen instead of being clamped onto the counter: a left title at
+     * the left edge pushes the counter right, a right title at the right
+     * edge pushes it left. widths[] is indexed by slot, 0 = slot unset.
+     */
+    public static int timerShiftX(int timerX, int timerWidth, int[] widths, int gap, int screenWidth) {
+        int shift = 0;
+        if (widths[LEFT] > 0) {
+            int needed = widths[LEFT] + gap;
+            if (timerX < needed) shift = needed - timerX;
+        }
+        if (widths[RIGHT] > 0) {
+            int needed = widths[RIGHT] + gap;
+            int overflow = (timerX + shift + timerWidth + needed) - screenWidth;
+            if (overflow > 0) shift -= overflow;
+        }
+        return shift;
+    }
+
+    /**
+     * Vertical shift for the TIMER: an 'above' title at a top preset takes
+     * the counter's spot and pushes the counter down (and 'below' at the
+     * bottom edge pushes it up). heights[] is indexed by slot, 0 = unset.
+     */
+    public static int timerShiftY(int timerY, int timerHeight, int[] heights, int gap, int screenHeight) {
+        int shift = 0;
+        if (heights[ABOVE] > 0) {
+            int needed = heights[ABOVE] + gap;
+            if (timerY < needed) shift = needed - timerY;
+        }
+        if (heights[BELOW] > 0) {
+            int needed = heights[BELOW] + gap;
+            int overflow = (timerY + shift + timerHeight + needed) - screenHeight;
+            if (overflow > 0) shift -= overflow;
+        }
+        return shift;
+    }
 }

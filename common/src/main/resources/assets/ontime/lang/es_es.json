@@ -172,6 +172,8 @@
   "ontime.command.title.too_long": "§cTítulo demasiado largo (máx %s caracteres)",
   "ontime.command.title.current.header": "§e=== Títulos de '%s' ===",
   "ontime.command.title.current.entry": "§7%s: §f%s",
+  "ontime.config.command_delay": "Delay entre comandos (ticks)",
+  "ontime.config.command_delay.tooltip": "Pausa en ticks (20 = 1 segundo) entre comandos que se ejecutan en secuencia en el mismo instante (un punto programado o la lista de finalización). 0 = todos en el mismo tick",
   "ontime.command.title.current.none": "§7El timer §f'%s' §7no tiene títulos",
   "ontime.help.title.desc": "Define textos decorativos arriba, abajo, a la izquierda o derecha del contador (texto plano o JSON estilo tellraw)"
 }

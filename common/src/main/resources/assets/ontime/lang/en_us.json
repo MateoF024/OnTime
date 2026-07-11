@@ -63,6 +63,8 @@
   "ontime.config.permission_level.tooltip": "Required permission level for timer commands",
   "ontime.config.max_timer_seconds": "Max Timer Seconds",
   "ontime.config.max_timer_seconds.tooltip": "Maximum allowed timer duration in seconds",
+  "ontime.config.command_delay": "Command Delay (ticks)",
+  "ontime.config.command_delay.tooltip": "Pause in ticks (20 = 1 second) between commands that run as a sequence at the same moment (a scheduled time point or the finish list). 0 = run all in the same tick",
   "ontime.config.allow_players_hide": "Allow Players to Use Hide",
   "ontime.config.allow_players_hide.tooltip": "If enabled, all players can use /timer hide. If disabled, only operators can use it",
   "ontime.config.allow_players_list": "Allow Players to Use List",

@@ -38,7 +38,9 @@ public class TimerRenderer {
             if (x == -1) x = (screenWidth - textWidth) / 2;
         }
 
-        TitleOverlay.render(graphics, x, y, textWidth, textHeight, scale, screenWidth, screenHeight);
+        int[] titleAdjusted = TitleOverlay.renderAndShift(graphics, x, y, textWidth, textHeight, scale, screenWidth, screenHeight);
+        x = titleAdjusted[0];
+        y = titleAdjusted[1];
 
         if (com.mateof24.render.TimerRendererRegistry.hasCustomRenderer()) {
             com.mateof24.render.TimerRendererRegistry.getCustomRenderer()

@@ -34,6 +34,13 @@ public class TimerTickHandler {
     private static long lastCommandSecond = -1L;
     private static String lastCommandTimer = "";
 
+    // Command pacing (4.0.0): when config commandDelayTicks > 0, commands of
+    // a same-moment sequence are queued here (placeholders ALREADY resolved,
+    // so {time}/{seconds} reflect the trigger instant) and drained one per
+    // delay window instead of all in one tick.
+    private static final java.util.ArrayDeque<String> pendingCommands = new java.util.ArrayDeque<>();
+    private static long commandDelayRemaining = 0L;
+
     /**
      * Re-baselines the scheduled-command tracker without firing anything.
      * Called on manual time jumps (/timer set|add) and on stop: a jump over
@@ -44,6 +51,12 @@ public class TimerTickHandler {
         lastCommandTimer = "";
     }
 
+    /** Drops queued (delay-paced) commands. Used by /timer stop via cancelCooldown. */
+    public static void clearPendingCommands() {
+        pendingCommands.clear();
+        commandDelayRemaining = 0L;
+    }
+
     public static void cancelCooldown() {
         cooldownRemaining = 0;
         inRepeatCooldown = false;
@@ -51,6 +64,7 @@ public class TimerTickHandler {
         lastBroadcastedScoreboardSecond = -1L;
         lastBroadcastedScoreboardTimer = "";
         resetCommandProgress();
+        clearPendingCommands();
         com.mateof24.trigger.TriggerRegistry.resetAll();
     }
 
@@ -59,6 +73,7 @@ public class TimerTickHandler {
     }
 
     public static void tick(MinecraftServer server) {
+        drainPendingCommands(server);
         com.mateof24.trigger.FTBQuestsPoller.poll(server);
         startConditionCheckCounter++;
         if (startConditionCheckCounter >= START_CHECK_INTERVAL) {
@@ -283,25 +298,48 @@ public class TimerTickHandler {
         }
     }
 
-    /** Runs the commands in order; one failing command does not stop the rest. */
+    /**
+     * Runs the commands in order; one failing command does not stop the
+     * rest. With config commandDelayTicks > 0 the (placeholder-resolved)
+     * commands are queued instead and drained one per delay window.
+     */
     private static void runCommandList(MinecraftServer server, Timer timer, java.util.List<String> commands) {
         if (commands.isEmpty()) return;
-        ServerLevel overworld = server.getLevel(ServerLevel.OVERWORLD);
-        if (overworld == null) return;
-        CommandSourceStack source;
-        try {
-            source = com.mateof24.compat.VanillaCompat.createCommandSource(server, overworld, "OnTime");
-        } catch (Exception e) {
-            com.mateof24.OnTimeConstants.LOGGER.error("Failed to create timer command source", e);
+        int delayTicks = com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks();
+        if (delayTicks > 0) {
+            for (String command : commands) {
+                pendingCommands.add(com.mateof24.command.PlaceholderSystem.replacePlaceholders(command, timer));
+            }
             return;
         }
         for (String command : commands) {
-            String processedCommand = com.mateof24.command.PlaceholderSystem.replacePlaceholders(command, timer);
-            try {
-                server.getCommands().performPrefixedCommand(source, processedCommand);
-            } catch (Exception e) {
-                com.mateof24.OnTimeConstants.LOGGER.error("Failed to execute timer command: " + processedCommand, e);
-            }
+            executeResolvedCommand(server,
+                    com.mateof24.command.PlaceholderSystem.replacePlaceholders(command, timer));
+        }
+    }
+
+    /** One queued command per delay window, preserving enqueue order. */
+    private static void drainPendingCommands(MinecraftServer server) {
+        if (pendingCommands.isEmpty()) return;
+        if (commandDelayRemaining > 0) {
+            commandDelayRemaining--;
+            return;
+        }
+        executeResolvedCommand(server, pendingCommands.poll());
+        if (!pendingCommands.isEmpty()) {
+            commandDelayRemaining = Math.max(1,
+                    com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks());
+        }
+    }
+
+    private static void executeResolvedCommand(MinecraftServer server, String processedCommand) {
+        try {
+            ServerLevel overworld = server.getLevel(ServerLevel.OVERWORLD);
+            if (overworld == null) return;
+            CommandSourceStack source = com.mateof24.compat.VanillaCompat.createCommandSource(server, overworld, "OnTime");
+            server.getCommands().performPrefixedCommand(source, processedCommand);
+        } catch (Exception e) {
+            com.mateof24.OnTimeConstants.LOGGER.error("Failed to execute timer command: " + processedCommand, e);
         }
     }
 

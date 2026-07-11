@@ -132,6 +132,15 @@ public class ConfigScreen {
                 .setSaveConsumer(config::setMaxTimerSeconds)
                 .build());
 
+        server.addEntry(entryBuilder.startIntField(Component.translatable("ontime.config.command_delay"),
+                        config.getCommandDelayTicks())
+                .setDefaultValue(0)
+                .setMin(0)
+                .setMax(1200)
+                .setTooltip(Component.translatable("ontime.config.command_delay.tooltip"))
+                .setSaveConsumer(config::setCommandDelayTicks)
+                .build());
+
         server.addEntry(entryBuilder.startStrField(Component.translatable("ontime.config.timer_sound_id"),
                         config.getTimerSoundId())
                 .setDefaultValue("minecraft:block.note_block.hat")
