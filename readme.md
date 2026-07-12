@@ -49,6 +49,7 @@ A powerful and flexible timer mod for Minecraft. Create custom timers with on-sc
 *   Adjustable scale (0.1× to 5.0×)
 *   Dynamic color gradient based on remaining time (configurable thresholds and colors)
 *   All display settings are managed server-side and pushed to clients automatically
+*   **Timer titles** — decorative text above, below, left or right of the counter, as plain text or tellraw-style JSON, per timer (`/timer title`)
 *   **Active timer synced to scoreboard** — `ontime_active` objective updated every second, usable with `/execute if score`
 *   **Jade compatibility** — when the timer overlaps Jade's overlay, Jade is gently displaced; restored automatically
 
@@ -60,6 +61,8 @@ A powerful and flexible timer mod for Minecraft. Create custom timers with on-sc
 ### ⚡ Command Execution
 
 *   Attach any server command to a timer, executed automatically on completion
+*   **Scheduled commands** — fire commands at intermediate times and chain several commands per point, on top of the classic finish command (`/timer commands`)
+*   **Command delay** — optional configurable pause between commands that run as a sequence
 *   **Placeholder system**: use `{name}`, `{time}`, `{seconds}`, `{ticks}`, `{target}`, `{mode}` in commands
 
 ### 🌍 Web Admin Panel
@@ -114,6 +117,11 @@ A powerful and flexible timer mod for Minecraft. Create custom timers with on-sc
 
 # Behavior
 /timer command <name> [command]
+/timer commands <name> add <h> <m> <s> <command>
+/timer commands <name> add finish <command>
+/timer commands <name> list | remove <index> | clear
+/timer title <name> <above|below|left|right> <text|clear>
+/timer title <name> [clear]
 /timer repeat <name> [count] [cooldownSeconds]
 /timer sequence <name> [nextName|clear] [cooldownSeconds]
 /timer condition <name> <objective> <score> [target] | clear | if <expr> | if_start <expr>
@@ -140,8 +148,6 @@ A powerful and flexible timer mod for Minecraft. Create custom timers with on-sc
 /timer list
 /timer help [page|command]
 ```
-
-> All commands require operator permission level 4 (or a LuckPerms node if installed).
 
 ***
 

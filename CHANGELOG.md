@@ -7,6 +7,9 @@
 - Minecraft 1.21.11 support
 - Minecraft 26.1 support
 - Minecraft 26.2 support
+- Timer titles: decorative text above, below, left or right of the counter, as plain text or tellraw-style JSON (/timer title)
+- Scheduled commands: run commands at intermediate times and several commands per point, on top of the classic finish command (/timer commands)
+- Config option to add a delay between commands that run as a sequence (Command Delay)
 
 ### Changed
 - License changed from CC0 to MIT
