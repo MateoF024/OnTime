@@ -20,6 +20,8 @@ if (mcVer.startsWith("26.2")) {
     vt = "v26.1"
 } else if (mcVer.startsWith("1.21.11")) {
     vt = "v1.21.11"
+} else if (mcVer.startsWith("1.21.5")) {
+    vt = "v1.21.5"
 } else if (mcVer.startsWith("1.21.6") || mcVer.startsWith("1.21.7") ||
         mcVer.startsWith("1.21.8") || mcVer.startsWith("1.21.9") ||
         mcVer.startsWith("1.21.10")) {
@@ -28,16 +30,16 @@ if (mcVer.startsWith("26.2")) {
         mcVer.startsWith("1.21.3") || mcVer.startsWith("1.21.4")) {
     vt = "v1.21.1"
 } else {
-    // 1.21.5 is intentionally unsupported; 1.20.1 lives on the
-    // '1.20.1-maintenance' branch.
+    // 1.20.1 lives on the '1.20.1-maintenance' branch.
     throw new GradleException("Unsupported minecraft_version '${mcVer}'. " +
-            "Supported: 1.21.1-1.21.4, 1.21.6-1.21.11, 26.1.x, 26.2.x " +
+            "Supported: 1.21.1-1.21.11, 26.1.x, 26.2.x " +
             "(1.20.1 is built from the 1.20.1-maintenance branch).")
 }
 
 ext.versionType = vt
 ext.vKey = vt.replace('.', '_')
-// HelpSystem variant: v1 = pre-1.21.6 ClickEvent/HoverEvent API, v2 = 1.21.6+.
+// HelpSystem variant: v1 = pre-1.21.5 ClickEvent/HoverEvent API, v2 = 1.21.5+
+// (the ClickEvent/HoverEvent record rework landed in 1.21.5).
 ext.helpSystemVer = (vt == "v1.21.1") ? "v1" : "v2"
 // VanillaCompat variant (common/src/<compatVer>/java): the vanilla API surface
 // used by common code that drifts across MC versions (permissions, identifier
@@ -45,7 +47,7 @@ ext.helpSystemVer = (vt == "v1.21.1") ? "v1" : "v2"
 //   compat1 = MC 1.21.1-1.21.10 (int permission levels, ResourceLocation)
 //   compat2 = MC 1.21.11 (PermissionSet/PermissionCheck, Identifier)   [Fase 3]
 //   compat3 = MC 26.x                                                  [Fase 4/5]
-ext.compatVer = (vt == "v1.21.1" || vt == "v1.21.6") ? "compat1"
+ext.compatVer = (vt == "v1.21.1" || vt == "v1.21.5" || vt == "v1.21.6") ? "compat1"
         : (vt == "v1.21.11") ? "compat2" : "compat3"
 // 26.x requires Java 25; 1.21.x requires Java 21.
 ext.javaRelease = vt.startsWith("v26") ? 25 : 21
@@ -113,6 +115,7 @@ subprojects {
 // ============================================================
 def buildMatrix = [
         buildMc1_21_1 : '1.21.1',
+        buildMc1_21_5 : '1.21.5',
         buildMc1_21_10: '1.21.10',
         buildMc1_21_11: '1.21.11',
         buildMc26_1   : '26.1.2',

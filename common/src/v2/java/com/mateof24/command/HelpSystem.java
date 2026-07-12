@@ -12,7 +12,7 @@ import java.util.List;
 
 /*
  * SYNC NOTE: common/src/v1 and common/src/v2 keep separate copies of this
- * class on purpose (ClickEvent/HoverEvent API drift at 1.21.6); apply logic
+ * class on purpose (ClickEvent/HoverEvent API drift at 1.21.5); apply logic
  * changes to both. The legacy § codes in the decorative headers are kept
  * deliberately: they rely on the color-code style reset, are still fully
  * supported through 26.2, and replicating them with Style would change the
