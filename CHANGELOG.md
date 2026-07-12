@@ -4,8 +4,9 @@
 
 ### Added
 
+- Minecraft 1.21.5 support is back
 - Minecraft 1.21.11 support
-- Minecraft 26.1 support
+- Minecraft 26.1.X support
 - Minecraft 26.2 support
 - Timer titles: decorative text above, below, left or right of the counter, as plain text or tellraw-style JSON (/timer title)
 - Scheduled commands: run commands at intermediate times and several commands per point, on top of the classic finish command (/timer commands)
@@ -28,7 +29,6 @@
 - All files are saved atomically; a crash mid-save can no longer corrupt them
 - Single-timer operations rewrite only that timer's file instead of every file
 - WebSocket messages are sent from a dedicated thread; a slow client can no longer stall the server
-- More command messages are localizable (en, es_ar, es_es, es_mx)
 
 ---
 
