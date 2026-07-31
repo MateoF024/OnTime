@@ -4,7 +4,7 @@
 
 ### Added
 
-- Minecraft 1.21.5 support is back
+- Minecraft 1.21.5 support is back (Omitted in 3.0.0)
 - Minecraft 1.21.11 support
 - Minecraft 26.1.X support
 - Minecraft 26.2 support
