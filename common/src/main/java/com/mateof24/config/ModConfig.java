@@ -18,6 +18,11 @@ public class ModConfig {
 
     private ModConfig() {}
 
+    /**
+     * Lazily creates and loads the instance. Callers must NOT call
+     * {@link #load()} again right after: the config is already on disk-state
+     * here, and the extra read was pure duplicated I/O at startup.
+     */
     public static ModConfig getInstance() {
         if (INSTANCE == null) {
             INSTANCE = new ModConfig();
@@ -47,6 +52,11 @@ public class ModConfig {
     // heavy collision footprint of 8080 (Pl3xMap, Tomcat, Spring Boot, etc.).
     private int webSocketPort = 25581;
     private int webPanelPort = 25580;
+    // Interface the web panel binds to. "0.0.0.0" keeps it reachable from the
+    // LAN (the common case: opening the panel from a phone); "127.0.0.1"
+    // restricts it to the machine running the server. File-only on purpose —
+    // it is not editable from the panel itself.
+    private String webPanelBindAddress = "0.0.0.0";
     // Global pause in ticks between commands that run as a sequence at the
     // SAME moment (a scheduled point or the finish list). 0 = all in one
     // tick, the pre-4.0.0 behavior.
@@ -89,6 +99,10 @@ public class ModConfig {
             if (root.has("webSocketEnabled")) webSocketEnabled = root.get("webSocketEnabled").getAsBoolean();
             if (root.has("webSocketPort")) webSocketPort = root.get("webSocketPort").getAsInt();
             if (root.has("webPanelPort")) webPanelPort = root.get("webPanelPort").getAsInt();
+            if (root.has("webPanelBindAddress")) {
+                String bind = root.get("webPanelBindAddress").getAsString().trim();
+                if (!bind.isEmpty()) webPanelBindAddress = bind;
+            }
             if (root.has("commandDelayTicks")) {
                 commandDelayTicks = root.get("commandDelayTicks").getAsInt();
                 commandDelayTicks = Math.max(0, Math.min(1200, commandDelayTicks));
@@ -120,6 +134,7 @@ public class ModConfig {
             root.addProperty("webSocketEnabled", webSocketEnabled);
             root.addProperty("webSocketPort", webSocketPort);
             root.addProperty("webPanelPort", webPanelPort);
+            root.addProperty("webPanelBindAddress", webPanelBindAddress);
             root.addProperty("commandDelayTicks", commandDelayTicks);
             com.mateof24.storage.AtomicJsonIO.write(GSON, CONFIG_FILE, root);
         } catch (IOException e) {
@@ -248,6 +263,7 @@ public class ModConfig {
     public void setWebSocketPort(int port) { this.webSocketPort = port; save(); }
     public int getWebPanelPort() { return webPanelPort; }
     public void setWebPanelPort(int port) { this.webPanelPort = port; save(); }
+    public String getWebPanelBindAddress() { return webPanelBindAddress; }
 
     public int getCommandDelayTicks() { return commandDelayTicks; }
     public void setCommandDelayTicks(int ticks) {

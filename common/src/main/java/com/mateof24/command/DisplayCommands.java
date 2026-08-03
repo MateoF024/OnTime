@@ -87,36 +87,34 @@ final class DisplayCommands {
         return 1;
     }
 
-    static int toggleSilentTargets(CommandContext<CommandSourceStack> ctx) {
+    /**
+     * Applies the tick-sound preference to the selected players.
+     *
+     * @param silent {@code null} toggles each player independently;
+     *               {@code TRUE}/{@code FALSE} forces the same result for all.
+     *               The report counts both outcomes, because a toggle over a
+     *               mixed selection genuinely produces both — the old message
+     *               reported whatever the last player of the loop happened to
+     *               get, which was simply wrong.
+     */
+    static int applySilentTargets(CommandContext<CommandSourceStack> ctx, Boolean silent) {
         try {
             var targets = EntityArgument.getPlayers(ctx, "targets");
-            int count = 0;
-            boolean newSilent = true;
+            int muted = 0, unmuted = 0;
 
             for (net.minecraft.server.level.ServerPlayer target : targets) {
                 UUID playerUUID = target.getUUID();
-                boolean currentSilent = PlayerPreferences.getTimerSilent(playerUUID);
-                newSilent = !currentSilent;
+                boolean newSilent = silent != null ? silent : !PlayerPreferences.getTimerSilent(playerUUID);
 
                 PlayerPreferences.setTimerSilent(playerUUID, newSilent);
                 Services.PLATFORM.sendSilentPacket(target, newSilent);
-                count++;
+                if (newSilent) muted++; else unmuted++;
             }
 
-            int finalCount = count;
-            boolean finalSilent = newSilent;
-
-            if (finalSilent) {
-                ctx.getSource().sendSuccess(() ->
-                        Component.translatable("ontime.command.silent.disabled_for",
-                                Component.translatable("ontime.command.silent.players", finalCount)), true);
-            } else {
-                ctx.getSource().sendSuccess(() ->
-                        Component.translatable("ontime.command.silent.enabled_for",
-                                Component.translatable("ontime.command.silent.players", finalCount)), true);
-            }
-
-            return count;
+            int finalMuted = muted, finalUnmuted = unmuted;
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.silent.result", finalUnmuted, finalMuted), true);
+            return muted + unmuted;
         } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.invalid_selector"));
             return 0;
@@ -151,36 +149,32 @@ final class DisplayCommands {
         return 1;
     }
 
-    static int toggleHideTargets(CommandContext<CommandSourceStack> ctx) {
+    /**
+     * Applies the timer visibility to the selected players.
+     *
+     * @param visible {@code null} toggles each player independently;
+     *                {@code TRUE}/{@code FALSE} forces the same result for all.
+     *                See {@link #applySilentTargets} for why both outcomes are
+     *                counted.
+     */
+    static int applyHideTargets(CommandContext<CommandSourceStack> ctx, Boolean visible) {
         try {
             var targets = EntityArgument.getPlayers(ctx, "targets");
-            int count = 0;
-            boolean newVisibility = true;
+            int shown = 0, hidden = 0;
 
             for (net.minecraft.server.level.ServerPlayer target : targets) {
                 UUID playerUUID = target.getUUID();
-                boolean currentVisibility = PlayerPreferences.getTimerVisibility(playerUUID);
-                newVisibility = !currentVisibility;
+                boolean newVisibility = visible != null ? visible : !PlayerPreferences.getTimerVisibility(playerUUID);
 
                 PlayerPreferences.setTimerVisibility(playerUUID, newVisibility);
                 Services.PLATFORM.sendVisibilityPacket(target, newVisibility);
-                count++;
+                if (newVisibility) shown++; else hidden++;
             }
 
-            int finalCount = count;
-            boolean finalVisibility = newVisibility;
-
-            if (newVisibility) {
-                ctx.getSource().sendSuccess(() ->
-                        Component.translatable("ontime.command.hide.enabled",
-                                Component.translatable("ontime.command.hide.players", finalCount)), true);
-            } else {
-                ctx.getSource().sendSuccess(() ->
-                        Component.translatable("ontime.command.hide.disabled",
-                                Component.translatable("ontime.command.hide.players", finalCount)), true);
-            }
-
-            return count;
+            int finalShown = shown, finalHidden = hidden;
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.hide.result", finalShown, finalHidden), true);
+            return shown + hidden;
         } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.invalid_selector"));
             return 0;

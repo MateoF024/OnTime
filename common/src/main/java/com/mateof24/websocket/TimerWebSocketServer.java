@@ -23,6 +23,11 @@ public class TimerWebSocketServer {
     // still delivering events to every client in order.
     private ExecutorService sendExecutor;
     private boolean running = false;
+    // TimerEventBus has no unregister, so the listeners are wired exactly once
+    // for the lifetime of the JVM. Without this flag a stop()+start() cycle
+    // (possible through the API) would register a second set and every event
+    // would be broadcast twice, then three times, and so on.
+    private boolean listenersRegistered = false;
     private int port;
 
     private TimerWebSocketServer() {}
@@ -43,11 +48,14 @@ public class TimerWebSocketServer {
         });
         executor.submit(this::acceptLoop);
 
-        TimerEventBus.registerOnStart(info -> broadcast(buildPayload("START", info)));
-        TimerEventBus.registerOnFinish(info -> broadcast(buildPayload("FINISH", info)));
-        TimerEventBus.registerOnPause(info -> broadcast(buildPayload("PAUSE", info)));
-        TimerEventBus.registerOnResume(info -> broadcast(buildPayload("RESUME", info)));
-        TimerEventBus.registerOnTick(info -> broadcast(buildPayload("TICK", info)));
+        if (!listenersRegistered) {
+            TimerEventBus.registerOnStart(info -> broadcast(buildPayload("START", info)));
+            TimerEventBus.registerOnFinish(info -> broadcast(buildPayload("FINISH", info)));
+            TimerEventBus.registerOnPause(info -> broadcast(buildPayload("PAUSE", info)));
+            TimerEventBus.registerOnResume(info -> broadcast(buildPayload("RESUME", info)));
+            TimerEventBus.registerOnTick(info -> broadcast(buildPayload("TICK", info)));
+            listenersRegistered = true;
+        }
 
         running = true;
         OnTimeConstants.LOGGER.info("OnTime WebSocket server started on port {}", port);

@@ -25,7 +25,7 @@ public class OnTime implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        ModConfig.getInstance().load();
+        ModConfig.getInstance();
         PlayerPreferences.load();
         Services.PLATFORM.registerPackets();
         com.mateof24.trigger.FabricTriggerHandler.register();

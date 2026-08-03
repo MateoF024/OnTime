@@ -249,45 +249,6 @@ public class TimerManager {
         validateActiveTimer();
     }
 
-    public void reloadCommandsFromDisk() {
-        TimerStorage.TimerLoadResult result = TimerStorage.loadTimers();
-        Map<String, Timer> diskTimers = result.getTimers();
-
-        for (Map.Entry<String, Timer> entry : diskTimers.entrySet()) {
-            String name = entry.getKey();
-            Timer diskTimer = entry.getValue();
-            Timer memTimer = timers.get(name);
-
-            if (memTimer != null) {
-                memTimer.setCommand(diskTimer.getCommand());
-                memTimer.setSilent(diskTimer.isSilent());
-            }
-        }
-    }
-
-    public void reloadFromDisk() {
-        TimerStorage.TimerLoadResult result = TimerStorage.loadTimers();
-        Map<String, Timer> diskTimers = result.getTimers();
-
-        for (Map.Entry<String, Timer> entry : diskTimers.entrySet()) {
-            String name = entry.getKey();
-            Timer diskTimer = entry.getValue();
-            Timer memTimer = timers.get(name);
-
-            if (memTimer != null) {
-                boolean wasRunning = memTimer.isRunning();
-                timers.put(name, diskTimer);
-                diskTimer.setRunning(wasRunning);
-
-                if (activeTimer == memTimer) {
-                    activeTimer = diskTimer;
-                }
-            } else {
-                timers.put(name, diskTimer);
-            }
-        }
-    }
-
     public boolean validateActiveTimer() {
         if (activeTimer != null && !timers.containsValue(activeTimer)) {
             OnTimeConstants.LOGGER.warn("Active timer '{}' not found in timers map, clearing", activeTimer.getName());

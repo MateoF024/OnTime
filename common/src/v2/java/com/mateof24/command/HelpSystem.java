@@ -66,8 +66,15 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "pause",
                 "ontime.help.pause.desc",
-                "/timer pause",
+                "/timer pause [explicit]",
                 "/timer pause"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "resume",
+                "ontime.help.resume.desc",
+                "/timer resume",
+                "/timer resume"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
@@ -111,19 +118,19 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "hide",
                 "ontime.help.hide.desc",
-                "/timer hide [targets]",
+                "/timer hide [targets] [show|hide|toggle]",
                 "/timer hide",
-                "/timer hide @a",
-                "/timer hide PlayerName"
+                "/timer hide @a hide",
+                "/timer hide PlayerName show"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
                 "silent",
                 "ontime.help.silent.desc",
-                "/timer silent [targets]",
+                "/timer silent [targets] [mute|unmute|toggle]",
                 "/timer silent",
-                "/timer silent @a",
-                "/timer silent PlayerName"
+                "/timer silent @a mute",
+                "/timer silent PlayerName unmute"
         ));
 
         // Información
@@ -137,10 +144,11 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "position",
                 "ontime.help.position.desc",
-                "/timer position <preset> [targets]",
+                "/timer position <preset>",
                 "/timer position bossbar",
-                "/timer position actionbar @a",
-                "/timer position center @p"
+                "/timer position actionbar",
+                "/timer position top_left",
+                "/timer position center"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(

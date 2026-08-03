@@ -361,10 +361,11 @@ public class Timer {
     /** Removes the entry at the given 0-based index of {@link #scheduledEntries()}. */
     public boolean removeScheduledEntry(int index) {
         if (index < 0) return false;
-        for (CommandEvent event : commandEvents) {
+        for (java.util.Iterator<CommandEvent> it = commandEvents.iterator(); it.hasNext(); ) {
+            CommandEvent event = it.next();
             if (index < event.getCommands().size()) {
                 event.getCommands().remove(index);
-                if (event.getCommands().isEmpty()) commandEvents.remove(event);
+                if (event.getCommands().isEmpty()) it.remove();
                 return true;
             }
             index -= event.getCommands().size();

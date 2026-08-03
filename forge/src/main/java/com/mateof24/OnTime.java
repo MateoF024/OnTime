@@ -47,7 +47,7 @@ public class OnTime {
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        ModConfig.getInstance().load();
+        ModConfig.getInstance();
         PlayerPreferences.load();
         LOGGER.info("OnTime NeoForge mod initialized successfully!");
     }

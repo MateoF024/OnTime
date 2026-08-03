@@ -177,7 +177,27 @@ final class LifecycleCommands {
         return 0;
     }
 
+    /** {@code /timer pause} — toggles, kept for compatibility with 4.0.0 scripts. */
     static int pauseTimer(CommandContext<CommandSourceStack> ctx) {
+        return setRunning(ctx, null);
+    }
+
+    /** {@code /timer pause explicit} — always pauses, never resumes. */
+    static int pauseOnly(CommandContext<CommandSourceStack> ctx) {
+        return setRunning(ctx, Boolean.FALSE);
+    }
+
+    /** {@code /timer resume} — always resumes, never pauses. */
+    static int resumeTimer(CommandContext<CommandSourceStack> ctx) {
+        return setRunning(ctx, Boolean.TRUE);
+    }
+
+    /**
+     * @param running {@code null} toggles (legacy {@code /timer pause}
+     *                behaviour); {@code TRUE}/{@code FALSE} forces the state
+     *                and reports it as a no-op when it already matches.
+     */
+    private static int setRunning(CommandContext<CommandSourceStack> ctx, Boolean running) {
         Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
 
         if (activeTimer.isEmpty()) {
@@ -186,6 +206,13 @@ final class LifecycleCommands {
         }
 
         Timer timer = activeTimer.get();
+
+        if (running != null && running == timer.isRunning()) {
+            ctx.getSource().sendFailure(Component.translatable(
+                    running ? "ontime.command.resume.already" : "ontime.command.pause.already",
+                    timer.getName()));
+            return 0;
+        }
 
         if (timer.isRunning()) {
             timer.setRunning(false);
@@ -210,7 +237,10 @@ final class LifecycleCommands {
             );
             return 1;
         } else {
-            TimerManager.getInstance().reloadCommandsFromDisk();
+            // 4.0.0 re-read the whole timers directory here so hand-edited
+            // command fields were picked up on resume. That is a full directory
+            // scan on the server thread every time anyone unpauses, for a case
+            // that is better served by an explicit reload.
             timer.setRunning(true);
             TimerManager.getInstance().saveTimers();
 

@@ -38,8 +38,23 @@ public class TimerWebPanel {
     private long lastClientActivityTime = 0L;
     private boolean shutdownWarned = false;
 
+    // Access token, regenerated on every start(). Every request must carry it,
+    // either as the 't' query parameter (the initial page load and the SSE
+    // stream, which cannot set headers) or as the X-OnTime-Token header (the
+    // fetch calls the dashboard makes). Without it the panel would expose
+    // timer command editing — which the server runs at OP level — to anyone
+    // who can reach the port.
+    private volatile String accessToken = null;
+
+    // Coarse per-address rate limit for the mutating endpoints.
+    private final ConcurrentHashMap<String, long[]> rateWindows = new ConcurrentHashMap<>();
+
     private static final long INACTIVITY_MS = 5 * 60 * 1000L;
     private static final long WARN_AHEAD_MS = 60 * 1000L;
+    private static final String TOKEN_HEADER = "X-OnTime-Token";
+    private static final String TOKEN_QUERY = "t";
+    private static final long RATE_WINDOW_MS = 10_000L;
+    private static final int RATE_MAX_PER_WINDOW = 40;
 
     private TimerWebPanel() {}
 
@@ -55,8 +70,12 @@ public class TimerWebPanel {
         this.lastClientActivityTime = System.currentTimeMillis();
         this.shutdownWarned = false;
 
+        this.accessToken = generateToken();
+        this.rateWindows.clear();
+
         try {
-            httpServer = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
+            String bindAddress = ModConfig.getInstance().getWebPanelBindAddress();
+            httpServer = HttpServer.create(new InetSocketAddress(bindAddress, port), 0);
             executor = Executors.newCachedThreadPool(r -> {
                 Thread t = new Thread(r, "ontime-webpanel");
                 t.setDaemon(true);
@@ -88,9 +107,10 @@ public class TimerWebPanel {
             });
             scheduler.scheduleAtFixedRate(this::checkInactivity, 30, 30, TimeUnit.SECONDS);
 
-            OnTimeConstants.LOGGER.info("OnTime WebPanel started on port {}", port);
+            OnTimeConstants.LOGGER.info("OnTime WebPanel started on {}:{}", bindAddress, port);
         } catch (IOException e) {
             running = false;
+            accessToken = null;
             OnTimeConstants.LOGGER.error("Failed to start OnTime WebPanel on port {}", port, e);
         }
     }
@@ -98,6 +118,9 @@ public class TimerWebPanel {
     public void stop() {
         if (!running) return;
         running = false;
+        // Invalidate the token first: any request already in flight is rejected.
+        accessToken = null;
+        rateWindows.clear();
         if (scheduler != null) { scheduler.shutdownNow(); scheduler = null; }
         sseClients.forEach(w -> { try { w.close(); } catch (Exception ignored) {} });
         sseClients.clear();
@@ -110,6 +133,76 @@ public class TimerWebPanel {
     public boolean isRunning() { return running; }
     public int getPort() { return port; }
     public int getConnectedClients() { return sseClients.size(); }
+
+    /**
+     * Access URL including the token. This is what gets handed to the operator
+     * who started the panel, and the only way in — it must not be logged or
+     * broadcast anywhere else.
+     */
+    public String getAccessUrlWithToken() {
+        String token = accessToken;
+        return token == null ? getAccessUrl() : getAccessUrl() + "?" + TOKEN_QUERY + "=" + token;
+    }
+
+    private static String generateToken() {
+        byte[] bytes = new byte[16];
+        new java.security.SecureRandom().nextBytes(bytes);
+        StringBuilder sb = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) sb.append(Character.forDigit((b >> 4) & 0xF, 16)).append(Character.forDigit(b & 0xF, 16));
+        return sb.toString();
+    }
+
+    private static String queryParam(HttpExchange ex, String key) {
+        String query = ex.getRequestURI().getRawQuery();
+        if (query == null || query.isEmpty()) return null;
+        for (String pair : query.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq <= 0) continue;
+            if (pair.substring(0, eq).equals(key)) {
+                return java.net.URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Rejects the exchange with 401 unless it carries the current token, either
+     * as the {@code X-OnTime-Token} header or as the {@code t} query parameter.
+     * Compared in constant time so a wrong token leaks nothing by timing.
+     */
+    private boolean authorized(HttpExchange ex) throws IOException {
+        String expected = accessToken;
+        String provided = ex.getRequestHeaders().getFirst(TOKEN_HEADER);
+        if (provided == null) provided = queryParam(ex, TOKEN_QUERY);
+
+        boolean ok = expected != null && provided != null
+                && java.security.MessageDigest.isEqual(
+                        expected.getBytes(StandardCharsets.UTF_8),
+                        provided.getBytes(StandardCharsets.UTF_8));
+        if (!ok) {
+            byte[] body = "{\"error\":\"unauthorized\"}".getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().set("Content-Type", "application/json");
+            ex.sendResponseHeaders(401, body.length);
+            try (OutputStream os = ex.getResponseBody()) { os.write(body); }
+        }
+        return ok;
+    }
+
+    /** Coarse per-address limit on the mutating endpoints. Returns true when the request must be dropped. */
+    private boolean rateLimited(HttpExchange ex) throws IOException {
+        String key = ex.getRemoteAddress() != null && ex.getRemoteAddress().getAddress() != null
+                ? ex.getRemoteAddress().getAddress().getHostAddress() : "unknown";
+        long now = System.currentTimeMillis();
+        long[] window = rateWindows.compute(key, (k, w) -> {
+            if (w == null || now - w[0] >= RATE_WINDOW_MS) return new long[]{now, 1};
+            w[1]++;
+            return w;
+        });
+        if (window[1] <= RATE_MAX_PER_WINDOW) return false;
+        ex.sendResponseHeaders(429, -1);
+        ex.close();
+        return true;
+    }
 
     public String getAccessUrl() {
         try {
@@ -176,12 +269,12 @@ public class TimerWebPanel {
     }
 
     private void serveSSE(HttpExchange ex) throws IOException {
+        if (!authorized(ex)) return;
         lastClientActivityTime = System.currentTimeMillis();
         shutdownWarned = false;
         ex.getResponseHeaders().set("Content-Type", "text/event-stream");
         ex.getResponseHeaders().set("Cache-Control", "no-cache");
         ex.getResponseHeaders().set("Connection", "keep-alive");
-        ex.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
         ex.sendResponseHeaders(200, 0);
 
         PrintWriter writer = new PrintWriter(
@@ -229,7 +322,13 @@ public class TimerWebPanel {
 
     private void serveRoot(HttpExchange ex) throws IOException {
         if (!ex.getRequestMethod().equalsIgnoreCase("GET")) { ex.sendResponseHeaders(405, -1); return; }
-        byte[] body = getDashboardHtml().getBytes(StandardCharsets.UTF_8);
+        if (!authorized(ex)) return;
+        // The page carries the token so its own fetch/EventSource calls can
+        // present it; it never has to be typed twice.
+        String token = accessToken;
+        byte[] body = getDashboardHtml()
+                .replace("__ONTIME_TOKEN__", token != null ? token : "")
+                .getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
         ex.sendResponseHeaders(200, body.length);
         try (OutputStream os = ex.getResponseBody()) { os.write(body); }
@@ -238,6 +337,7 @@ public class TimerWebPanel {
     private void serveState(HttpExchange ex) throws IOException {
         if (!ex.getRequestMethod().equalsIgnoreCase("GET")) { ex.sendResponseHeaders(405, -1); return; }
         setCors(ex);
+        if (!authorized(ex)) return;
         byte[] body = buildStateJson().toString().getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().set("Content-Type", "application/json");
         ex.sendResponseHeaders(200, body.length);
@@ -247,6 +347,7 @@ public class TimerWebPanel {
     private void serveHistory(HttpExchange ex) throws IOException {
         if (!ex.getRequestMethod().equalsIgnoreCase("GET")) { ex.sendResponseHeaders(405, -1); return; }
         setCors(ex);
+        if (!authorized(ex)) return;
         String content = "[]";
         java.nio.file.Path histFile = Services.PLATFORM.getConfigDir().resolve("ontime").resolve("history.json");
         if (Files.exists(histFile)) {
@@ -263,6 +364,8 @@ public class TimerWebPanel {
         setCors(ex);
         if (ex.getRequestMethod().equalsIgnoreCase("OPTIONS")) { ex.sendResponseHeaders(204, -1); return; }
         if (!ex.getRequestMethod().equalsIgnoreCase("POST")) { ex.sendResponseHeaders(405, -1); return; }
+        if (!authorized(ex)) return;
+        if (rateLimited(ex)) return;
 
         String reqBody;
         try (BufferedReader r = new BufferedReader(new InputStreamReader(ex.getRequestBody(), StandardCharsets.UTF_8))) {
@@ -292,6 +395,8 @@ public class TimerWebPanel {
         setCors(ex);
         if (ex.getRequestMethod().equalsIgnoreCase("OPTIONS")) { ex.sendResponseHeaders(204, -1); return; }
         if (!ex.getRequestMethod().equalsIgnoreCase("POST")) { ex.sendResponseHeaders(405, -1); return; }
+        if (!authorized(ex)) return;
+        if (rateLimited(ex)) return;
 
         String reqBody;
         try (BufferedReader r = new BufferedReader(new InputStreamReader(ex.getRequestBody(), StandardCharsets.UTF_8))) {
@@ -355,6 +460,8 @@ public class TimerWebPanel {
         setCors(ex);
         if (ex.getRequestMethod().equalsIgnoreCase("OPTIONS")) { ex.sendResponseHeaders(204, -1); return; }
         if (!ex.getRequestMethod().equalsIgnoreCase("POST")) { ex.sendResponseHeaders(405, -1); return; }
+        if (!authorized(ex)) return;
+        if (rateLimited(ex)) return;
 
         String reqBody;
         try (BufferedReader r = new BufferedReader(new InputStreamReader(ex.getRequestBody(), StandardCharsets.UTF_8))) {
@@ -408,8 +515,15 @@ public class TimerWebPanel {
                     }
                 }
                 case "pause" -> TimerManager.getInstance().getActiveTimer().ifPresent(t -> {
-                    t.setRunning(!t.isRunning());
+                    boolean nowRunning = !t.isRunning();
+                    t.setRunning(nowRunning);
                     TimerManager.getInstance().saveTimers();
+                    // Pausing from the panel used to be invisible to the API,
+                    // the entrypoints and the WebSocket feed, while pausing by
+                    // command did fire. Same event either way now.
+                    TimerInfo info = toInfo(t);
+                    if (nowRunning) TimerEventBus.fireOnResume(info);
+                    else TimerEventBus.fireOnPause(info);
                     Services.PLATFORM.sendTimerSyncPacket(mcServer,
                             t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
                             t.isCountUp(), t.isRunning(), t.isSilent());
@@ -441,6 +555,12 @@ public class TimerWebPanel {
                 }
             }
         });
+    }
+
+    private static TimerInfo toInfo(Timer t) {
+        return new TimerInfo(t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
+                t.isCountUp(), t.isRunning(), t.isSilent(), t.getCommand(),
+                t.isRepeat(), t.getRepeatCount(), t.getRepeatsDone());
     }
 
     private void applyTimerProps(Timer t, JsonObject req) {
@@ -541,10 +661,14 @@ public class TimerWebPanel {
         return json;
     }
 
+    /**
+     * The dashboard is served by this very server, so its own requests are
+     * same-origin and need no CORS at all. The wildcard that used to be here
+     * let any page on the internet call the API; it is gone on purpose.
+     */
     private void setCors(HttpExchange ex) {
-        ex.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
         ex.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        ex.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+        ex.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, " + TOKEN_HEADER);
     }
 
     private String getDashboardHtml() {
@@ -786,6 +910,8 @@ input[type=checkbox],input[type=radio]{accent-color:var(--ac);width:14px;height:
 
 <script>
 let S={timers:{},active:null,config:{}},es=null,editing=null,deleting=null;
+const TOKEN='__ONTIME_TOKEN__';
+function api(path,opts){opts=opts||{};opts.headers=Object.assign({},opts.headers||{},{'X-OnTime-Token':TOKEN});return fetch(path,opts)}
 
 function gid(i){return document.getElementById(i)}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
@@ -793,7 +919,7 @@ function gc(p){const{thresholdMid:m=30,thresholdLow:l=10,colorHigh:h='#3fb950',c
 
 function connect(){
   if(es)es.close();
-  es=new EventSource('/events');
+  es=new EventSource('/events?t='+encodeURIComponent(TOKEN));
   es.addEventListener('INIT',e=>{applyState(JSON.parse(e.data));setConn(true);});
   es.addEventListener('STATE',e=>{applyState(JSON.parse(e.data));});
   ['START','FINISH','PAUSE','RESUME'].forEach(ev=>{
@@ -895,7 +1021,7 @@ function renderList(){
 }
 
 async function act(action,timer){
-  await fetch('/api/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,timer:timer||null})});
+  await api('/api/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,timer:timer||null})});
 }
 
 function openCreate(){
@@ -958,7 +1084,7 @@ async function saveTimer(){
   p.nextTimer=gid('f-nt').value;p.sequenceCooldown=parseInt(gid('f-scd').value)||0;
   p.conditionObjective=gid('f-co').value.trim();p.conditionScore=parseInt(gid('f-cs').value)||0;
   p.conditionTarget=gid('f-ct').value.trim()||'*';
-  const r=await fetch('/api/timer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+  const r=await api('/api/timer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
   const d=await r.json();
   if(d.success){toast(editing?'Timer updated':'Timer created','ok');closeM();}
   else toast(d.error||'Operation failed','er');
@@ -968,7 +1094,7 @@ function openDel(name){deleting=name;gid('dmsg').textContent=`Delete "${name}"? 
 function closeDel(){gid('dmo').classList.remove('op');deleting=null;}
 async function doDel(){
   if(!deleting)return;const name=deleting;closeDel();
-  const r=await fetch('/api/timer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',name})});
+  const r=await api('/api/timer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',name})});
   const d=await r.json();
   if(d.success)toast('Timer deleted','ok');else toast(d.error||'Failed','er');
 }
@@ -993,12 +1119,12 @@ async function saveSettings(){
     thresholdMid:parseInt(gid('c-tm').value),thresholdLow:parseInt(g('c-tl').value),
 soundId:gid('c-sid').value,soundVolume:parseFloat(gid('c-sv2').value),soundPitch:parseFloat(gid('c-sp').value)
 };
-const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+const r=await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
 const d=await r.json();
 if(d.success)toast('Settings saved','ok');else toast(d.error||'Failed','er');
 }
 function loadHist(){
-fetch('/api/history').then(r=>r.json()).then(data=>{
+api('/api/history').then(r=>r.json()).then(data=>{
 const el=gid('hlist');
 if(!data||!data.length){el.innerHTML='<div class="empty">No history yet</div>';return;}
 el.innerHTML=[...data].reverse().slice(0,150).map(h=>{
