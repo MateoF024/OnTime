@@ -117,6 +117,8 @@ public class OnTime {
             }
         });
         TimerManager.getInstance().saveTimers();
+        PlayerPreferences.flush();
+        ModConfig.getInstance().flush();
         LOGGER.info("Timers saved on server shutdown");
     }
 

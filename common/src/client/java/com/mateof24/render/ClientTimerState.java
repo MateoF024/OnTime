@@ -105,35 +105,13 @@ public class ClientTimerState {
     public static int[] occupiedRectWithTitles(int timerX, int timerY, int timerWidth, int timerHeight,
                                                float scale, int screenWidth, int screenHeight,
                                                net.minecraft.client.gui.Font font) {
-        if (!hasTitles()) {
+        TitleBlock block = TitleBlock.of(font, timerX, timerY, timerWidth, timerHeight,
+                scale, screenWidth, screenHeight);
+        if (block == null) {
             return new int[]{timerX, timerY, timerX + timerWidth, timerY + timerHeight};
         }
-        int gap = Math.max(1, (int) (TitleLayout.GAP * scale));
-        net.minecraft.network.chat.Component[] titles = new net.minecraft.network.chat.Component[4];
-        int[] widths = new int[4];
-        int[] heights = new int[4];
-        for (int slot = 0; slot < 4; slot++) {
-            titles[slot] = titleComponent(slot);
-            if (titles[slot] == null) continue;
-            widths[slot] = (int) (font.width(titles[slot]) * scale);
-            heights[slot] = (int) (font.lineHeight * scale);
-        }
-        timerX += TitleLayout.timerShiftX(timerX, timerWidth, widths, gap, screenWidth);
-        timerY += TitleLayout.timerShiftY(timerY, timerHeight, heights, gap, screenHeight);
-        int left = timerX;
-        int top = timerY;
-        int right = timerX + timerWidth;
-        int bottom = timerY + timerHeight;
-        for (int slot = 0; slot < 4; slot++) {
-            if (titles[slot] == null) continue;
-            int titleX = TitleLayout.posX(slot, timerX, timerWidth, widths, gap, screenWidth);
-            int titleY = TitleLayout.posY(slot, timerY, timerHeight, heights[slot], gap, screenHeight);
-            left = Math.min(left, titleX);
-            top = Math.min(top, titleY);
-            right = Math.max(right, titleX + widths[slot]);
-            bottom = Math.max(bottom, titleY + heights[slot]);
-        }
-        return new int[]{left, top, right, bottom};
+        TitleLayout.Placement p = block.layout;
+        return new int[]{p.left, p.top, p.right, p.bottom};
     }
 
     public static void updateTimer(String name, long current, long target, boolean up,

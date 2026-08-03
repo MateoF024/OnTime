@@ -36,11 +36,12 @@ public class TimerCommands {
                 CommandContext<CommandSourceStack> context,
                 com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
 
-            Map<String, Timer> timers = TimerManager.getInstance().getAllTimers();
-
-            for (String timerName : timers.keySet()) {
-                if (timerName.toLowerCase().startsWith(builder.getRemaining().toLowerCase())) {
-                    builder.suggest(timerName);
+            // No defensive copy: this runs on the server thread once per
+            // keystroke, and only names are read.
+            String remaining = builder.getRemaining().toLowerCase();
+            for (Timer timer : TimerManager.getInstance().timersView()) {
+                if (timer.getName().toLowerCase().startsWith(remaining)) {
+                    builder.suggest(timer.getName());
                 }
             }
 

@@ -93,6 +93,8 @@ public class OnTime implements ModInitializer {
                 }
             });
             TimerManager.getInstance().saveTimers();
+            PlayerPreferences.flush();
+            ModConfig.getInstance().flush();
             OnTimeConstants.LOGGER.info("Timers saved on server shutdown");
         });
 

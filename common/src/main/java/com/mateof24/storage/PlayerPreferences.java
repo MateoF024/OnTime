@@ -19,11 +19,26 @@ public class PlayerPreferences {
     private static final Map<UUID, Boolean> timerVisibility = new HashMap<>();
     private static final Map<UUID, Boolean> timerSilent = new HashMap<>();
 
+    /**
+     * Set by the mutators, cleared by {@link #flush()} at the end of the tick.
+     * The setters used to write the whole file each time, so a single
+     * {@code /timer hide @a} on a busy server produced one full rewrite per
+     * player.
+     */
+    private static boolean dirty = false;
+
     public static boolean getTimerVisibility(UUID uuid) { return timerVisibility.getOrDefault(uuid, true); }
-    public static void setTimerVisibility(UUID uuid, boolean visible) { timerVisibility.put(uuid, visible); save(); }
+    public static void setTimerVisibility(UUID uuid, boolean visible) { timerVisibility.put(uuid, visible); dirty = true; }
 
     public static boolean getTimerSilent(UUID uuid) { return timerSilent.getOrDefault(uuid, false); }
-    public static void setTimerSilent(UUID uuid, boolean silent) { timerSilent.put(uuid, silent); save(); }
+    public static void setTimerSilent(UUID uuid, boolean silent) { timerSilent.put(uuid, silent); dirty = true; }
+
+    /** Writes only if something changed. Called once per server tick and on shutdown. */
+    public static void flush() {
+        if (!dirty) return;
+        dirty = false;
+        save();
+    }
 
     public static void save() {
         try {

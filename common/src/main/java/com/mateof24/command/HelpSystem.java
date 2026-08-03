@@ -238,6 +238,24 @@ public class HelpSystem {
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
+                "trigger",
+                "ontime.help.trigger.desc",
+                "/timer trigger <name> <event> [action|clear]",
+                "/timer trigger event player_death",
+                "/timer trigger event dimension_change minecraft:the_nether start",
+                "/timer trigger event clear"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "expr",
+                "ontime.help.expr.desc",
+                "/timer expr <create|set|add> <name> <expression>",
+                "/timer expr create round 60 * players_online",
+                "/timer expr set round 300",
+                "/timer expr add round 30"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
                 "export",
                 "ontime.help.export.desc",
                 "/timer export <name>",

@@ -22,6 +22,60 @@ public final class TitleLayout {
     private TitleLayout() {}
 
     /**
+     * Resolved geometry of the counter plus its titles: where the counter ends
+     * up after being nudged, where each title goes, and the rectangle the whole
+     * block occupies.
+     */
+    public static final class Placement {
+        /** Counter position after the shift. */
+        public final int timerX, timerY;
+        /** Per-slot title position, indexed like {@link #ABOVE} and friends. */
+        public final int[] x = new int[4];
+        public final int[] y = new int[4];
+        /** Union rectangle of counter and titles. */
+        public final int left, top, right, bottom;
+
+        private Placement(int timerX, int timerY, int[] widths, int[] heights,
+                          int timerWidth, int timerHeight, int gap, int screenWidth, int screenHeight) {
+            this.timerX = timerX;
+            this.timerY = timerY;
+            int l = timerX, t = timerY, r = timerX + timerWidth, b = timerY + timerHeight;
+            for (int slot = 0; slot < 4; slot++) {
+                if (heights[slot] <= 0) continue;
+                x[slot] = posX(slot, timerX, timerWidth, widths, gap, screenWidth);
+                y[slot] = posY(slot, timerY, timerHeight, heights[slot], gap, screenHeight);
+                l = Math.min(l, x[slot]);
+                t = Math.min(t, y[slot]);
+                r = Math.max(r, x[slot] + widths[slot]);
+                b = Math.max(b, y[slot] + heights[slot]);
+            }
+            this.left = l;
+            this.top = t;
+            this.right = r;
+            this.bottom = b;
+        }
+    }
+
+    /**
+     * Applies the shift and resolves every title position in one go.
+     *
+     * <p>The renderer, the boss-bar displacement and the Jade hook all need
+     * exactly this, and each used to reimplement it — three copies of the same
+     * sequence that had to stay in lockstep for the overlays to line up.</p>
+     *
+     * @param widths  per-slot title width, 0 for an unset slot
+     * @param heights per-slot title height, 0 for an unset slot
+     */
+    public static Placement resolve(int timerX, int timerY, int timerWidth, int timerHeight,
+                                    int[] widths, int[] heights, int gap,
+                                    int screenWidth, int screenHeight) {
+        int shiftedX = timerX + timerShiftX(timerX, timerWidth, widths, gap, screenWidth);
+        int shiftedY = timerY + timerShiftY(timerY, timerHeight, heights, gap, screenHeight);
+        return new Placement(shiftedX, shiftedY, widths, heights,
+                timerWidth, timerHeight, gap, screenWidth, screenHeight);
+    }
+
+    /**
      * X of one title. widths[] holds every slot's width (0 = unset): the
      * above/below titles center over the WHOLE left+counter+right block,
      * not just the counter, so the composition reads as one unit.

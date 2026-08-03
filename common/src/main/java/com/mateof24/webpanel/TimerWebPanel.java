@@ -46,6 +46,10 @@ public class TimerWebPanel {
     // who can reach the port.
     private volatile String accessToken = null;
 
+    // Snapshot of the panel state, always built on the server thread and only
+    // read by the HTTP handlers. "{}" until the first refresh.
+    private volatile String publishedState = "{}";
+
     // Coarse per-address rate limit for the mutating endpoints.
     private final ConcurrentHashMap<String, long[]> rateWindows = new ConcurrentHashMap<>();
 
@@ -55,6 +59,9 @@ public class TimerWebPanel {
     private static final String TOKEN_QUERY = "t";
     private static final long RATE_WINDOW_MS = 10_000L;
     private static final int RATE_MAX_PER_WINDOW = 40;
+    // onServerTick runs every 4 server ticks, so 5 calls is about one second.
+    private static final int STATE_REFRESH_EVERY = 5;
+    private int stateRefreshCounter = 0;
 
     private TimerWebPanel() {}
 
@@ -91,6 +98,9 @@ public class TimerWebPanel {
             httpServer.createContext("/events", this::serveSSE);
             httpServer.start();
             running = true;
+            // start() runs on the server thread (the command handler), so this
+            // is the right place to seed the snapshot the HTTP threads serve.
+            refreshState();
 
             if (!listenersRegistered) {
                 TimerEventBus.registerOnStart(info -> { if (running) { broadcastSSE(buildEvent("START", info)); broadcastState(); } });
@@ -223,7 +233,14 @@ public class TimerWebPanel {
     }
 
     public void onServerTick(Timer activeTimer) {
-        if (!running || sseClients.isEmpty()) return;
+        if (!running) return;
+        // Keep the published snapshot roughly one second fresh so /api/state
+        // stays useful without rebuilding it on every call of this method.
+        if (++stateRefreshCounter >= STATE_REFRESH_EVERY) {
+            stateRefreshCounter = 0;
+            refreshState();
+        }
+        if (sseClients.isEmpty()) return;
         JsonObject obj = new JsonObject();
         obj.addProperty("name", activeTimer.getName());
         obj.addProperty("currentSeconds", activeTimer.getCurrentTicks() / 20L);
@@ -235,9 +252,26 @@ public class TimerWebPanel {
         broadcastSSE("event: TICK\ndata: " + obj + "\n\n");
     }
 
+    /**
+     * Rebuilds the published snapshot and pushes it to the SSE clients. Must
+     * run on the server thread — it walks the live timer map.
+     */
     private void broadcastState() {
+        String state = refreshState();
         if (!running || sseClients.isEmpty()) return;
-        broadcastSSE("event: STATE\ndata: " + buildStateJson() + "\n\n");
+        broadcastSSE("event: STATE\ndata: " + state + "\n\n");
+    }
+
+    /**
+     * Rebuilds {@link #publishedState} from the live timer map. Server thread
+     * only: the HTTP handlers used to call buildStateJson() themselves, which
+     * meant copying the timer map and reading every Timer's fields while the
+     * server thread could be mutating them.
+     */
+    private String refreshState() {
+        String state = buildStateJson().toString();
+        publishedState = state;
+        return state;
     }
 
     private void checkInactivity() {
@@ -281,7 +315,7 @@ public class TimerWebPanel {
                 new BufferedWriter(new OutputStreamWriter(ex.getResponseBody(), StandardCharsets.UTF_8)), true);
         sseClients.add(writer);
         lastClientActivityTime = System.currentTimeMillis();
-        sseWrite(writer, "INIT", buildStateJson().toString());
+        sseWrite(writer, "INIT", publishedState);
 
         try {
             while (running && !writer.checkError()) {
@@ -338,7 +372,7 @@ public class TimerWebPanel {
         if (!ex.getRequestMethod().equalsIgnoreCase("GET")) { ex.sendResponseHeaders(405, -1); return; }
         setCors(ex);
         if (!authorized(ex)) return;
-        byte[] body = buildStateJson().toString().getBytes(StandardCharsets.UTF_8);
+        byte[] body = publishedState.getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().set("Content-Type", "application/json");
         ex.sendResponseHeaders(200, body.length);
         try (OutputStream os = ex.getResponseBody()) { os.write(body); }
@@ -593,7 +627,9 @@ public class TimerWebPanel {
     private JsonObject buildStateJson() {
         JsonObject root = new JsonObject();
         JsonArray timers = new JsonArray();
-        for (Timer t : TimerManager.getInstance().getAllTimers().values()) {
+        // Safe without the defensive copy now that this only runs on the
+        // server thread.
+        for (Timer t : TimerManager.getInstance().timersView()) {
             timers.add(timerJson(t));
         }
         root.add("timers", timers);

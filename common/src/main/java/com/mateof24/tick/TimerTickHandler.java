@@ -73,6 +73,11 @@ public class TimerTickHandler {
     }
 
     public static void tick(MinecraftServer server) {
+        // Coalesced writes: the preference and config setters only mark
+        // themselves dirty, so a command touching many players or many config
+        // fields produces one file write here instead of one per change.
+        com.mateof24.storage.PlayerPreferences.flush();
+        com.mateof24.config.ModConfig.getInstance().flush();
         drainPendingCommands(server);
         com.mateof24.trigger.FTBQuestsPoller.poll(server);
         startConditionCheckCounter++;

@@ -26,38 +26,28 @@ public final class TitleOverlay {
     public static int[] renderAndShift(GuiGraphics graphics, int timerX, int timerY,
                                        int timerWidth, int timerHeight, float scale,
                                        int screenWidth, int screenHeight) {
-        if (!ClientTimerState.hasTitles()) return new int[]{timerX, timerY};
         Font font = Minecraft.getInstance().font;
-        int gap = Math.max(1, (int) (TitleLayout.GAP * scale));
-
-        Component[] titles = new Component[4];
-        int[] widths = new int[4];
-        int[] heights = new int[4];
-        for (int slot = 0; slot < 4; slot++) {
-            titles[slot] = ClientTimerState.titleComponent(slot);
-            if (titles[slot] == null) continue;
-            widths[slot] = (int) (font.width(titles[slot]) * scale);
-            heights[slot] = (int) (font.lineHeight * scale);
-        }
-
-        timerX += TitleLayout.timerShiftX(timerX, timerWidth, widths, gap, screenWidth);
-        timerY += TitleLayout.timerShiftY(timerY, timerHeight, heights, gap, screenHeight);
+        TitleBlock block = TitleBlock.of(font, timerX, timerY, timerWidth, timerHeight,
+                scale, screenWidth, screenHeight);
+        if (block == null) return new int[]{timerX, timerY};
+        TitleLayout.Placement layout = block.layout;
 
         for (int slot = 0; slot < 4; slot++) {
-            if (titles[slot] == null) continue;
-            int x = TitleLayout.posX(slot, timerX, timerWidth, widths, gap, screenWidth);
-            int y = TitleLayout.posY(slot, timerY, timerHeight, heights[slot], gap, screenHeight);
+            Component title = block.titles[slot];
+            if (title == null) continue;
+            int x = layout.x[slot];
+            int y = layout.y[slot];
             if (scale != 1.0f) {
                 var pose = graphics.pose();
                 pose.pushMatrix();
                 pose.translate(x, y);
                 pose.scale(scale, scale);
-                graphics.drawString(font, titles[slot], 0, 0, 0xFFFFFFFF, true);
+                graphics.drawString(font, title, 0, 0, 0xFFFFFFFF, true);
                 pose.popMatrix();
             } else {
-                graphics.drawString(font, titles[slot], x, y, 0xFFFFFFFF, true);
+                graphics.drawString(font, title, x, y, 0xFFFFFFFF, true);
             }
         }
-        return new int[]{timerX, timerY};
+        return new int[]{layout.timerX, layout.timerY};
     }
 }

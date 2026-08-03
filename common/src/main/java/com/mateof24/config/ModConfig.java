@@ -66,6 +66,8 @@ public class ModConfig {
     // Función para cargar parámetros
     public void load() {
         if (!Files.exists(CONFIG_FILE)) {
+            // First run: write the defaults straight away rather than waiting
+            // for a flush, so the file is there for the user to edit.
             save();
             return;
         }
@@ -113,8 +115,24 @@ public class ModConfig {
 
     }
 
+    /**
+     * Set by the setters, cleared by {@link #save()}. Every setter used to
+     * write the file AND fire {@link #onSaveHook}, which broadcasts the
+     * display config to every client — so saving a config screen produced one
+     * disk write and one broadcast per field touched.
+     */
+    private boolean dirty = false;
+
+    /** Writes and broadcasts only if a setter actually changed something. */
+    public void flush() {
+        if (!dirty) return;
+        save();
+    }
+
+
     // Función para guardar parámetros
     public void save() {
+        dirty = false;
         try {
             Files.createDirectories(CONFIG_DIR);
             JsonObject root = new JsonObject();
@@ -151,7 +169,7 @@ public class ModConfig {
     public void setPositionPreset(TimerPositionPreset preset) {
         this.positionPreset = preset;
 
-        save();
+        dirty = true;
     }
     public void applyPreset(TimerPositionPreset preset, int screenWidth, int screenHeight,
                             int timerWidth, int timerHeight) {
@@ -161,7 +179,7 @@ public class ModConfig {
         this.timerX = preset.calculateX(screenWidth, timerWidth, this.timerX);
         this.timerY = preset.calculateY(screenHeight, timerHeight, this.timerY);
 
-        save();
+        dirty = true;
     }
 
     // Métodos para obtener y establecer posición
@@ -170,28 +188,28 @@ public class ModConfig {
     public int getTimerY() { return timerY; }
     public void setTimerX(int x) {
         this.timerX = x;
-        save();
+        dirty = true;
     }
     public void setTimerY(int y) {
         this.timerY = Math.max(0, y);
-        save();
+        dirty = true;
     }
 
     public void setCustomPosition(int x, int y) {
         this.positionPreset = TimerPositionPreset.CUSTOM;
         this.timerX = x;
         this.timerY = Math.max(0, y);
-        save();
+        dirty = true;
     }
     public void setCustomPositionX(int x) {
         this.positionPreset = TimerPositionPreset.CUSTOM;
         this.timerX = x;
-        save();
+        dirty = true;
     }
     public void setCustomPositionY(int y) {
         this.positionPreset = TimerPositionPreset.CUSTOM;
         this.timerY = Math.max(0, y);
-        save();
+        dirty = true;
     }
 
     // Métodos para obtener y establecer escalas.
@@ -199,14 +217,14 @@ public class ModConfig {
     public float getTimerScale() { return timerScale; }
     public void setTimerScale(float scale) {
         this.timerScale = Math.max(0.1f, Math.min(5.0f, scale));
-        save();
+        dirty = true;
     }
 
 
     // Métodos para obtener y establecer tiempos.
 
     public long getMaxTimerSeconds() { return maxTimerSeconds; }
-    public void setMaxTimerSeconds(long seconds) { this.maxTimerSeconds = Math.max(1, seconds); save(); }
+    public void setMaxTimerSeconds(long seconds) { this.maxTimerSeconds = Math.max(1, seconds); dirty = true; }
 
     // Métodos para obtener y establecer colores
 
@@ -226,48 +244,48 @@ public class ModConfig {
     }
 
     public int getColorHigh() { return colorHigh; }
-    public void setColorHigh(int color) { this.colorHigh = color; save(); }
+    public void setColorHigh(int color) { this.colorHigh = color; dirty = true; }
 
     public int getColorMid() { return colorMid; }
-    public void setColorMid(int color) { this.colorMid = color; save(); }
+    public void setColorMid(int color) { this.colorMid = color; dirty = true; }
 
     public int getColorLow() { return colorLow; }
-    public void setColorLow(int color) { this.colorLow = color; save(); }
+    public void setColorLow(int color) { this.colorLow = color; dirty = true; }
 
     public int getThresholdMid() { return thresholdMid; }
-    public void setThresholdMid(int threshold) { this.thresholdMid = threshold; save(); }
+    public void setThresholdMid(int threshold) { this.thresholdMid = threshold; dirty = true; }
 
     public int getThresholdLow() { return thresholdLow; }
-    public void setThresholdLow(int threshold) { this.thresholdLow = threshold; save(); }
+    public void setThresholdLow(int threshold) { this.thresholdLow = threshold; dirty = true; }
 
     // Métodos para obtener y establecer sonido, volumen y pitch
 
     public String getTimerSoundId() { return timerSoundId; }
-    public void setTimerSoundId(String soundId) { this.timerSoundId = soundId; save(); }
+    public void setTimerSoundId(String soundId) { this.timerSoundId = soundId; dirty = true; }
 
     public float getTimerSoundVolume() { return timerSoundVolume; }
-    public void setTimerSoundVolume(float volume) { this.timerSoundVolume = volume; save(); }
+    public void setTimerSoundVolume(float volume) { this.timerSoundVolume = volume; dirty = true; }
 
     public float getTimerSoundPitch() { return timerSoundPitch; }
-    public void setTimerSoundPitch(float pitch) { this.timerSoundPitch = pitch; save(); }
+    public void setTimerSoundPitch(float pitch) { this.timerSoundPitch = pitch; dirty = true; }
     public void setTimerSound(String soundId, float volume, float pitch) {
         this.timerSoundId = soundId;
         this.timerSoundVolume = volume;
         this.timerSoundPitch = pitch;
-        save();
+        dirty = true;
     }
 
     public boolean isWebSocketEnabled() { return webSocketEnabled; }
-    public void setWebSocketEnabled(boolean enabled) { this.webSocketEnabled = enabled; save(); }
+    public void setWebSocketEnabled(boolean enabled) { this.webSocketEnabled = enabled; dirty = true; }
     public int getWebSocketPort() { return webSocketPort; }
-    public void setWebSocketPort(int port) { this.webSocketPort = port; save(); }
+    public void setWebSocketPort(int port) { this.webSocketPort = port; dirty = true; }
     public int getWebPanelPort() { return webPanelPort; }
-    public void setWebPanelPort(int port) { this.webPanelPort = port; save(); }
+    public void setWebPanelPort(int port) { this.webPanelPort = port; dirty = true; }
     public String getWebPanelBindAddress() { return webPanelBindAddress; }
 
     public int getCommandDelayTicks() { return commandDelayTicks; }
     public void setCommandDelayTicks(int ticks) {
         this.commandDelayTicks = Math.max(0, Math.min(1200, ticks));
-        save();
+        dirty = true;
     }
 }

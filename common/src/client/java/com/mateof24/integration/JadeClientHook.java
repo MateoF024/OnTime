@@ -44,35 +44,10 @@ public final class JadeClientHook {
         // The decorative titles (4.0.0) are part of the occupied rect and
         // shift the counter exactly like TitleOverlay does, so Jade is
         // pushed clear of the same final layout.
-        int gap = Math.max(1, (int) (com.mateof24.render.TitleLayout.GAP * scale));
-        net.minecraft.network.chat.Component[] titles = new net.minecraft.network.chat.Component[4];
-        int[] titleWs = new int[4];
-        int[] titleHs = new int[4];
-        for (int slot = 0; slot < 4; slot++) {
-            titles[slot] = ClientTimerState.titleComponent(slot);
-            if (titles[slot] == null) continue;
-            titleWs[slot] = (int) (mc.font.width(titles[slot]) * scale);
-            titleHs[slot] = (int) (mc.font.lineHeight * scale);
-        }
-        x += com.mateof24.render.TitleLayout.timerShiftX(x, textW, titleWs, gap, screenW);
-        y += com.mateof24.render.TitleLayout.timerShiftY(y, textH, titleHs, gap, screenH);
+        int[] rect = ClientTimerState.occupiedRectWithTitles(x, y, textW, textH,
+                scale, screenW, screenH, mc.font);
 
-        int left = x;
-        int top = y;
-        int right = x + textW;
-        int bottom = y + textH;
-
-        for (int slot = 0; slot < 4; slot++) {
-            if (titles[slot] == null) continue;
-            int titleX = com.mateof24.render.TitleLayout.posX(slot, x, textW, titleWs, gap, screenW);
-            int titleY = com.mateof24.render.TitleLayout.posY(slot, y, textH, titleHs[slot], gap, screenH);
-            left = Math.min(left, titleX);
-            top = Math.min(top, titleY);
-            right = Math.max(right, titleX + titleWs[slot]);
-            bottom = Math.max(bottom, titleY + titleHs[slot]);
-        }
-
-        JadeOverlayManager.updateForTimer(left, top, right, bottom, screenW, screenH);
+        JadeOverlayManager.updateForTimer(rect[0], rect[1], rect[2], rect[3], screenW, screenH);
     }
 
     private static boolean isTopPreset(TimerPositionPreset p) {
