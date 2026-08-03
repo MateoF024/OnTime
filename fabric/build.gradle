@@ -40,10 +40,15 @@ loom {
 sourceSets {
     main {
         java {
+            // src/<fabricVer> holds the Fabric-side platform glue (networking,
+            // triggers, PlaceholderAPI). It is grouped by Fabric/PAPI tier, not
+            // by family — see the root build.gradle for the mapping.
             srcDirs = [
                     'src/main/java',
                     '../common/src/main/java',
-                    "src/${versionType}/main/java"
+                    "../common/src/${rootProject.ext.helpSystemVer}/java",
+                    "../common/src/${rootProject.ext.compatVer}/java",
+                    "src/${rootProject.ext.fabricVer}/java"
             ]
         }
         resources {
@@ -71,6 +76,9 @@ sourceSets {
                     'src/client/java',
                     '../common/src/client/java',
                     "../common/src/${rootProject.ext.clientVer}/java",
+                    // VanillaClientCompat sits in its own client dir so the
+                    // dedicated-server source set never sees client types.
+                    "../common/src/${rootProject.ext.compatVer}/client/java",
                     "src/${versionType}/client/java"
             ] + (rootProject.ext.unobfuscatedMc
                     ? ['../common/src/client-26/java', 'src/client-26/java']
@@ -101,7 +109,6 @@ dependencies {
         if (placeholderApiVer) {
             modCompileOnly "eu.pb4:placeholder-api:${placeholderApiVer}"
         }
-        implementation project(path: ':common', configuration: 'namedElements')
     } else {
         // The non-remapping plugin (26.1+) drops the mod* configurations and
         // 'namedElements'; mods are plain dependencies (see
@@ -115,10 +122,12 @@ dependencies {
         if (placeholderApiVer) {
             compileOnly "eu.pb4:placeholder-api:${placeholderApiVer}"
         }
-        implementation project(':common')
     }
 
-    include project(':common')
+    // The common sources are compiled straight into this jar (see the source
+    // set above), exactly as the NeoForge subproject does. They used to ALSO be
+    // bundled as a nested jar, so every Fabric artifact carried the whole of
+    // common twice — 466 KB against NeoForge's 262 KB for the same code.
 }
 
 // The mixin configs used to be copied per family just to carry a different

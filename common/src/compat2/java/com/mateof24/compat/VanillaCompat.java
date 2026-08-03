@@ -29,7 +29,7 @@ import java.util.concurrent.CompletableFuture;
  * source set ({@code common/src/<compatVer>/java}, selected by the root
  * build.gradle) and every implementation must expose the same signatures.
  *
- * <p>compat2 — MC 1.21.11: {@code PermissionSet}/{@code PermissionCheck}
+ * <p>compat2 — MC 1.21.11 and 26.x: {@code PermissionSet}/{@code PermissionCheck}
  * permissions (the int-level API was removed), {@code ResourceLocation}
  * renamed to {@code Identifier}, {@code ResourceKey#location()} renamed to
  * {@code identifier()}.</p>

@@ -51,60 +51,21 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
 
     @Override
     public boolean checkScoreboardCondition(MinecraftServer server, String objectiveName, int score, String target) {
-        net.minecraft.world.scores.Scoreboard scoreboard = server.getScoreboard();
-        net.minecraft.world.scores.Objective objective = scoreboard.getObjective(objectiveName);
-        if (objective == null) return false;
-
-        if ("*".equals(target)) {
-            for (net.minecraft.server.level.ServerPlayer player : server.getPlayerList().getPlayers()) {
-                net.minecraft.world.scores.ReadOnlyScoreInfo info =
-                        scoreboard.getPlayerScoreInfo(player, objective);
-                if (info != null && info.value() >= score) return true;
-            }
-            return false;
-        }
-
-        net.minecraft.world.scores.ScoreHolder holder =
-                net.minecraft.world.scores.ScoreHolder.forNameOnly(target);
-        net.minecraft.world.scores.ReadOnlyScoreInfo info =
-                scoreboard.getPlayerScoreInfo(holder, objective);
-        return info != null && info.value() >= score;
+        return ScoreboardHelper.checkScoreboardCondition(server, objectiveName, score, target);
     }
-
-    private static final String OBJECTIVE_NAME = "ontime_active";
 
     @Override
     public void updateScoreboardTimer(MinecraftServer server, String timerName, long currentSeconds, long targetSeconds) {
-        net.minecraft.world.scores.Scoreboard sb = server.getScoreboard();
-        net.minecraft.world.scores.Objective obj = sb.getObjective(OBJECTIVE_NAME);
-        if (obj == null) {
-            obj = sb.addObjective(OBJECTIVE_NAME,
-                    net.minecraft.world.scores.criteria.ObjectiveCriteria.DUMMY,
-                    net.minecraft.network.chat.Component.literal("OnTime"),
-                    net.minecraft.world.scores.criteria.ObjectiveCriteria.RenderType.INTEGER,
-                    true, null);
-        }
-        net.minecraft.world.scores.ScoreHolder holder =
-                net.minecraft.world.scores.ScoreHolder.forNameOnly(timerName);
-        sb.getOrCreatePlayerScore(holder, obj).set((int) currentSeconds);
+        ScoreboardHelper.updateScoreboardTimer(server, timerName, currentSeconds, targetSeconds);
     }
 
     @Override
     public void clearScoreboardTimer(MinecraftServer server) {
-        net.minecraft.world.scores.Scoreboard sb = server.getScoreboard();
-        if (sb.getObjective(OBJECTIVE_NAME) != null) {
-            sb.removeObjective(sb.getObjective(OBJECTIVE_NAME));
-        }
+        ScoreboardHelper.clearScoreboardTimer(server);
     }
 
     @Override
     public long getScoreboardValue(MinecraftServer server, String objectiveName, String holderName) {
-        net.minecraft.world.scores.Scoreboard sb = server.getScoreboard();
-        net.minecraft.world.scores.Objective obj = sb.getObjective(objectiveName);
-        if (obj == null) return 0;
-        net.minecraft.world.scores.ScoreHolder holder =
-                net.minecraft.world.scores.ScoreHolder.forNameOnly(holderName);
-        net.minecraft.world.scores.ReadOnlyScoreInfo info = sb.getPlayerScoreInfo(holder, obj);
-        return info != null ? info.value() : 0;
+        return ScoreboardHelper.getScoreboardValue(server, objectiveName, holderName);
     }
 }

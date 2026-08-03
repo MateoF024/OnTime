@@ -47,8 +47,23 @@ ext.helpSystemVer = (vt == "v1.21.1") ? "v1" : "v2"
 //   compat1 = MC 1.21.1-1.21.10 (int permission levels, ResourceLocation)
 //   compat2 = MC 1.21.11 (PermissionSet/PermissionCheck, Identifier)   [Fase 3]
 //   compat3 = MC 26.x                                                  [Fase 4/5]
-ext.compatVer = (vt == "v1.21.1" || vt == "v1.21.5" || vt == "v1.21.6") ? "compat1"
-        : (vt == "v1.21.11") ? "compat2" : "compat3"
+// VanillaCompat variant (common/src/<compatVer>/java): the vanilla API surface
+// used by common code that drifts across MC versions.
+//   compat1 = 1.21.1-1.21.10  int permission levels, ResourceLocation
+//   compat2 = 1.21.11 and 26.x  PermissionSet/PermissionCheck, Identifier
+// 26.x used to have its own compat3; it was byte-identical to compat2 apart
+// from one javadoc line, because the permission and identifier reworks both
+// landed in 1.21.11 and 26.x changed neither.
+ext.compatVer = (vt == "v1.21.1" || vt == "v1.21.5" || vt == "v1.21.6") ? "compat1" : "compat2"
+// Fabric-side platform tier (fabric/src/<fabricVer>/java): NetworkHandler,
+// FabricTriggerHandler and PlaceholderAPIIntegration. This does NOT line up
+// with compatVer — the vanilla API is stable from 1.21.11 onwards, but Fabric
+// API and PlaceholderAPI both broke again at 26.1.
+//   fapi1 = 1.21.1-1.21.10  ResourceLocation, ServerEntityWorldChangeEvents, PAPI 2.x
+//   fapi2 = 1.21.11         Identifier, PAPI 2.8
+//   fapi3 = 26.x            clientboundPlay, ServerEntityLevelChangeEvents, PAPI 3.x
+ext.fabricVer = (vt == "v1.21.1" || vt == "v1.21.5" || vt == "v1.21.6") ? "fapi1"
+        : (vt == "v1.21.11") ? "fapi2" : "fapi3"
 // Client render flavour (common/src/<clientVer>/java): holds TimerRenderer and
 // TitleOverlay, the only client files that differ by Minecraft version. Shared
 // by BOTH loaders — the loader axis is redundant there (measured: TitleOverlay

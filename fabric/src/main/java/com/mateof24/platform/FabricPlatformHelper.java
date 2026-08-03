@@ -50,21 +50,21 @@ public class FabricPlatformHelper implements IPlatformHelper {
 
     @Override
     public boolean checkScoreboardCondition(MinecraftServer server, String objectiveName, int score, String target) {
-        return FabricScoreboardHelper.checkScoreboardCondition(server, objectiveName, score, target);
+        return ScoreboardHelper.checkScoreboardCondition(server, objectiveName, score, target);
     }
 
     @Override
     public void updateScoreboardTimer(MinecraftServer server, String timerName, long currentSeconds, long targetSeconds) {
-        FabricScoreboardHelper.updateScoreboardTimer(server, timerName, currentSeconds, targetSeconds);
+        ScoreboardHelper.updateScoreboardTimer(server, timerName, currentSeconds, targetSeconds);
     }
 
     @Override
     public void clearScoreboardTimer(MinecraftServer server) {
-        FabricScoreboardHelper.clearScoreboardTimer(server);
+        ScoreboardHelper.clearScoreboardTimer(server);
     }
 
     @Override
     public long getScoreboardValue(MinecraftServer server, String objective, String holder) {
-        return FabricScoreboardHelper.getScoreboardValue(server, objective, holder);
+        return ScoreboardHelper.getScoreboardValue(server, objective, holder);
     }
 }
