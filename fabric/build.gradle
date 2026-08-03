@@ -58,19 +58,29 @@ sourceSets {
 
     client {
         java {
-            // client-pre26 holds client code that only compiles against
-            // obfuscated-era MC (GuiGraphics and friends; 26.1 replaced them
-            // with GuiGraphicsExtractor). 26.x families ship their own
-            // variants in their version source set.
+            // Client code shared with NeoForge lives under common/src/: the
+            // loader axis is redundant there (TitleOverlay was byte-identical
+            // between loaders in all six families). It still compiles once per
+            // family and per loader — only the duplicated *sources* are gone.
+            //   common/src/client        shared by every family
+            //   common/src/<clientVer>   TimerRenderer + TitleOverlay flavour
+            //   common/src/client-pre26  GuiGraphics era (ITimerRenderer, boss bar mixin)
+            //   common/src/client-26     GuiGraphicsExtractor era (26.1+)
+            // src/client-pre26 and src/client-26 keep the Fabric-only entrypoint.
             srcDirs = [
                     'src/client/java',
+                    '../common/src/client/java',
+                    "../common/src/${rootProject.ext.clientVer}/java",
                     "src/${versionType}/client/java"
-            ] + (rootProject.ext.unobfuscatedMc ? [] : ['src/client-pre26/java'])
+            ] + (rootProject.ext.unobfuscatedMc
+                    ? ['../common/src/client-26/java', 'src/client-26/java']
+                    : ['../common/src/client-pre26/java', 'src/client-pre26/java'])
         }
         resources {
             srcDirs = [
                     "src/${versionType}/client/resources",
-                    'src/client/resources'
+                    'src/client/resources',
+                    '../common/src/client/resources'
             ]
         }
     }
@@ -111,19 +121,31 @@ dependencies {
     include project(':common')
 }
 
+// The mixin configs used to be copied per family just to carry a different
+// compatibilityLevel; it is expanded from the family's Java release instead.
+def mixinCompatLevel = rootProject.ext.javaRelease.toString()
+
 processResources {
     def javaRequirement = ">=${rootProject.ext.javaRelease}".toString()
     inputs.property "version", mod_version
     inputs.property "minecraft_range", minecraftRange
     inputs.property "java_requirement", javaRequirement
+    inputs.property "mixin_compat_level", mixinCompatLevel
     filesMatching("fabric.mod.json") {
         expand "version": mod_version, "minecraft_range": minecraftRange,
                 "java_requirement": javaRequirement
+    }
+    filesMatching("ontime*.mixins.json") {
+        expand "mixin_compat_level": mixinCompatLevel
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 tasks.named('processClientResources') {
+    inputs.property "mixin_compat_level", mixinCompatLevel
+    filesMatching("ontime*.mixins.json") {
+        expand "mixin_compat_level": mixinCompatLevel
+    }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 tasks.withType(Jar) {

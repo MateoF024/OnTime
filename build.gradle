@@ -49,6 +49,19 @@ ext.helpSystemVer = (vt == "v1.21.1") ? "v1" : "v2"
 //   compat3 = MC 26.x                                                  [Fase 4/5]
 ext.compatVer = (vt == "v1.21.1" || vt == "v1.21.5" || vt == "v1.21.6") ? "compat1"
         : (vt == "v1.21.11") ? "compat2" : "compat3"
+// Client render flavour (common/src/<clientVer>/java): holds TimerRenderer and
+// TitleOverlay, the only client files that differ by Minecraft version. Shared
+// by BOTH loaders — the loader axis is redundant there (measured: TitleOverlay
+// is byte-identical between Fabric and NeoForge in every family).
+//   client1 = 1.21.1-1.21.5  GuiGraphics + PoseStack
+//   client2 = 1.21.6-1.21.11 GuiGraphics + Matrix3x2fStack
+//   client3 = 26.1           GuiGraphicsExtractor + Options.hideGui
+//   client4 = 26.2           GuiGraphicsExtractor + Hud.isHidden()
+// 26.1 and 26.2 really are separate: javap confirms 26.1 has Options.hideGui and
+// no Hud.isHidden, and 26.2 the other way round.
+ext.clientVer = (vt == "v1.21.1" || vt == "v1.21.5") ? "client1"
+        : (vt == "v1.21.6" || vt == "v1.21.11") ? "client2"
+        : (vt == "v26.1") ? "client3" : "client4"
 // 26.x requires Java 25; 1.21.x requires Java 21.
 ext.javaRelease = vt.startsWith("v26") ? 25 : 21
 // 26.1+ ships unobfuscated: Loom's non-remapping plugin must be used.

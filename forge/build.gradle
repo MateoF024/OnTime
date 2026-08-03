@@ -43,17 +43,22 @@ neoForge {
 sourceSets {
     main {
         java {
-            // client-pre26: see fabric/build.gradle — obfuscated-era client
-            // code that 26.x families replace in their version source set.
+            // NeoForge does not split environments, so the client sources land
+            // in 'main'. The common/src/client* dirs are the same ones Fabric
+            // pulls in — see fabric/build.gradle for what each one holds.
             srcDirs = [
                     'src/main/java',
                     '../common/src/main/java',
                     "../common/src/${helpSystemVer}/java",
                     "../common/src/${rootProject.ext.compatVer}/java",
                     'src/client/java',
+                    '../common/src/client/java',
+                    "../common/src/${rootProject.ext.clientVer}/java",
                     "src/${versionType}/main/java",
                     "src/${versionType}/client/java"
-            ] + (rootProject.ext.unobfuscatedMc ? [] : ['src/client-pre26/java'])
+            ] + (rootProject.ext.unobfuscatedMc
+                    ? ['../common/src/client-26/java']
+                    : ['../common/src/client-pre26/java'])
         }
         // Family dirs first: with DuplicatesStrategy.EXCLUDE the first
         // occurrence wins, letting a family override a shared resource
@@ -63,7 +68,8 @@ sourceSets {
                     "src/${versionType}/main/resources",
                     "src/${versionType}/client/resources",
                     'src/main/resources',
-                    'src/client/resources'
+                    'src/client/resources',
+                    '../common/src/client/resources'
             ]
         }
     }
@@ -76,10 +82,17 @@ processResources {
         exclude 'fabric.mod.json'
         exclude 'pack.mcmeta'
     }
+    def mixinCompatLevel = rootProject.ext.javaRelease.toString()
     inputs.property "version", mod_version
     inputs.property "minecraft_range", minecraftRange
+    inputs.property "mixin_compat_level", mixinCompatLevel
     filesMatching("META-INF/neoforge.mods.toml") {
         expand "version": mod_version, "minecraft_range": minecraftRange
+    }
+    // See fabric/build.gradle: one templated mixin config instead of a copy
+    // per family that only differed in compatibilityLevel.
+    filesMatching("ontime*.mixins.json") {
+        expand "mixin_compat_level": mixinCompatLevel
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
