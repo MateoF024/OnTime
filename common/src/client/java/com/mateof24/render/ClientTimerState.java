@@ -69,6 +69,19 @@ public class ClientTimerState {
         return visible && !views.isEmpty();
     }
 
+    /**
+     * Minimum client ticks between two tick sounds.
+     *
+     * <p>A clock ticks every 20, and prediction jitter can make one land a tick
+     * early, so anything comfortably under that is safe. Its only job is to
+     * cover the instant the audible clock changes hands: the outgoing and the
+     * incoming one are not in phase, and without this you could hear both
+     * within the same second exactly once, at the handover.</p>
+     */
+    private static final int MIN_SOUND_GAP_TICKS = 15;
+
+    private static int ticksSinceSound = MIN_SOUND_GAP_TICKS;
+
     public static void tick() {
         Minecraft mc = Minecraft.getInstance();
 
@@ -78,21 +91,68 @@ public class ClientTimerState {
         }
         for (ClientRunView view : views.values()) view.onClientResumed();
 
+        if (ticksSinceSound < MIN_SOUND_GAP_TICKS) ticksSinceSound++;
+
         if (!visible || playerSilent) {
             // Still advance the cursors so resuming does not replay seconds.
             for (ClientRunView view : views.values()) view.advanceSecond();
             return;
         }
 
-        // At most one tick sound per client tick: with several counters running
-        // the second boundaries line up and the overlap would be a rattle.
+        // Exactly one clock is audible at a time. Every cursor still advances —
+        // they must, or a run would replay seconds when it becomes the audible
+        // one — but only the elected run's crossing makes a sound.
+        ClientRunView sounding = electSoundingRun();
         boolean play = false;
         for (ClientRunView view : views.values()) {
-            if (view.advanceSecond()) play = true;
+            boolean crossed = view.advanceSecond();
+            if (crossed && view == sounding) play = true;
         }
-        if (play && mc.player != null && mc.level != null) {
+
+        if (play && ticksSinceSound >= MIN_SOUND_GAP_TICKS
+                && mc.player != null && mc.level != null) {
             VanillaClientCompat.playLocalTimerSound(displaySoundId, displaySoundVolume, displaySoundPitch);
+            ticksSinceSound = 0;
         }
+    }
+
+    /**
+     * The one execution allowed to make a sound: the one closest to ending.
+     *
+     * <p>Two clocks ticking at once are not twice the information, they are a
+     * rattle — a person can follow one cadence, and which counter a given tick
+     * belonged to was never audible anyway. So one is picked, and the rest are
+     * drawn in silence.</p>
+     *
+     * <p>Closest to ending is the useful one: it is the next thing that will
+     * actually happen. A one-hour game and a one-minute turn running together
+     * means you hear the turn, and when the hour drops under a minute left it
+     * takes over on its own — no special case, it simply became the nearer of
+     * the two.</p>
+     *
+     * <p>Re-elected every tick, which is safe precisely because the key only
+     * moves one way: remaining time falls at the same rate for every running
+     * clock, so once one is ahead it stays ahead. It changes hands only on a
+     * real event — a run starts, ends, is paused, is given time, laps — and
+     * never oscillates. Ties break on run id so two identical clocks still
+     * settle on one.</p>
+     *
+     * @return null when nothing may sound, which silences the lot
+     */
+    static ClientRunView electSoundingRun() {
+        ClientRunView best = null;
+        long bestRemaining = Long.MAX_VALUE;
+        for (ClientRunView view : views.values()) {
+            if (!view.isRunning() || view.isSilent()) continue;
+            long remaining = view.remainingTicks();
+            if (best == null || remaining < bestRemaining
+                    || (remaining == bestRemaining
+                        && view.runId().compareTo(best.runId()) < 0)) {
+                best = view;
+                bestRemaining = remaining;
+            }
+        }
+        return best;
     }
 
     public static String formatTicks(long ticks) {
@@ -112,6 +172,7 @@ public class ClientTimerState {
         views.clear();
         visible = true;
         playerSilent = false;
+        ticksSinceSound = MIN_SOUND_GAP_TICKS;
     }
 
     public static void setVisible(boolean vis) { visible = vis; }

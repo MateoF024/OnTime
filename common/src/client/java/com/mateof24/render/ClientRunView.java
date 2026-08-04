@@ -59,6 +59,18 @@ public final class ClientRunView {
     public String timerName() { return timerName; }
     public boolean isRunning() { return running; }
     public boolean isSilent() { return silent; }
+
+    /**
+     * Ticks left before this execution ends, counting either way round.
+     *
+     * <p>It only ever decreases while a run ticks, which is what lets the
+     * audible clock be picked fresh every tick without it flapping between
+     * two of them.</p>
+     */
+    long remainingTicks() {
+        long current = getInterpolatedTicks();
+        return countUp ? Math.max(0L, targetTicks - current) : Math.max(0L, current);
+    }
     public float scale() { return scale; }
     public int displayX() { return x; }
     public int displayY() { return y; }
