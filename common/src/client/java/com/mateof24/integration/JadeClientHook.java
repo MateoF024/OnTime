@@ -1,6 +1,5 @@
 package com.mateof24.integration;
 
-import com.mateof24.config.TimerPositionPreset;
 import com.mateof24.render.ClientTimerState;
 import net.minecraft.client.Minecraft;
 
@@ -26,22 +25,19 @@ public final class JadeClientHook {
         int screenH = mc.getWindow().getGuiScaledHeight();
         if (screenW <= 0 || screenH <= 0) return;
 
-        // Union of every counter sitting at a top preset, titles included:
-        // Jade has to clear the whole composition, not one of the counters.
-        int[] rect = com.mateof24.render.TitleBlock.unionRect(mc.font, screenW, screenH,
-                view -> isTopPreset(view.positionPreset()));
-        if (rect == null) {
+        // Every visible execution, whatever preset it uses. This used to be
+        // filtered to the four presets that sit along the top, which meant a
+        // counter on CUSTOM coordinates was invisible to the displacement no
+        // matter where the player put it — Jade would draw straight through it.
+        // Where a counter is has no bearing on whether Jade overlaps it; that
+        // is what the overlap test is for.
+        java.util.List<int[]> rects = com.mateof24.render.TitleBlock
+                .occupiedRects(mc.font, screenW, screenH);
+        if (rects.isEmpty()) {
             JadeOverlayManager.restore();
             return;
         }
 
-        JadeOverlayManager.updateForTimer(rect[0], rect[1], rect[2], rect[3], screenW, screenH);
-    }
-
-    private static boolean isTopPreset(TimerPositionPreset p) {
-        return p == TimerPositionPreset.BOSSBAR
-                || p == TimerPositionPreset.TOP_CENTER
-                || p == TimerPositionPreset.TOP_LEFT
-                || p == TimerPositionPreset.TOP_RIGHT;
+        JadeOverlayManager.updateForTimers(rects, screenW, screenH);
     }
 }

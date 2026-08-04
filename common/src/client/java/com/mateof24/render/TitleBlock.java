@@ -81,24 +81,20 @@ public final class TitleBlock {
     }
 
     /**
-     * Union of the occupied rects of every execution matching the filter, or
-     * null when none do.
+     * The occupied rect of every visible execution, one entry each.
+     *
+     * <p>Deliberately not a union. A union is the right answer only while every
+     * counter sits in the same corner of the screen: with one counter pinned
+     * bottom-left and another in the boss bar, their bounding box covers most
+     * of the screen, and an overlay that dodges it dodges empty space. Both
+     * consumers — the boss bar and Jade — want "does this actually overlap
+     * something", which only the individual rects can answer.</p>
      */
-    public static int[] unionRect(Font font, int screenWidth, int screenHeight,
-                                  java.util.function.Predicate<ClientRunView> filter) {
-        int[] union = null;
+    public static java.util.List<int[]> occupiedRects(Font font, int screenWidth, int screenHeight) {
+        java.util.List<int[]> rects = new java.util.ArrayList<>();
         for (ClientRunView view : ClientTimerState.visibleViews()) {
-            if (!filter.test(view)) continue;
-            int[] rect = occupiedRect(font, view, screenWidth, screenHeight);
-            if (union == null) {
-                union = rect;
-            } else {
-                union[0] = Math.min(union[0], rect[0]);
-                union[1] = Math.min(union[1], rect[1]);
-                union[2] = Math.max(union[2], rect[2]);
-                union[3] = Math.max(union[3], rect[3]);
-            }
+            rects.add(occupiedRect(font, view, screenWidth, screenHeight));
         }
-        return union;
+        return rects;
     }
 }

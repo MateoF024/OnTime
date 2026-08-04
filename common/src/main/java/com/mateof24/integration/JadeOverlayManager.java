@@ -8,10 +8,27 @@ import java.lang.reflect.Method;
 /**
  * Reflection-based displacement of Jade's overlay (no compileOnly dep needed).
  *
- * Supports Jade across the full version range we ship for:
- *  - Jade 11.x  (1.20.1)            : OverlayRenderer has no rect field
- *  - Jade 15.x  (1.21.1 NeoForge/Fabric): IConfigOverlay + OverlayRenderer.rect (TooltipRect.rect Rect2i)
- *  - Jade 19.x  (1.21.6+/1.21.8)    : Overlay (renamed) + OverlayRenderer.animation (TooltipAnimation.rect Rect2f)
+ * <p>None of this is Jade's plugin API — its wiki documents providers,
+ * datapacks and themes, and says nothing about the overlay's position config or
+ * the renderer. So the surface below was read off the jars themselves, one per
+ * loader and version we ship for, and the placement formula off Jade's source
+ * ({@code BoxElementImpl.updateExpectedRect}).</p>
+ *
+ * <p>What actually drifts, measured across all sixteen jars:</p>
+ * <ul>
+ *   <li>{@code IWailaConfig.getOverlay()} became {@code overlay()} in Jade 18.x
+ *       (MC 1.21.5), and {@code IConfigOverlay} was renamed {@code Overlay} with
+ *       it. The five accessors we use — overlayPosX/Y, setOverlayPosY,
+ *       anchorX/Y — are present and identically named in every one of them.</li>
+ *   <li>The rendered rect moved from {@code OverlayRenderer.rect}
+ *       (TooltipRect, Rect2i, up to 18.x / MC 1.21.5) to
+ *       {@code OverlayRenderer.animation} (TooltipAnimation, Rect2f, from 19.x /
+ *       MC 1.21.8). Both expose {@code expectedRect} and {@code rect}.</li>
+ *   <li>Jade 11.x (MC 1.20.x, the maintenance branch) has no rect field at all,
+ *       so the overlay's size falls back to an estimate there.</li>
+ *   <li>{@code accessibility().tryFlip(float)} exists from 18.x onwards; older
+ *       Jade has no mirroring option, and leaving the value alone is correct.</li>
+ * </ul>
  *
  * Robustness:
  *  - All reflection guarded by Throwable so a missing/incompatible Jade class
@@ -31,6 +48,10 @@ public final class JadeOverlayManager {
 
     private static Object overlayConfigInstance;
     private static Method getPosY, setPosY, getPosX, getAnchorX, getAnchorY;
+
+    // Accessibility mirror, present from Jade 18.x (MC 1.21.5) onwards.
+    private static Object accessibilityConfig;
+    private static Method tryFlipMethod;
 
     // Optional access to Jade's last-rendered rect for precise overlap detection.
     // Two layouts are supported:
@@ -68,7 +89,7 @@ public final class JadeOverlayManager {
             Object cfg = invokeStaticGet(wailaCfgClass);
             if (cfg == null) return false;
 
-            // Jade 1.21.6+ renamed getOverlay() -> overlay(). Try both.
+            // Jade 18.x (MC 1.21.5) renamed getOverlay() -> overlay(). Try both.
             overlayConfigInstance = invokeAccessor(wailaCfgClass, cfg, "getOverlay", "overlay");
             if (overlayConfigInstance == null) return false;
 
@@ -80,6 +101,17 @@ public final class JadeOverlayManager {
             getAnchorY = lookupAny(overlayCfgClass, "getAnchorY", "anchorY");
 
             if (getPosY == null || setPosY == null) return false;
+
+            // Optional: Jade 11.x and 15.x have no accessibility config at all.
+            accessibilityConfig = invokeAccessor(wailaCfgClass, cfg, "getAccessibility", "accessibility");
+            if (accessibilityConfig != null) {
+                try {
+                    tryFlipMethod = accessibilityConfig.getClass().getMethod("tryFlip", float.class);
+                    tryFlipMethod.setAccessible(true);
+                } catch (Throwable ignored) {
+                    tryFlipMethod = null;
+                }
+            }
 
             tryInitOverlayRectAccess();
 
@@ -223,12 +255,19 @@ public final class JadeOverlayManager {
         }
     }
 
+    /** Pixels left between Jade and a counter it had to step around. */
+    private static final int MARGIN = 4;
+
     /**
-     * Called every client tick while the timer is up.
+     * Called every client tick while at least one counter is up.
+     *
+     * @param timerRects one {left, top, right, bottom} per visible execution,
+     *                   never a union of them — see
+     *                   {@code TitleBlock.occupiedRects}
      */
-    public static void updateForTimer(int timerLeft, int timerTop, int timerRight, int timerBottom,
-                                      int screenW, int screenH) {
+    public static void updateForTimers(java.util.List<int[]> timerRects, int screenW, int screenH) {
         if (!isInstalled() || screenH <= 0 || screenW <= 0) return;
+        if (timerRects == null || timerRects.isEmpty()) return;
         if (!initialized && !tryInit()) return;
 
         float realPosY = readPosY();
@@ -243,22 +282,22 @@ public final class JadeOverlayManager {
 
         if (Float.isNaN(userPosY)) userPosY = realPosY;
 
-        if (!wouldOverlapAt(timerLeft, timerTop, timerRight, timerBottom, screenW, screenH, userPosY)) {
+        Box jade = measure(screenW, screenH);
+
+        // Only counters that share Jade's horizontal band can ever be in the
+        // way. Moving Jade vertically never changes its X, so this set is fixed
+        // for the whole search — and a counter that lines up in height but not
+        // in width is not a collision at all.
+        java.util.List<int[]> inColumn = new java.util.ArrayList<>();
+        for (int[] rect : timerRects) {
+            if (rect[2] > jade.left && rect[0] < jade.right) inColumn.add(rect);
+        }
+
+        Float target = solve(inColumn, jade, screenH);
+        if (target == null) {
             if (displacing) restoreInternal();
             return;
         }
-
-        // posY-based displacement target. We deliberately do NOT key off Jade's
-        // currently-rendered rect: that creates a feedback loop where each tick
-        // we re-measure our own displacement and recompute, causing the overlay
-        // to oscillate. Slight over-displacement (when anchorY > 0) is fine.
-        float ratio = (float) (timerBottom + 4) / (float) screenH;
-        float desired = 1f - Math.max(0f, Math.min(1f, ratio));
-
-        // Never push higher than the user's preferred value (smaller posY = lower).
-        float target = Math.min(userPosY, desired);
-        if (target < 0f) target = 0f;
-        if (target > 1f) target = 1f;
 
         if (Math.abs(realPosY - target) <= EPSILON) {
             displacing = true;
@@ -272,6 +311,61 @@ public final class JadeOverlayManager {
         } catch (Throwable t) {
             OnTimeConstants.LOGGER.debug("[OnTime/Jade] setOverlayPosY failed: {}", t.toString());
         }
+    }
+
+    /**
+     * The posY that clears every counter, or null when the user's own value
+     * already does.
+     *
+     * <p>Stepping down past one counter can land on the next, so the search
+     * repeats; each step strictly lowers Jade, so it cannot loop. Down is tried
+     * first — it is what the boss-bar case has always done and what Jade's own
+     * PUSH_DOWN does — and up only when down would push Jade off the bottom of
+     * the screen, which is what a counter pinned near the bottom would do.</p>
+     */
+    static Float solve(java.util.List<int[]> inColumn, Box jade, int screenH) {
+        if (inColumn.isEmpty()) return null;
+        if (collisionAt(inColumn, jade, jade.top) == null) return null;
+
+        float top = jade.top;
+        for (int step = 0; step <= inColumn.size(); step++) {
+            int[] hit = collisionAt(inColumn, jade, top);
+            if (hit == null) return posYForTop(top, jade, screenH);
+            float next = hit[3] + MARGIN;
+            if (next + jade.height > screenH) break;
+            top = next;
+        }
+
+        top = jade.top;
+        for (int step = 0; step <= inColumn.size(); step++) {
+            int[] hit = collisionAt(inColumn, jade, top);
+            if (hit == null) return posYForTop(top, jade, screenH);
+            float next = hit[1] - MARGIN - jade.height;
+            if (next < 0f) return null; // boxed in: leave the player's value alone
+            top = next;
+        }
+        return null;
+    }
+
+    /** First counter Jade's box would overlap with its top edge at {@code top}. */
+    static int[] collisionAt(java.util.List<int[]> inColumn, Box jade, float top) {
+        float bottom = top + jade.height;
+        for (int[] rect : inColumn) {
+            if (rect[3] > top && rect[1] < bottom) return rect;
+        }
+        return null;
+    }
+
+    /**
+     * Inverts Jade's own placement: it renders at
+     * {@code screenH * (1 - posY) - height * anchorY}, so this is that solved
+     * for posY. Deliberately derived from the counter positions and Jade's
+     * dimensions only — never from Jade's current Y, which is our own last
+     * displacement and would make each tick chase the previous one.
+     */
+    private static Float posYForTop(float top, Box jade, int screenH) {
+        float posY = 1f - (top + jade.height * jade.anchorY) / screenH;
+        return Math.max(0f, Math.min(1f, posY));
     }
 
     /** Called when the timer is gone or hidden. Restores the user's preferred posY. */
@@ -303,35 +397,51 @@ public final class JadeOverlayManager {
         lastWrittenY = Float.NaN;
     }
 
+    /** Jade's box as the player configured it, before any displacement of ours. */
+    static final class Box {
+        float left, right, top, height, anchorY;
+    }
+
     /**
-     * Would Jade overlap the timer if it were rendered at the user's preferred posY?
-     * We can't ask Jade directly (its current rect reflects whatever posY we wrote),
-     * so we estimate from posY/posX/anchor + the actual rendered width (when readable).
+     * Where Jade would draw itself at the player's own posY.
+     *
+     * <p>Jade cannot be asked directly — its live rect already reflects
+     * whatever we last wrote — so this reproduces its placement:
+     * {@code x = screenW * flip(posX)}, {@code y = screenH * (1 - posY)}, then
+     * {@code left = x - w * flip(anchorX)} and {@code top = y - h * anchorY}.
+     * Width and height come from the live rect because they do not depend on
+     * the position at all, and they already include Jade's own scale.</p>
      */
-    private static boolean wouldOverlapAt(int tLeft, int tTop, int tRight, int tBottom,
-                                          int screenW, int screenH, float posY) {
-        // Jade's current rect gives us the actual width/height of its overlay,
-        // which doesn't depend on posY/posX. Use those dims to estimate the
-        // bounding box at the user's preferred position.
+    private static Box measure(int screenW, int screenH) {
         float[] live = readActualRect();
-        float jadeW = (live != null && live[2] > 0) ? live[2] : 100f;
-        float jadeH = (live != null && live[3] > 0) ? live[3] : 22f;
+        Box box = new Box();
+        float width = (live != null && live[2] > 0) ? live[2] : 100f;
+        box.height = (live != null && live[3] > 0) ? live[3] : 22f;
 
-        float anchorY = readFloatOrDefault(getAnchorY, 0f);
-        float anchorX = readFloatOrDefault(getAnchorX, 0.5f);
-        float posX    = readFloatOrDefault(getPosX, 0.5f);
-
-        // Estimated top edge at the given posY:
-        //   anchored Y in pixels = screenH * (1 - posY)
-        //   render top = anchoredY - jadeH * anchorY
-        float estTop = screenH * (1f - posY) - jadeH * anchorY;
-        float estBottom = estTop + jadeH;
-        if (estTop > tBottom || estBottom < tTop) return false;
+        box.anchorY = readFloatOrDefault(getAnchorY, 0f);
+        float anchorX = tryFlip(readFloatOrDefault(getAnchorX, 0.5f));
+        float posX = tryFlip(readFloatOrDefault(getPosX, 0.5f));
 
         float anchoredX = screenW * posX;
-        float estLeft = anchoredX - jadeW * anchorX;
-        float estRight = anchoredX + jadeW * (1f - anchorX);
-        return !(tRight < estLeft || tLeft > estRight);
+        box.left = anchoredX - width * anchorX;
+        box.right = box.left + width;
+        box.top = screenH * (1f - userPosY) - box.height * box.anchorY;
+        return box;
+    }
+
+    /**
+     * Jade's accessibility mirror, applied to the X axis when the player has
+     * "flip main hand" on and plays left-handed. Asking Jade to do it rather
+     * than reimplementing it means the two cannot disagree; older Jade has no
+     * such option and leaves the value alone.
+     */
+    private static float tryFlip(float value) {
+        if (accessibilityConfig == null || tryFlipMethod == null) return value;
+        try {
+            return ((Number) tryFlipMethod.invoke(accessibilityConfig, value)).floatValue();
+        } catch (Throwable t) {
+            return value;
+        }
     }
 
     private static float readFloatOrDefault(Method m, float fallback) {

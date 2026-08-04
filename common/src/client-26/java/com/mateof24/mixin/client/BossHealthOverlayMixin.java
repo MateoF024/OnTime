@@ -27,26 +27,28 @@ public class BossHealthOverlayMixin {
         int screenWidth = this.minecraft.getWindow().getGuiScaledWidth();
         int screenHeight = this.minecraft.getWindow().getGuiScaledHeight();
 
-        // Union of every counter that could reach the boss bar, titles
-        // included: the bar has to clear the whole block, not one counter.
-        int[] occupied = com.mateof24.render.TitleBlock.unionRect(
-                this.minecraft.font, screenWidth, screenHeight, view -> true);
-        if (occupied == null) return y;
-
         int bossBarLeft = (screenWidth - BOSSBAR_WIDTH) / 2;
         int bossBarRight = bossBarLeft + BOSSBAR_WIDTH;
+        int bossBarBottom = BOSSBAR_DEFAULT_Y + BOSSBAR_HEIGHT;
 
-        boolean horizontalOverlap = occupied[2] > bossBarLeft && occupied[0] < bossBarRight;
-        boolean verticalOverlap = occupied[3] > BOSSBAR_DEFAULT_Y && occupied[1] < (BOSSBAR_DEFAULT_Y + BOSSBAR_HEIGHT);
-
-        if (horizontalOverlap && verticalOverlap) {
-            int bottomEdge = occupied[3];
-            if (com.mateof24.platform.Services.PLATFORM.isModLoaded("jade")) {
-                bottomEdge = Math.max(bottomEdge, JADE_ESTIMATED_HEIGHT);
+        // Each counter on its own, not their bounding box. A counter pinned to
+        // the bottom of the screen and one in the boss bar have a union that
+        // covers nearly everything, and pushing the bar clear of that would
+        // send it halfway down the screen to avoid empty space.
+        int bottomEdge = Integer.MIN_VALUE;
+        for (int[] occupied : com.mateof24.render.TitleBlock.occupiedRects(
+                this.minecraft.font, screenWidth, screenHeight)) {
+            boolean horizontalOverlap = occupied[2] > bossBarLeft && occupied[0] < bossBarRight;
+            boolean verticalOverlap = occupied[3] > BOSSBAR_DEFAULT_Y && occupied[1] < bossBarBottom;
+            if (horizontalOverlap && verticalOverlap) {
+                bottomEdge = Math.max(bottomEdge, occupied[3]);
             }
-            return y + (bottomEdge - BOSSBAR_DEFAULT_Y) + 10;
         }
+        if (bottomEdge == Integer.MIN_VALUE) return y;
 
-        return y;
+        if (com.mateof24.platform.Services.PLATFORM.isModLoaded("jade")) {
+            bottomEdge = Math.max(bottomEdge, JADE_ESTIMATED_HEIGHT);
+        }
+        return y + (bottomEdge - BOSSBAR_DEFAULT_Y) + 10;
     }
 }
