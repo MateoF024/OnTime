@@ -76,7 +76,10 @@ public class OnTime {
         }
         TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
             if (timer.wasRunningBeforeShutdown()) {
-                timer.setRunning(true);
+                TimerManager.getInstance().getActiveRun().ifPresent(run -> {
+                    run.setRunning(true);
+                    run.mirrorToTimer();
+                });
                 timer.setWasRunningBeforeShutdown(false);
                 TimerManager.getInstance().saveTimers();
                 LOGGER.info("Timer '{}' auto-resumed after server restart at {}",

@@ -545,9 +545,11 @@ public class TimerWebPanel {
                         com.mateof24.network.TimerState.markDirty();
                     }
                 }
-                case "pause" -> TimerManager.getInstance().getActiveTimer().ifPresent(t -> {
-                    boolean nowRunning = !t.isRunning();
-                    t.setRunning(nowRunning);
+                case "pause" -> TimerManager.getInstance().getActiveRun().ifPresent(run -> {
+                    com.mateof24.timer.Timer t = run.timer();
+                    boolean nowRunning = !run.isRunning();
+                    run.setRunning(nowRunning);
+                    run.mirrorToTimer();
                     TimerManager.getInstance().saveTimers();
                     // Pausing from the panel used to be invisible to the API,
                     // the entrypoints and the WebSocket feed, while pausing by
@@ -574,6 +576,11 @@ public class TimerWebPanel {
                     TimerManager.getInstance().getTimer(timerName).ifPresent(t -> {
                         boolean wasActive = TimerManager.getInstance().getActiveTimer()
                                 .map(a -> a.getName().equals(timerName)).orElse(false);
+                        for (com.mateof24.timer.TimerRun r :
+                                TimerManager.getInstance().findRuns(timerName, null)) {
+                            r.reset();
+                            r.mirrorToTimer();
+                        }
                         t.reset();
                         TimerManager.getInstance().saveTimers();
                         if (wasActive) com.mateof24.network.TimerState.markDirty();

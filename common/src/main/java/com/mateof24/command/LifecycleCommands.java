@@ -190,24 +190,27 @@ final class LifecycleCommands {
      *                and reports it as a no-op when it already matches.
      */
     private static int setRunning(CommandContext<CommandSourceStack> ctx, Boolean running) {
-        Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
+        Optional<com.mateof24.timer.TimerRun> activeRun = TimerManager.getInstance().getActiveRun()
+                .filter(r -> !r.isAwaitingSequence());
 
-        if (activeTimer.isEmpty()) {
+        if (activeRun.isEmpty()) {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.pause.none"));
             return 0;
         }
 
-        Timer timer = activeTimer.get();
+        com.mateof24.timer.TimerRun run = activeRun.get();
+        Timer timer = run.timer();
 
-        if (running != null && running == timer.isRunning()) {
+        if (running != null && running == run.isRunning()) {
             ctx.getSource().sendFailure(Component.translatable(
                     running ? "ontime.command.resume.already" : "ontime.command.pause.already",
                     timer.getName()));
             return 0;
         }
 
-        if (timer.isRunning()) {
-            timer.setRunning(false);
+        if (run.isRunning()) {
+            run.setRunning(false);
+            run.mirrorToTimer();
             TimerManager.getInstance().saveTimers();
 
             com.mateof24.event.TimerEventBus.fireOnPause(
@@ -225,7 +228,8 @@ final class LifecycleCommands {
             // command fields were picked up on resume. That is a full directory
             // scan on the server thread every time anyone unpauses, for a case
             // that is better served by an explicit reload.
-            timer.setRunning(true);
+            run.setRunning(true);
+            run.mirrorToTimer();
             TimerManager.getInstance().saveTimers();
 
             com.mateof24.event.TimerEventBus.fireOnResume(
@@ -307,8 +311,11 @@ final class LifecycleCommands {
 
         if (activeTimer.isPresent()) {
             Timer timer = activeTimer.get();
-            timer.resetRepeatsDone();
-            timer.reset();
+            for (com.mateof24.timer.TimerRun r : TimerManager.getInstance().findRuns(timer.getName(), null)) {
+                r.resetRepeatsDone();
+                r.reset();
+                r.mirrorToTimer();
+            }
             TimerManager.getInstance().clearActiveTimer();
             TimerManager.getInstance().saveTimers();
             ctx.getSource().sendSuccess(() ->
@@ -335,6 +342,10 @@ final class LifecycleCommands {
 
         Timer timer = activeTimer.get();
         boolean wasRunning = timer.isRunning();
+        for (com.mateof24.timer.TimerRun r : TimerManager.getInstance().findRuns(timer.getName(), null)) {
+            r.reset();
+            r.mirrorToTimer();
+        }
         timer.reset();
         TimerManager.getInstance().saveTimers();
 
@@ -362,6 +373,10 @@ final class LifecycleCommands {
                 .orElse(false);
         boolean wasRunning = timer.isRunning();
 
+        for (com.mateof24.timer.TimerRun r : TimerManager.getInstance().findRuns(name, null)) {
+            r.reset();
+            r.mirrorToTimer();
+        }
         timer.reset();
         TimerManager.getInstance().saveTimers();
 

@@ -137,6 +137,7 @@ public class TimerTickHandler {
 
         Timer timer = run.timer();
         boolean finished = run.tick();
+        mirror(run);
 
         if (!finished && timer.getTriggerType() != null
                 && "finish".equals(timer.getTriggerAction())) {
@@ -238,6 +239,15 @@ public class TimerTickHandler {
         } else {
             clearDisplay(server);
         }
+    }
+
+    /**
+     * Keeps the definition's stored clock in step with its primary run, so
+     * every existing reader, the timer file and the downgrade hatch stay
+     * correct without knowing runs exist.
+     */
+    private static void mirror(TimerRun run) {
+        if (TimerManager.getInstance().isPrimaryRunOf(run)) run.mirrorToTimer();
     }
 
     private static void clearDisplay(MinecraftServer server) {

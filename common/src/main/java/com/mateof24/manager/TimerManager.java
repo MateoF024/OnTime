@@ -66,34 +66,88 @@ public class TimerManager {
         return true;
     }
 
+    /** Starts a run seen by the whole server. The 4.0.0 shape of a timer. */
     public boolean startTimer(String name) {
-        Timer timer = timers.get(name);
-        if (timer == null) {
-            return false;
-        }
+        return startShared(name, Audience.global()) != null;
+    }
 
-        // One run at a time for now: starting anything stops whatever was
-        // running, which is exactly what the single active timer did.
-        Timer previous = getActiveTimer().orElse(null);
-        if (previous != null) {
-            previous.setRunning(false);
-        }
-        runs.clear();
+    /**
+     * Starts one run shared by an audience.
+     *
+     * @return the new run, or null when the timer is missing or an existing
+     *         run of it already reaches some of the same players
+     */
+    public TimerRun startShared(String name, Audience audience) {
+        Timer timer = timers.get(name);
+        if (timer == null) return null;
+        if (findOverlapping(name, audience) != null) return null;
 
         timer.setRunning(true);
-        newRun(TimerRun.global(timer));
-
-        if (previous != null && previous != timer) {
-            TimerStorage.saveTimer(previous);
-        }
-        // saveRuns() already writes the active pointer, so only the timer file
-        // is left to persist here.
+        TimerRun run = newRun(TimerRun.shared(timer, audience));
         TimerStorage.saveTimer(timer);
         saveRuns();
 
-        getTimer(name).ifPresent(t ->
-                com.mateof24.event.TimerEventBus.fireOnStart(toInfo(t)));
-        return true;
+        com.mateof24.event.TimerEventBus.fireOnStart(toInfo(timer));
+        return run;
+    }
+
+    /**
+     * Starts one run per player, each with a clock of its own.
+     *
+     * <p>Players who already have a run of this timer are skipped rather than
+     * refused: asking for a timer "for everyone" should not fail because one
+     * person already has it.</p>
+     *
+     * @return the runs actually created
+     */
+    public java.util.List<TimerRun> startEach(String name, Collection<UUID> players) {
+        Timer timer = timers.get(name);
+        if (timer == null) return java.util.List.of();
+
+        java.util.List<TimerRun> created = new java.util.ArrayList<>();
+        for (UUID player : players) {
+            if (findOverlapping(name, Audience.ofPlayer(player)) != null) continue;
+            created.add(newRun(TimerRun.forPlayer(timer, player)));
+        }
+        if (created.isEmpty()) return created;
+
+        timer.setRunning(true);
+        TimerStorage.saveTimer(timer);
+        saveRuns();
+        com.mateof24.event.TimerEventBus.fireOnStart(toInfo(timer));
+        return created;
+    }
+
+    /**
+     * The run whose clock is mirrored onto the definition: the first one
+     * registered for that timer. With one run — the overwhelmingly common case
+     * — it is simply that run.
+     */
+    public boolean isPrimaryRunOf(TimerRun run) {
+        for (TimerRun other : runs.values()) {
+            if (other.timerName().equals(run.timerName())) return other == run;
+        }
+        return false;
+    }
+
+    /** An existing run of this timer that would reach some of the same players. */
+    public TimerRun findOverlapping(String timerName, Audience audience) {
+        for (TimerRun run : runs.values()) {
+            if (!run.timerName().equals(timerName)) continue;
+            if (run.audience().overlaps(audience)) return run;
+        }
+        return null;
+    }
+
+    /** Runs matching a timer name (null for any) and reaching any of the given players (null for any). */
+    public java.util.List<TimerRun> findRuns(String timerName, Collection<UUID> players) {
+        java.util.List<TimerRun> found = new java.util.ArrayList<>();
+        for (TimerRun run : runs.values()) {
+            if (timerName != null && !run.timerName().equals(timerName)) continue;
+            if (players != null && players.stream().noneMatch(run::isVisibleTo)) continue;
+            found.add(run);
+        }
+        return found;
     }
 
     /** Registers the run and returns it. Split out so the put stays readable. */
@@ -103,12 +157,13 @@ public class TimerManager {
     }
 
     public boolean pauseTimer() {
-        Optional<Timer> active = getActiveTimer();
+        Optional<TimerRun> active = getActiveRun().filter(run -> !run.isAwaitingSequence());
         if (active.isEmpty()) {
             return false;
         }
 
         active.get().setRunning(false);
+        active.get().mirrorToTimer();
         saveActiveTimer();
         return true;
     }
@@ -120,6 +175,10 @@ public class TimerManager {
         }
 
         timer.setTime(hours, minutes, seconds);
+        // The runs carry the live clock, so a manual jump has to reach them.
+        for (TimerRun run : runs.values()) {
+            if (run.timerName().equals(name)) run.setTime(hours, minutes, seconds);
+        }
         // Manual jump: re-baseline scheduled commands so skipped-over
         // thresholds don't fire (only natural ticking fires them).
         resetCommandProgress(name);
@@ -134,6 +193,9 @@ public class TimerManager {
         }
 
         timer.addTime(hours, minutes, seconds);
+        for (TimerRun run : runs.values()) {
+            if (run.timerName().equals(name)) run.addTime(hours, minutes, seconds);
+        }
         resetCommandProgress(name);
         saveTimer(timer);
         return true;

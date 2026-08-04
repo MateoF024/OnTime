@@ -50,6 +50,16 @@ public final class TimerRun {
     // second execution was impossible: two runs would have shared one cooldown,
     // one scheduled-command cursor and one command queue.
 
+    /**
+     * The run's own clock. Seeded from the timer when the run starts, and from
+     * then on the authority: two {@code each} runs of the same timer must be
+     * able to sit at different times, which is impossible while they share the
+     * definition's fields.
+     */
+    private long currentTicks;
+    private boolean running;
+    private int repeatsDone;
+
     private Phase phase = Phase.ACTIVE;
     private long cooldownRemaining = 0L;
     /** Timer to start once a sequence cooldown elapses; null when not sequencing. */
@@ -80,6 +90,9 @@ public final class TimerRun {
         this.audience = audience;
         this.mode = mode;
         this.owner = owner;
+        this.currentTicks = timer.getCurrentTicks();
+        this.running = timer.isRunning();
+        this.repeatsDone = timer.getRepeatsDone();
     }
 
     /** A run shared by everyone on the server, the shape every 4.0.0 timer had. */
@@ -117,35 +130,85 @@ public final class TimerRun {
 
     public boolean isVisibleTo(UUID player) { return audience.includes(player); }
 
-    // ---- clock state (delegated for now, see the staging note above) ----
+    // ---- clock ----
 
-    public long getCurrentTicks() { return timer.getCurrentTicks(); }
+    public long getCurrentTicks() { return currentTicks; }
 
-    public void setCurrentTicks(long ticks) { timer.setCurrentTicks(ticks); }
+    public void setCurrentTicks(long ticks) { this.currentTicks = ticks; }
 
     public long getTargetTicks() { return timer.getTargetTicks(); }
 
     public boolean isCountUp() { return timer.isCountUp(); }
 
-    public boolean isRunning() { return timer.isRunning(); }
+    public boolean isRunning() { return running; }
 
-    public void setRunning(boolean running) { timer.setRunning(running); }
+    public void setRunning(boolean running) { this.running = running; }
 
     public boolean isSilent() { return timer.isSilent(); }
 
-    public int getRepeatsDone() { return timer.getRepeatsDone(); }
+    public int getRepeatsDone() { return repeatsDone; }
 
-    public void incrementRepeatsDone() { timer.incrementRepeatsDone(); }
+    public void incrementRepeatsDone() { repeatsDone++; }
 
-    public void resetRepeatsDone() { timer.resetRepeatsDone(); }
+    public void resetRepeatsDone() { repeatsDone = 0; }
 
-    public boolean shouldRepeatAgain() { return timer.shouldRepeatAgain(); }
+    public boolean shouldRepeatAgain() {
+        if (!timer.isRepeat()) return false;
+        if (timer.getRepeatCount() == -1) return true;
+        return repeatsDone < timer.getRepeatCount();
+    }
 
-    public boolean tick() { return timer.tick(); }
+    /** Advances one tick. @return true when the run just reached its end */
+    public boolean tick() {
+        if (!running) return false;
+        if (timer.isCountUp()) {
+            currentTicks++;
+            if (currentTicks >= timer.getTargetTicks()) { reset(); return true; }
+        } else {
+            currentTicks--;
+            if (currentTicks <= 0) { reset(); return true; }
+        }
+        return false;
+    }
 
-    public void reset() { timer.reset(); }
+    public void reset() {
+        currentTicks = timer.isCountUp() ? 0 : timer.getTargetTicks();
+        running = false;
+    }
 
-    public String getFormattedTime() { return timer.getFormattedTime(); }
+    public void setTime(int hours, int minutes, int seconds) {
+        currentTicks = (hours * 3600L + minutes * 60L + seconds) * 20L;
+    }
+
+    public void addTime(int hours, int minutes, int seconds) {
+        currentTicks += (hours * 3600L + minutes * 60L + seconds) * 20L;
+        if (timer.isCountUp() && currentTicks > timer.getTargetTicks()) {
+            currentTicks = timer.getTargetTicks();
+        } else if (!timer.isCountUp() && currentTicks < 0) {
+            currentTicks = 0;
+        }
+    }
+
+    public String getFormattedTime() {
+        long totalSeconds = currentTicks / 20L;
+        long hours = totalSeconds / 3600, minutes = (totalSeconds % 3600) / 60, seconds = totalSeconds % 60;
+        return hours > 0 ? String.format("%02d:%02d:%02d", hours, minutes, seconds)
+                : String.format("%02d:%02d", minutes, seconds);
+    }
+
+    /**
+     * Copies the clock back onto the definition.
+     *
+     * <p>The timer's own fields become a derived mirror of the primary run —
+     * a cache with exactly one writer, not a second source of truth. It is what
+     * keeps the ninety-odd existing readers, the timer file and the 4.0.0
+     * downgrade hatch all correct without touching any of them.</p>
+     */
+    public void mirrorToTimer() {
+        timer.setCurrentTicks(currentTicks);
+        timer.setRunning(running);
+        timer.setRepeatsDone(repeatsDone);
+    }
 
     // ---- phase and cooldowns ----
 

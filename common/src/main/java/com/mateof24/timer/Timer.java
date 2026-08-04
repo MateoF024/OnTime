@@ -307,6 +307,8 @@ public class Timer {
     public int getRepeatsDone() { return repeatsDone; }
     public void incrementRepeatsDone() { repeatsDone++; }
     public void resetRepeatsDone() { repeatsDone = 0; }
+    /** Used by {@link TimerRun#mirrorToTimer()} to keep the stored value current. */
+    public void setRepeatsDone(int done) { this.repeatsDone = done; }
     public boolean shouldRepeatAgain() {
         if (!repeat) return false;
         if (repeatCount == -1) return true;

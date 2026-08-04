@@ -57,6 +57,21 @@ public final class Audience {
     /** Number of players explicitly listed; 0 for a global audience. */
     public int size() { return players.size(); }
 
+    /**
+     * Whether both audiences would reach at least one player in common.
+     *
+     * <p>A global audience overlaps everything, since it covers the whole
+     * server including anyone the other one lists. This is what decides
+     * whether two runs of the same timer can coexist.</p>
+     */
+    public boolean overlaps(Audience other) {
+        if (scope == Scope.GLOBAL || other.scope == Scope.GLOBAL) return true;
+        for (UUID player : players) {
+            if (other.players.contains(player)) return true;
+        }
+        return false;
+    }
+
     public Audience withAdded(Collection<UUID> extra) {
         if (scope == Scope.GLOBAL) return this;
         Set<UUID> merged = new LinkedHashSet<>(players);
