@@ -24,11 +24,11 @@ public final class TitleOverlay {
      * the titles around the shifted rect and returns {adjustedX, adjustedY}
      * for the counter itself.
      */
-    public static int[] renderAndShift(GuiGraphics graphics, int timerX, int timerY,
+    public static int[] renderAndShift(ClientRunView view, GuiGraphics graphics, int timerX, int timerY,
                                        int timerWidth, int timerHeight, float scale,
                                        int screenWidth, int screenHeight) {
         Font font = Minecraft.getInstance().font;
-        TitleBlock block = TitleBlock.of(font, timerX, timerY, timerWidth, timerHeight,
+        TitleBlock block = TitleBlock.of(font, view, timerX, timerY, timerWidth, timerHeight,
                 scale, screenWidth, screenHeight);
         if (block == null) return new int[]{timerX, timerY};
         TitleLayout.Placement layout = block.layout;

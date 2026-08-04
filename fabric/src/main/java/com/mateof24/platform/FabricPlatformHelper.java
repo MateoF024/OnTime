@@ -20,9 +20,13 @@ public class FabricPlatformHelper implements IPlatformHelper {
     public Path getConfigDir() { return FabricLoader.getInstance().getConfigDir(); }
 
     @Override
-    public void sendTimerSyncPacket(MinecraftServer server, String name, long currentTicks,
-                                    long targetTicks, boolean countUp, boolean running, boolean silent) {
-        NetworkHandler.syncTimerToClients(server, name, currentTicks, targetTicks, countUp, running, silent);
+    public void sendTimerState(MinecraftServer server) {
+        NetworkHandler.sendTimerState(server);
+    }
+
+    @Override
+    public void sendTimerState(ServerPlayer player) {
+        NetworkHandler.sendTimerState(player);
     }
 
     @Override

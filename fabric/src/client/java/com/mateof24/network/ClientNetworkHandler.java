@@ -6,16 +6,8 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 public class ClientNetworkHandler {
 
     public static void registerClientPackets() {
-        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerSyncPayload.TYPE, (payload, context) ->
-                context.client().execute(() -> {
-                    if (payload.name().isEmpty()) ClientTimerState.clear();
-                    else {
-                        ClientTimerState.updateTimer(payload.name(), payload.currentTicks(), payload.targetTicks(),
-                                payload.countUp(), payload.running(), payload.silent());
-                        ClientTimerState.updateTitles(payload.titleAbove(), payload.titleBelow(),
-                                payload.titleLeft(), payload.titleRight());
-                    }
-                })
+        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerStatePayload.TYPE, (payload, context) ->
+                context.client().execute(() -> ClientTimerState.applyState(payload.runs()))
         );
 
         ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerVisibilityPayload.TYPE, (payload, context) ->

@@ -22,30 +22,18 @@ public final class JadeClientHook {
             return;
         }
 
-        TimerPositionPreset preset = ClientTimerState.getPositionPreset();
-        if (!isTopPreset(preset)) {
-            JadeOverlayManager.restore();
-            return;
-        }
-
         int screenW = mc.getWindow().getGuiScaledWidth();
         int screenH = mc.getWindow().getGuiScaledHeight();
         if (screenW <= 0 || screenH <= 0) return;
 
-        String text = ClientTimerState.getFormattedTime();
-        float scale = ClientTimerState.getDisplayScale();
-        int textW = (int) (mc.font.width(text) * scale);
-        int textH = (int) (mc.font.lineHeight * scale);
-
-        int x = preset.calculateX(screenW, textW, ClientTimerState.getDisplayX());
-        int y = preset.calculateY(screenH, textH, ClientTimerState.getDisplayY());
-        if (x == -1) x = (screenW - textW) / 2;
-
-        // The decorative titles (4.0.0) are part of the occupied rect and
-        // shift the counter exactly like TitleOverlay does, so Jade is
-        // pushed clear of the same final layout.
-        int[] rect = ClientTimerState.occupiedRectWithTitles(x, y, textW, textH,
-                scale, screenW, screenH, mc.font);
+        // Union of every counter sitting at a top preset, titles included:
+        // Jade has to clear the whole composition, not one of the counters.
+        int[] rect = com.mateof24.render.TitleBlock.unionRect(mc.font, screenW, screenH,
+                view -> isTopPreset(view.positionPreset()));
+        if (rect == null) {
+            JadeOverlayManager.restore();
+            return;
+        }
 
         JadeOverlayManager.updateForTimer(rect[0], rect[1], rect[2], rect[3], screenW, screenH);
     }

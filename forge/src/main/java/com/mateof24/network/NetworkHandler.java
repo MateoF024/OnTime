@@ -14,22 +14,14 @@ public class NetworkHandler {
     public static void registerPayloads(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
 
-        registrar.playToClient(TimerSyncPayload.TYPE, TimerSyncPayload.STREAM_CODEC, NetworkHandler::handleTimerSync);
+        registrar.playToClient(TimerStatePayload.TYPE, TimerStatePayload.STREAM_CODEC, NetworkHandler::handleTimerState);
         registrar.playToClient(TimerVisibilityPayload.TYPE, TimerVisibilityPayload.STREAM_CODEC, NetworkHandler::handleVisibility);
         registrar.playToClient(TimerSilentPayload.TYPE, TimerSilentPayload.STREAM_CODEC, NetworkHandler::handleSilent);
         registrar.playToClient(TimerDisplayConfigPayload.TYPE, TimerDisplayConfigPayload.STREAM_CODEC, NetworkHandler::handleDisplayConfig);
     }
 
-    private static void handleTimerSync(TimerSyncPayload payload, IPayloadContext context) {
-        context.enqueueWork(() -> {
-            if (payload.name().isEmpty()) ClientTimerState.clear();
-            else {
-                ClientTimerState.updateTimer(payload.name(), payload.currentTicks(), payload.targetTicks(),
-                        payload.countUp(), payload.running(), payload.silent());
-                ClientTimerState.updateTitles(payload.titleAbove(), payload.titleBelow(),
-                        payload.titleLeft(), payload.titleRight());
-            }
-        });
+    private static void handleTimerState(TimerStatePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> ClientTimerState.applyState(payload.runs()));
     }
 
     private static void handleVisibility(TimerVisibilityPayload payload, IPayloadContext context) {
@@ -49,32 +41,26 @@ public class NetworkHandler {
         ));
     }
 
-    public static void syncTimerToClients(MinecraftServer server, String name,
-                                          long currentTicks, long targetTicks,
-                                          boolean countUp, boolean running, boolean silent) {
-        PacketDistributor.sendToAllPlayers(buildSyncPayload(
-                name, currentTicks, targetTicks, countUp, running, silent));
-    }
-
-    public static void syncTimerToClient(ServerPlayer player, String name,
-                                         long currentTicks, long targetTicks,
-                                         boolean countUp, boolean running, boolean silent) {
-        PacketDistributor.sendToPlayer(player, buildSyncPayload(
-                name, currentTicks, targetTicks, countUp, running, silent));
-    }
-
     /**
-     * The counter titles (4.0.0) ride the sync packet and are resolved HERE
-     * by timer name, so every existing send site stays title-correct without
-     * plumbing a new parameter through IPlatformHelper.
+     * One payload per distinct view: with a single global run that is one
+     * payload for the whole server, exactly as cheap as the old broadcast.
      */
-    private static TimerSyncPayload buildSyncPayload(String name, long currentTicks, long targetTicks,
-                                                     boolean countUp, boolean running, boolean silent) {
-        com.mateof24.timer.TimerTitles titles = com.mateof24.manager.TimerManager.getInstance()
-                .getTimer(name).map(com.mateof24.timer.TimerTitles::of)
-                .orElse(com.mateof24.timer.TimerTitles.EMPTY);
-        return new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent,
-                titles.above(), titles.below(), titles.left(), titles.right());
+    public static void sendTimerState(MinecraftServer server) {
+        java.util.List<java.util.UUID> online = new java.util.ArrayList<>();
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) online.add(player.getUUID());
+
+        for (var entry : com.mateof24.network.TimerState.groupByView(online).entrySet()) {
+            TimerStatePayload payload = TimerStatePayload.of(entry.getKey());
+            for (java.util.UUID id : entry.getValue()) {
+                ServerPlayer player = server.getPlayerList().getPlayer(id);
+                if (player != null) PacketDistributor.sendToPlayer(player, payload);
+            }
+        }
+    }
+
+    public static void sendTimerState(ServerPlayer player) {
+        PacketDistributor.sendToPlayer(player,
+                TimerStatePayload.of(com.mateof24.network.TimerState.viewFor(player.getUUID())));
     }
 
     public static void syncVisibilityToClient(ServerPlayer player, boolean visible) {

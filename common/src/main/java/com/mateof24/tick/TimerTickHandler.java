@@ -68,7 +68,10 @@ public class TimerTickHandler {
         }
 
         TimerManager manager = TimerManager.getInstance();
-        if (manager.runCount() == 0) return;
+        if (manager.runCount() == 0) {
+            com.mateof24.network.TimerState.flush(server);
+            return;
+        }
 
         // The cadences only advance while something is actually ticking, so a
         // paused timer does not drift the next broadcast, exactly as before.
@@ -95,6 +98,10 @@ public class TimerTickHandler {
         for (TimerRun run : List.copyOf(manager.runsView())) {
             tickRun(server, run, syncNow, webPanelNow);
         }
+
+        // One send per tick at most, covering every change made above plus the
+        // 1 Hz heartbeat. Redundant sends within a tick collapse into this.
+        com.mateof24.network.TimerState.flush(server);
     }
 
     private static void tickRun(MinecraftServer server, TimerRun run,
@@ -107,7 +114,7 @@ public class TimerTickHandler {
                 run.endCooldown();
                 run.setRunning(true);
                 TimerManager.getInstance().saveActiveTimer();
-                syncTimerToClients(server, run.timer());
+                com.mateof24.network.TimerState.markDirty();
                 return;
             }
             case SEQUENCE_COOLDOWN -> {
@@ -117,8 +124,7 @@ public class TimerTickHandler {
                 TimerManager.getInstance().endRun(run);
                 if (TimerManager.getInstance().hasTimer(next)) {
                     TimerManager.getInstance().startTimer(next);
-                    TimerManager.getInstance().getTimer(next)
-                            .ifPresent(t -> syncTimerToClients(server, t));
+                    com.mateof24.network.TimerState.markDirty();
                 } else {
                     clearDisplay(server);
                 }
@@ -167,7 +173,7 @@ public class TimerTickHandler {
         }
 
         if (syncNow) {
-            syncTimerToClients(server, timer);
+            com.mateof24.network.TimerState.markDirty();
             com.mateof24.event.TimerEventBus.fireOnTick(toInfo(timer));
         }
 
@@ -203,7 +209,7 @@ public class TimerTickHandler {
                 run.setRunning(true);
             }
             TimerManager.getInstance().saveActiveTimer();
-            syncTimerToClients(server, timer);
+            com.mateof24.network.TimerState.markDirty();
             return;
         }
 
@@ -219,7 +225,7 @@ public class TimerTickHandler {
             // as awaiting a sequence, so nothing treats it as the active timer.
             run.beginSequenceCooldown(nextTimerName, seqCd);
             TimerManager.getInstance().saveTimer(timer);
-            Services.PLATFORM.sendTimerSyncPacket(server, "", 0, 0, false, false, false);
+            com.mateof24.network.TimerState.markDirty();
             return;
         }
 
@@ -228,8 +234,7 @@ public class TimerTickHandler {
 
         if (hasNext) {
             TimerManager.getInstance().startTimer(nextTimerName);
-            TimerManager.getInstance().getTimer(nextTimerName).ifPresent(next ->
-                    syncTimerToClients(server, next));
+            com.mateof24.network.TimerState.markDirty();
         } else {
             clearDisplay(server);
         }
@@ -237,7 +242,7 @@ public class TimerTickHandler {
 
     private static void clearDisplay(MinecraftServer server) {
         Services.PLATFORM.clearScoreboardTimer(server);
-        Services.PLATFORM.sendTimerSyncPacket(server, "", 0, 0, false, false, false);
+        com.mateof24.network.TimerState.markDirty();
     }
 
     /**
@@ -273,18 +278,12 @@ public class TimerTickHandler {
             }
             if (shouldStart) {
                 manager.startTimer(t.getName());
-                manager.getTimer(t.getName()).ifPresent(started ->
-                        syncTimerToClients(server, started));
+                com.mateof24.network.TimerState.markDirty();
                 return;
             }
         }
     }
 
-    private static void syncTimerToClients(MinecraftServer server, Timer timer) {
-        Services.PLATFORM.sendTimerSyncPacket(server,
-                timer.getName(), timer.getCurrentTicks(), timer.getTargetTicks(),
-                timer.isCountUp(), timer.isRunning(), timer.isSilent());
-    }
 
     private static void executeTimerCommand(MinecraftServer server, TimerRun run) {
         java.util.List<String> toRun = new java.util.ArrayList<>();

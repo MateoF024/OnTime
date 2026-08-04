@@ -65,17 +65,9 @@ public class OnTime implements ModInitializer {
             Services.PLATFORM.sendSilentPacket(handler.getPlayer(), PlayerPreferences.getTimerSilent(playerUUID));
             Services.PLATFORM.sendDisplayConfigPacket(handler.getPlayer());
 
-            TimerManager.getInstance().getActiveTimer().ifPresent(timer ->
-                    Services.PLATFORM.sendTimerSyncPacket(
-                            server,
-                            timer.getName(),
-                            timer.getCurrentTicks(),
-                            timer.getTargetTicks(),
-                            timer.isCountUp(),
-                            timer.isRunning(),
-                            timer.isSilent()
-                    )
-            );
+            // The joiner gets their own view: global runs plus any fixed
+            // audience they belong to.
+            Services.PLATFORM.sendTimerState(handler.getPlayer());
         });
 
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {

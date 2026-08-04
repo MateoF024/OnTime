@@ -13,38 +13,39 @@ public class TimerRenderer {
         Minecraft mc = Minecraft.getInstance();
         if (mc.options.hideGui || mc.getDebugOverlay().showDebugScreen()) return;
 
-        long ticks = ClientTimerState.getInterpolatedTicks();
+        for (ClientRunView view : ClientTimerState.visibleViews()) {
+        long ticks = view.getInterpolatedTicks();
         String timeText = ClientTimerState.formatTicks(ticks);
-        float percentage = ClientTimerState.percentageOf(ticks);
+        float percentage = view.getPercentage();
         int textColor = ClientTimerState.getColorForPercentage(percentage);
 
         int screenWidth = graphics.guiWidth();
         int screenHeight = graphics.guiHeight();
 
-        TimerPositionPreset preset = ClientTimerState.getPositionPreset();
-        float scale = ClientTimerState.getDisplayScale();
+        TimerPositionPreset preset = view.positionPreset();
+        float scale = view.scale();
         int textWidth = (int) (mc.font.width(timeText) * scale);
         int textHeight = (int) (mc.font.lineHeight * scale);
 
         int x, y;
         if (preset == TimerPositionPreset.CUSTOM) {
-            int cfgX = ClientTimerState.getDisplayX();
+            int cfgX = view.displayX();
             x = cfgX == -1 ? (screenWidth - textWidth) / 2 : cfgX;
-            y = ClientTimerState.getDisplayY();
+            y = view.displayY();
         } else {
-            x = preset.calculateX(screenWidth, textWidth, ClientTimerState.getDisplayX());
-            y = preset.calculateY(screenHeight, textHeight, ClientTimerState.getDisplayY());
+            x = preset.calculateX(screenWidth, textWidth, view.displayX());
+            y = preset.calculateY(screenHeight, textHeight, view.displayY());
             if (x == -1) x = (screenWidth - textWidth) / 2;
         }
 
-        int[] titleAdjusted = TitleOverlay.renderAndShift(graphics, x, y, textWidth, textHeight, scale, screenWidth, screenHeight);
+        int[] titleAdjusted = TitleOverlay.renderAndShift(view, graphics, x, y, textWidth, textHeight, scale, screenWidth, screenHeight);
         x = titleAdjusted[0];
         y = titleAdjusted[1];
 
         if (com.mateof24.render.TimerRendererRegistry.hasCustomRenderer()) {
             com.mateof24.render.TimerRendererRegistry.getCustomRenderer()
                     .render(graphics, 0f, timeText, percentage, x, y, scale);
-            return;
+            continue;
         }
 
         int shadowColor = 0xFF000000;
@@ -61,6 +62,7 @@ public class TimerRenderer {
         } else {
             graphics.text(mc.font, timeText, x + 1, y + 1, shadowColor, false);
             graphics.text(mc.font, timeText, x, y, mainColor, false);
+        }
         }
     }
 }

@@ -60,13 +60,11 @@ final class BehaviorCommands {
 
     private static final String[] TITLE_POSITIONS = {"above", "below", "left", "right"};
 
-    /** Pushes the current sync packet immediately when the edited timer is on screen. */
+    /** Requests a push when the edited timer is one somebody is looking at. */
     private static void resyncIfActive(CommandContext<CommandSourceStack> ctx, String name) {
-        TimerManager.getInstance().getActiveTimer()
-                .filter(t -> t.getName().equals(name))
-                .ifPresent(t -> com.mateof24.platform.Services.PLATFORM.sendTimerSyncPacket(
-                        ctx.getSource().getServer(), t.getName(), t.getCurrentTicks(),
-                        t.getTargetTicks(), t.isCountUp(), t.isRunning(), t.isSilent()));
+        if (TimerManager.getInstance().hasRunOf(name)) {
+            com.mateof24.network.TimerState.markDirty();
+        }
     }
 
     static int setTitle(CommandContext<CommandSourceStack> ctx, String position, String text) {

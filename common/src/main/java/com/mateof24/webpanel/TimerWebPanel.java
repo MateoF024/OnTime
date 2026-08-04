@@ -472,7 +472,7 @@ public class TimerWebPanel {
                 );
                 case "delete" -> mcServer.execute(() -> {
                     if (TimerManager.getInstance().removeTimer(name)) {
-                        Services.PLATFORM.sendTimerSyncPacket(mcServer, "", 0, 0, false, false, false);
+                        com.mateof24.network.TimerState.markDirty();
                         broadcastState();
                     }
                 });
@@ -542,10 +542,7 @@ public class TimerWebPanel {
                     if (timerName == null || !TimerManager.getInstance().hasTimer(timerName)) return;
                     if (TimerManager.getInstance().getActiveTimer().isPresent()) return;
                     if (TimerManager.getInstance().startTimer(timerName)) {
-                        TimerManager.getInstance().getTimer(timerName).ifPresent(t ->
-                                Services.PLATFORM.sendTimerSyncPacket(mcServer,
-                                        t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
-                                        t.isCountUp(), t.isRunning(), t.isSilent()));
+                        com.mateof24.network.TimerState.markDirty();
                     }
                 }
                 case "pause" -> TimerManager.getInstance().getActiveTimer().ifPresent(t -> {
@@ -558,9 +555,7 @@ public class TimerWebPanel {
                     TimerInfo info = toInfo(t);
                     if (nowRunning) TimerEventBus.fireOnResume(info);
                     else TimerEventBus.fireOnPause(info);
-                    Services.PLATFORM.sendTimerSyncPacket(mcServer,
-                            t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
-                            t.isCountUp(), t.isRunning(), t.isSilent());
+                    com.mateof24.network.TimerState.markDirty();
                     broadcastState();
                 });
                 case "stop" -> {
@@ -571,7 +566,7 @@ public class TimerWebPanel {
                         TimerManager.getInstance().clearActiveTimer();
                     });
                     TimerManager.getInstance().saveTimers();
-                    Services.PLATFORM.sendTimerSyncPacket(mcServer, "", 0, 0, false, false, false);
+                    com.mateof24.network.TimerState.markDirty();
                     broadcastState();
                 }
                 case "reset" -> {
@@ -581,9 +576,7 @@ public class TimerWebPanel {
                                 .map(a -> a.getName().equals(timerName)).orElse(false);
                         t.reset();
                         TimerManager.getInstance().saveTimers();
-                        if (wasActive) Services.PLATFORM.sendTimerSyncPacket(mcServer,
-                                t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
-                                t.isCountUp(), false, t.isSilent());
+                        if (wasActive) com.mateof24.network.TimerState.markDirty();
                         broadcastState();
                     });
                 }

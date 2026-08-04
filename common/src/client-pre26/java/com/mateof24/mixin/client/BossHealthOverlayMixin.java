@@ -22,23 +22,14 @@ public class BossHealthOverlayMixin {
     private int adjustBossBarY(int y) {
         if (!ClientTimerState.shouldDisplay()) return y;
 
-        float scale = ClientTimerState.getDisplayScale();
-        int timerX = ClientTimerState.getDisplayX();
-        int timerY = ClientTimerState.getDisplayY();
-
         int screenWidth = this.minecraft.getWindow().getGuiScaledWidth();
-        String timeText = ClientTimerState.getFormattedTime();
-        int timerWidth = (int) (this.minecraft.font.width(timeText) * scale);
-        int timerHeight = (int) (this.minecraft.font.lineHeight * scale);
-
-        if (timerX == -1) timerX = (screenWidth - timerWidth) / 2;
-
-        // Expand to the full occupied rect: the decorative titles (4.0.0)
-        // shift the counter and extend the block, and the boss bar must
-        // clear ALL of it, not just the counter.
         int screenHeight = this.minecraft.getWindow().getGuiScaledHeight();
-        int[] occupied = ClientTimerState.occupiedRectWithTitles(timerX, timerY, timerWidth, timerHeight,
-                scale, screenWidth, screenHeight, this.minecraft.font);
+
+        // Union of every counter that could reach the boss bar, titles
+        // included: the bar has to clear the whole block, not one counter.
+        int[] occupied = com.mateof24.render.TitleBlock.unionRect(
+                this.minecraft.font, screenWidth, screenHeight, view -> true);
+        if (occupied == null) return y;
 
         int bossBarLeft = (screenWidth - BOSSBAR_WIDTH) / 2;
         int bossBarRight = bossBarLeft + BOSSBAR_WIDTH;

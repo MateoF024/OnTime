@@ -12,38 +12,41 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 public class NetworkHandler {
-    public static final ResourceLocation TIMER_SYNC_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_sync");
+    public static final ResourceLocation TIMER_STATE_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_state");
     public static final ResourceLocation TIMER_VISIBILITY_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_visibility");
     public static final ResourceLocation TIMER_SILENT_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_silent");
     public static final ResourceLocation TIMER_DISPLAY_CONFIG_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "timer_display_config");
 
     public static void registerPackets() {
-        PayloadTypeRegistry.playS2C().register(TimerSyncPayload.TYPE, TimerSyncPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TimerStatePayload.TYPE, TimerStatePayload.CODEC);
         PayloadTypeRegistry.playS2C().register(TimerVisibilityPayload.TYPE, TimerVisibilityPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(TimerSilentPayload.TYPE, TimerSilentPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(TimerDisplayConfigPayload.TYPE, TimerDisplayConfigPayload.CODEC);
     }
 
-    public static void syncTimerToClients(MinecraftServer server, String name, long currentTicks,
-                                          long targetTicks, boolean countUp, boolean running, boolean silent) {
-        TimerSyncPayload payload = buildSyncPayload(name, currentTicks, targetTicks, countUp, running, silent);
-        for (var player : server.getPlayerList().getPlayers()) {
-            ServerPlayNetworking.send(player, payload);
+
+
+
+    /**
+     * One payload per distinct view: with a single global run that is one
+     * payload for the whole server, exactly as cheap as the old broadcast.
+     */
+    public static void sendTimerState(MinecraftServer server) {
+        java.util.List<java.util.UUID> online = new java.util.ArrayList<>();
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) online.add(player.getUUID());
+
+        for (var entry : com.mateof24.network.TimerState.groupByView(online).entrySet()) {
+            TimerStatePayload payload = TimerStatePayload.of(entry.getKey());
+            for (java.util.UUID id : entry.getValue()) {
+                ServerPlayer player = server.getPlayerList().getPlayer(id);
+                if (player != null) ServerPlayNetworking.send(player, payload);
+            }
         }
     }
 
-    /**
-     * The counter titles (4.0.0) ride the sync packet and are resolved HERE
-     * by timer name, so every existing send site stays title-correct without
-     * plumbing a new parameter through IPlatformHelper.
-     */
-    private static TimerSyncPayload buildSyncPayload(String name, long currentTicks, long targetTicks,
-                                                     boolean countUp, boolean running, boolean silent) {
-        com.mateof24.timer.TimerTitles titles = com.mateof24.manager.TimerManager.getInstance()
-                .getTimer(name).map(com.mateof24.timer.TimerTitles::of)
-                .orElse(com.mateof24.timer.TimerTitles.EMPTY);
-        return new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent,
-                titles.above(), titles.below(), titles.left(), titles.right());
+    public static void sendTimerState(ServerPlayer player) {
+        ServerPlayNetworking.send(player,
+                TimerStatePayload.of(com.mateof24.network.TimerState.viewFor(player.getUUID())));
     }
 
     public static void syncVisibilityToClient(ServerPlayer player, boolean visible) {
@@ -117,25 +120,52 @@ public class NetworkHandler {
         @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
     }
 
-    public record TimerSyncPayload(String name, long currentTicks, long targetTicks,
-                                   boolean countUp, boolean running, boolean silent,
-                                   String titleAbove, String titleBelow,
-                                   String titleLeft, String titleRight)
+    /**
+     * The full set of executions a player can see.
+     *
+     * <p>A snapshot rather than a delta: it is self-healing, and at roughly
+     * sixty bytes per run the size never matters. The channel is renamed from
+     * the 4.0.0 one on purpose — a 4.x client then simply never receives it,
+     * instead of decoding a payload whose shape changed underneath it.</p>
+     */
+    public record TimerStatePayload(java.util.List<com.mateof24.network.RunView> runs)
             implements CustomPacketPayload {
-        public static final Type<TimerSyncPayload> TYPE = new Type<>(TIMER_SYNC_ID);
-        public static final StreamCodec<FriendlyByteBuf, TimerSyncPayload> CODEC = StreamCodec.of(
+        public static final Type<TimerStatePayload> TYPE = new Type<>(TIMER_STATE_ID);
+
+        public static TimerStatePayload of(java.util.List<com.mateof24.network.RunView> runs) {
+            return new TimerStatePayload(runs);
+        }
+
+        public static final StreamCodec<FriendlyByteBuf, TimerStatePayload> CODEC = StreamCodec.of(
                 (buf, p) -> {
-                    buf.writeUtf(p.name()); buf.writeLong(p.currentTicks()); buf.writeLong(p.targetTicks());
-                    buf.writeBoolean(p.countUp()); buf.writeBoolean(p.running());
-                    buf.writeBoolean(p.silent());
-                    buf.writeUtf(p.titleAbove()); buf.writeUtf(p.titleBelow());
-                    buf.writeUtf(p.titleLeft()); buf.writeUtf(p.titleRight());
+                    buf.writeVarInt(p.runs().size());
+                    for (com.mateof24.network.RunView v : p.runs()) {
+                        buf.writeUUID(v.runId());
+                        buf.writeUtf(v.timerName());
+                        buf.writeLong(v.currentTicks());
+                        buf.writeLong(v.targetTicks());
+                        buf.writeBoolean(v.countUp());
+                        buf.writeBoolean(v.running());
+                        buf.writeBoolean(v.silent());
+                        buf.writeUtf(v.titleAbove()); buf.writeUtf(v.titleBelow());
+                        buf.writeUtf(v.titleLeft()); buf.writeUtf(v.titleRight());
+                        buf.writeUtf(v.preset());
+                        buf.writeVarInt(v.x()); buf.writeVarInt(v.y());
+                        buf.writeFloat(v.scale());
+                    }
                 },
-                buf -> new TimerSyncPayload(
-                        buf.readUtf(), buf.readLong(), buf.readLong(),
-                        buf.readBoolean(), buf.readBoolean(), buf.readBoolean(),
-                        buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf()
-                )
+                buf -> {
+                    int count = buf.readVarInt();
+                    java.util.List<com.mateof24.network.RunView> runs = new java.util.ArrayList<>(count);
+                    for (int i = 0; i < count; i++) {
+                        runs.add(new com.mateof24.network.RunView(
+                                buf.readUUID(), buf.readUtf(), buf.readLong(), buf.readLong(),
+                                buf.readBoolean(), buf.readBoolean(), buf.readBoolean(),
+                                buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(),
+                                buf.readUtf(), buf.readVarInt(), buf.readVarInt(), buf.readFloat()));
+                    }
+                    return new TimerStatePayload(runs);
+                }
         );
         @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
     }

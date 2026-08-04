@@ -96,10 +96,9 @@ public class OnTime {
         NetworkHandler.syncSilentToClient(player, PlayerPreferences.getTimerSilent(playerUUID));
         Services.PLATFORM.sendDisplayConfigPacket(player);
 
-        TimerManager.getInstance().getActiveTimer().ifPresent(timer ->
-                NetworkHandler.syncTimerToClient(player, timer.getName(), timer.getCurrentTicks(),
-                        timer.getTargetTicks(), timer.isCountUp(), timer.isRunning(),
-                        timer.isSilent()));
+        // The joiner gets their own view: global runs plus any fixed audience
+        // they belong to.
+        Services.PLATFORM.sendTimerState(player);
     }
 
     private void onServerStopping(ServerStoppingEvent event) {

@@ -162,15 +162,7 @@ final class LifecycleCommands {
             ctx.getSource().sendSuccess(() ->
                     Component.translatable("ontime.command.start.success", name), true);
 
-            Services.PLATFORM.sendTimerSyncPacket(
-                    ctx.getSource().getServer(),
-                    timer.getName(),
-                    timer.getCurrentTicks(),
-                    timer.getTargetTicks(),
-                    timer.isCountUp(),
-                    timer.isRunning(),
-                    timer.isSilent()
-            );
+            com.mateof24.network.TimerState.markDirty();
             return 1;
         }
 
@@ -226,15 +218,7 @@ final class LifecycleCommands {
             ctx.getSource().sendSuccess(() ->
                     Component.translatable("ontime.command.pause.success", timer.getName()), true);
 
-            Services.PLATFORM.sendTimerSyncPacket(
-                    ctx.getSource().getServer(),
-                    timer.getName(),
-                    timer.getCurrentTicks(),
-                    timer.getTargetTicks(),
-                    timer.isCountUp(),
-                    false,
-                    timer.isSilent()
-            );
+            com.mateof24.network.TimerState.markDirty();
             return 1;
         } else {
             // 4.0.0 re-read the whole timers directory here so hand-edited
@@ -252,15 +236,7 @@ final class LifecycleCommands {
             ctx.getSource().sendSuccess(() ->
                     Component.translatable("ontime.command.resume.success", timer.getName()), true);
 
-            Services.PLATFORM.sendTimerSyncPacket(
-                    ctx.getSource().getServer(),
-                    timer.getName(),
-                    timer.getCurrentTicks(),
-                    timer.getTargetTicks(),
-                    timer.isCountUp(),
-                    true,
-                    timer.isSilent()
-            );
+            com.mateof24.network.TimerState.markDirty();
             return 1;
         }
     }
@@ -272,7 +248,7 @@ final class LifecycleCommands {
             ctx.getSource().sendSuccess(() ->
                     Component.translatable("ontime.command.remove.success", name), true);
 
-            Services.PLATFORM.sendTimerSyncPacket(ctx.getSource().getServer(), "", 0, 0, false, false, false);
+            com.mateof24.network.TimerState.markDirty();
             return 1;
         } else {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
@@ -343,7 +319,7 @@ final class LifecycleCommands {
                     Component.translatable("ontime.command.stop.cooldown_cancelled"), true);
         }
 
-        Services.PLATFORM.sendTimerSyncPacket(ctx.getSource().getServer(), "", 0, 0, false, false, false);
+        com.mateof24.network.TimerState.markDirty();
         return 1;
     }
 
@@ -366,10 +342,7 @@ final class LifecycleCommands {
                 Component.translatable("ontime.command.reset.success", timer.getName()), true);
 
         if (wasRunning) {
-            Services.PLATFORM.sendTimerSyncPacket(
-                    ctx.getSource().getServer(),
-                    timer.getName(), timer.getCurrentTicks(), timer.getTargetTicks(),
-                    timer.isCountUp(), false, timer.isSilent());
+            com.mateof24.network.TimerState.markDirty();
         }
         return 1;
     }
@@ -396,15 +369,7 @@ final class LifecycleCommands {
                 Component.translatable("ontime.command.reset.success", name), true);
 
         if (wasActive && wasRunning) {
-            Services.PLATFORM.sendTimerSyncPacket(
-                    ctx.getSource().getServer(),
-                    timer.getName(),
-                    timer.getCurrentTicks(),
-                    timer.getTargetTicks(),
-                    timer.isCountUp(),
-                    false,
-                    timer.isSilent()
-            );
+            com.mateof24.network.TimerState.markDirty();
         }
 
         return 1;
@@ -505,15 +470,7 @@ final class LifecycleCommands {
         Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
         if (activeTimer.isPresent() && activeTimer.get().getName().equals(name)) {
             Timer timer = activeTimer.get();
-            Services.PLATFORM.sendTimerSyncPacket(
-                    ctx.getSource().getServer(),
-                    timer.getName(),
-                    timer.getCurrentTicks(),
-                    timer.getTargetTicks(),
-                    timer.isCountUp(),
-                    timer.isRunning(),
-                    timer.isSilent()
-            );
+            com.mateof24.network.TimerState.markDirty();
         }
     }
 }
