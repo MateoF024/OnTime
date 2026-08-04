@@ -237,6 +237,71 @@ public final class TimerRun {
         lastScoreboardSecond = -1L;
     }
 
+    // ---- persistence ----
+
+    /**
+     * Serialises identity and audience.
+     *
+     * <p>Two things are deliberately absent. The clock, because while it still
+     * delegates to {@link Timer} the timer file is its only home and writing it
+     * here as well would create a second source of truth. And the cooldowns,
+     * because 4.0.0 held them in static fields that a restart simply dropped —
+     * restoring one would auto-start a timer at boot that the operator did not
+     * ask for, which is worse than losing a cooldown.</p>
+     */
+    public com.google.gson.JsonObject toJson() {
+        com.google.gson.JsonObject json = new com.google.gson.JsonObject();
+        json.addProperty("runId", runId.toString());
+        json.addProperty("timerName", timerName);
+        json.addProperty("mode", mode.name());
+        if (owner != null) json.addProperty("owner", owner.toString());
+        json.addProperty("audienceScope", audience.scope().name());
+        if (!audience.isGlobal()) {
+            com.google.gson.JsonArray players = new com.google.gson.JsonArray();
+            for (UUID player : audience.players()) players.add(player.toString());
+            json.add("audiencePlayers", players);
+        }
+        return json;
+    }
+
+    /**
+     * Rebuilds a run from disk against an already-loaded definition.
+     *
+     * @return null when the entry is unusable, so one bad record cannot stop
+     *         the rest from loading
+     */
+    public static TimerRun fromJson(com.google.gson.JsonObject json, Timer timer) {
+        if (timer == null) return null;
+        try {
+            UUID runId = json.has("runId")
+                    ? UUID.fromString(json.get("runId").getAsString())
+                    : UUID.randomUUID();
+            Mode mode = json.has("mode")
+                    ? Mode.valueOf(json.get("mode").getAsString())
+                    : Mode.SHARED;
+            UUID owner = json.has("owner") ? UUID.fromString(json.get("owner").getAsString()) : null;
+
+            Audience audience = Audience.global();
+            if (json.has("audienceScope")
+                    && Audience.Scope.PLAYERS.name().equals(json.get("audienceScope").getAsString())) {
+                java.util.List<UUID> players = new java.util.ArrayList<>();
+                if (json.has("audiencePlayers") && json.get("audiencePlayers").isJsonArray()) {
+                    for (com.google.gson.JsonElement el : json.getAsJsonArray("audiencePlayers")) {
+                        try { players.add(UUID.fromString(el.getAsString())); } catch (Exception ignored) {}
+                    }
+                }
+                audience = Audience.ofPlayers(players);
+            }
+
+            // Always restored ACTIVE: cooldowns are in-memory by design, see
+            // toJson(). Whether the timer resumes ticking is decided by the
+            // usual wasRunningBeforeShutdown check, exactly as in 4.0.0.
+            return new TimerRun(runId, timer, audience, mode, owner);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     @Override
     public String toString() {
         return "TimerRun[" + shortId() + " " + timerName + " " + mode + " " + audience + "]";

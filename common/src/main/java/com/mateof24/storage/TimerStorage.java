@@ -21,6 +21,7 @@ public class TimerStorage {
     private static final Path EXPORTS_DIR = CONFIG_DIR.resolve("exports");
     private static final Path LEGACY_FILE = CONFIG_DIR.resolve("timers.json");
     private static final Path ACTIVE_FILE = TIMERS_DIR.resolve("_active.json");
+    private static final Path RUNS_FILE = TIMERS_DIR.resolve("_runs.json");
 
     public static void saveTimers(Map<String, Timer> timers, String activeTimerName) {
         try {
@@ -84,6 +85,49 @@ public class TimerStorage {
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to save active timer state", e);
         }
+    }
+
+    /**
+     * Writes the executions in flight.
+     *
+     * <p>{@code _active.json} is still written alongside this, on purpose: it
+     * is the downgrade hatch. A world that goes back to 4.0.0 finds the pointer
+     * it expects and keeps its timer, instead of silently losing it.</p>
+     */
+    public static void saveRuns(java.util.Collection<com.mateof24.timer.TimerRun> runs) {
+        try {
+            Files.createDirectories(TIMERS_DIR);
+            JsonArray array = new JsonArray();
+            for (com.mateof24.timer.TimerRun run : runs) array.add(run.toJson());
+            JsonObject root = new JsonObject();
+            root.add("runs", array);
+            writeJsonAtomic(RUNS_FILE, root);
+        } catch (IOException e) {
+            OnTimeConstants.LOGGER.error("Failed to save timer runs", e);
+        }
+    }
+
+    /**
+     * Raw run entries from disk, for {@code TimerManager} to resolve against
+     * the loaded definitions.
+     *
+     * @return null when the file is absent, which is what tells the caller to
+     *         fall back to migrating {@code _active.json}
+     */
+    public static List<JsonObject> loadRunElements() {
+        if (!Files.exists(RUNS_FILE)) return null;
+        List<JsonObject> entries = new ArrayList<>();
+        try (Reader reader = Files.newBufferedReader(RUNS_FILE, StandardCharsets.UTF_8)) {
+            JsonObject root = GSON.fromJson(reader, JsonObject.class);
+            if (root == null || !root.has("runs") || !root.get("runs").isJsonArray()) return entries;
+            for (JsonElement el : root.getAsJsonArray("runs")) {
+                if (el.isJsonObject()) entries.add(el.getAsJsonObject());
+            }
+        } catch (Exception e) {
+            OnTimeConstants.LOGGER.error("Failed to load timer runs", e);
+            return entries;
+        }
+        return entries;
     }
 
     public static TimerLoadResult loadTimers() {

@@ -62,7 +62,7 @@ public class TimerManager {
 
         timers.remove(name);
         TimerStorage.deleteTimer(name);
-        TimerStorage.saveActiveState(activeName());
+        saveRuns();
         return true;
     }
 
@@ -86,7 +86,10 @@ public class TimerManager {
         if (previous != null && previous != timer) {
             TimerStorage.saveTimer(previous);
         }
-        saveActiveTimer();
+        // saveRuns() already writes the active pointer, so only the timer file
+        // is left to persist here.
+        TimerStorage.saveTimer(timer);
+        saveRuns();
 
         getTimer(name).ifPresent(t ->
                 com.mateof24.event.TimerEventBus.fireOnStart(toInfo(t)));
@@ -235,7 +238,7 @@ public class TimerManager {
 
     /** Ends one execution. The definition itself is untouched. */
     public void endRun(TimerRun run) {
-        runs.remove(run.runId());
+        if (runs.remove(run.runId()) != null) saveRuns();
     }
 
     /** Re-baselines the scheduled-command cursor of every run of this timer. */
@@ -276,7 +279,9 @@ public class TimerManager {
     }
 
     public void clearActiveTimer() {
+        if (runs.isEmpty()) return;
         runs.clear();
+        saveRuns();
     }
 
     public void saveTimers() {
@@ -310,13 +315,34 @@ public class TimerManager {
         TimerStorage.TimerLoadResult result = TimerStorage.loadTimers();
         timers.putAll(result.getTimers());
 
-        String activeTimerName = result.getActiveTimerName();
-        if (activeTimerName != null && timers.containsKey(activeTimerName)) {
-            // Restored as a global run, which is what the stored pointer meant.
-            newRun(TimerRun.global(timers.get(activeTimerName)));
-            OnTimeConstants.LOGGER.info("Restored active timer: '{}'", activeTimerName);
+        java.util.List<com.google.gson.JsonObject> stored = TimerStorage.loadRunElements();
+        if (stored != null) {
+            for (com.google.gson.JsonObject entry : stored) {
+                if (!entry.has("timerName")) continue;
+                Timer timer = timers.get(entry.get("timerName").getAsString());
+                TimerRun run = TimerRun.fromJson(entry, timer);
+                if (run != null) newRun(run);
+            }
+            if (!runs.isEmpty()) {
+                OnTimeConstants.LOGGER.info("Restored {} timer run(s)", runs.size());
+            }
+        } else {
+            // No runs file: this world comes from 4.0.0 or earlier. Its active
+            // pointer meant exactly one run, shared by the whole server.
+            String activeTimerName = result.getActiveTimerName();
+            if (activeTimerName != null && timers.containsKey(activeTimerName)) {
+                newRun(TimerRun.global(timers.get(activeTimerName)));
+                OnTimeConstants.LOGGER.info("Migrated active timer '{}' to a global run", activeTimerName);
+            }
         }
         validateActiveTimer();
+        saveRuns();
+    }
+
+    /** Persists the run registry plus the 4.0.0 active pointer kept for downgrades. */
+    public void saveRuns() {
+        TimerStorage.saveRuns(runs.values());
+        TimerStorage.saveActiveState(activeName());
     }
 
     /** Drops runs whose definition is no longer registered. */
@@ -327,7 +353,7 @@ public class TimerManager {
             return true;
         });
         if (removed) {
-            TimerStorage.saveActiveState(activeName());
+            saveRuns();
             return false;
         }
         return true;

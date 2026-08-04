@@ -65,6 +65,13 @@ public class Timer {
     private String titleBelow = null;
     private String titleLeft = null;
     private String titleRight = null;
+    // Per-timer display overrides (5.0.0). null means "inherit the global
+    // default from ModConfig", which is what every 4.0.0 timer does, so an old
+    // file loads unchanged and keeps behaving exactly the same.
+    private String position = null;
+    private Integer timerX = null;
+    private Integer timerY = null;
+    private Float scale = null;
 
     public Timer(String name, int hours, int minutes, int seconds, boolean countUp) {
         this.name = name;
@@ -170,6 +177,13 @@ public class Timer {
         json.addProperty("titleBelow", titleBelow != null ? titleBelow : "");
         json.addProperty("titleLeft", titleLeft != null ? titleLeft : "");
         json.addProperty("titleRight", titleRight != null ? titleRight : "");
+        // Display overrides are omitted rather than written as null, so a file
+        // with no override is byte-identical to a 4.0.0 one and "absent" reads
+        // unambiguously as "inherit".
+        if (position != null) json.addProperty("position", position);
+        if (timerX != null) json.addProperty("timerX", timerX);
+        if (timerY != null) json.addProperty("timerY", timerY);
+        if (scale != null) json.addProperty("scale", scale);
         return json;
     }
 
@@ -237,7 +251,30 @@ public class Timer {
         timer.titleLeft = readOptionalString(json, "titleLeft");
         timer.titleRight = readOptionalString(json, "titleRight");
 
+        timer.position = readOptionalString(json, "position");
+        timer.timerX = readOptionalInt(json, "timerX");
+        timer.timerY = readOptionalInt(json, "timerY");
+        timer.scale = readOptionalFloat(json, "scale");
+
         return timer;
+    }
+
+    private static Integer readOptionalInt(JsonObject json, String key) {
+        if (!json.has(key) || json.get(key).isJsonNull()) return null;
+        try {
+            return json.get(key).getAsInt();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static Float readOptionalFloat(JsonObject json, String key) {
+        if (!json.has(key) || json.get(key).isJsonNull()) return null;
+        try {
+            return json.get(key).getAsFloat();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static String readOptionalString(JsonObject json, String key) {
@@ -423,6 +460,37 @@ public class Timer {
         titleBelow = null;
         titleLeft = null;
         titleRight = null;
+    }
+
+    // ---- per-timer display overrides (5.0.0) ----
+    // null everywhere means "inherit the global default". Nothing reads these
+    // yet; the commands and the sync payload pick them up in stage 3.
+
+    /** Preset name, or null to inherit the global default. */
+    public String getPosition() { return position; }
+
+    public void setPosition(String preset) {
+        this.position = (preset == null || preset.isEmpty()) ? null : preset;
+    }
+
+    public Integer getTimerX() { return timerX; }
+    public Integer getTimerY() { return timerY; }
+
+    /** Both coordinates together; null clears the override. */
+    public void setCustomPosition(Integer x, Integer y) {
+        this.timerX = x;
+        this.timerY = y == null ? null : Math.max(0, y);
+    }
+
+    public Float getScale() { return scale; }
+
+    public void setScale(Float value) {
+        this.scale = value == null ? null : Math.max(0.1f, Math.min(5.0f, value));
+    }
+
+    /** True when this timer overrides any of the global display defaults. */
+    public boolean hasDisplayOverride() {
+        return position != null || timerX != null || timerY != null || scale != null;
     }
 
     public String getConditionExpressionAction() { return conditionExpressionAction; }
