@@ -92,6 +92,7 @@
   "ontime.help.stop.desc": "Stop and reset runs",
   "ontime.help.reset.desc": "Reset runs to their starting time",
   "ontime.help.audience.desc": "Inspect or correct who sees a running timer",
+  "ontime.help.confirm.desc": "Run the mass operation you just staged",
   "ontime.help.remove.desc": "Delete a timer permanently",
   "ontime.help.set.desc": "Set timer to a specific time",
   "ontime.help.add.desc": "Add time to a timer",
@@ -188,5 +189,12 @@
   "ontime.command.audience.removed": "§aRemoved §f%s §aplayer(s) from §f'%s' §a(§f%s §arun(s))",
   "ontime.mode.shared": "shared",
   "ontime.mode.each": "each",
-  "ontime.audience.global": "everyone"
+  "ontime.audience.global": "everyone",
+  "ontime.command.confirm.required.each": "§e[!] §fThis will create §e%s §findependent timers of §e'%s' §f(one per player).",
+  "ontime.command.confirm.required.shared": "§e[!] §fThis will create §e%s §frun(s) of §e'%s'§f.",
+  "ontime.command.confirm.hint": "§7    Type §f/timer confirm §7to run it. Expires in %ss.",
+  "ontime.command.confirm.hover": "Run /timer confirm",
+  "ontime.command.confirm.none": "§cNothing pending confirmation",
+  "ontime.command.confirm.expired": "§cThe pending confirmation expired. Run the command again.",
+  "ontime.command.confirm.player_only": "§cOnly a player can confirm; the console and command blocks run mass operations directly"
 }

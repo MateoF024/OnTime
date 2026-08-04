@@ -65,6 +65,7 @@ public class TimerTickHandler {
         if (startConditionCheckCounter >= START_CHECK_INTERVAL) {
             startConditionCheckCounter = 0;
             checkStartConditions(server);
+            com.mateof24.command.PendingConfirmations.sweep();
         }
 
         TimerManager manager = TimerManager.getInstance();

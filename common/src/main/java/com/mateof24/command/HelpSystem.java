@@ -100,6 +100,13 @@ public class HelpSystem {
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
+                "confirm",
+                "ontime.help.confirm.desc",
+                "/timer confirm",
+                "/timer confirm"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
                 "audience",
                 "ontime.help.audience.desc",
                 "/timer audience <name> <list|add|remove> [targets]",

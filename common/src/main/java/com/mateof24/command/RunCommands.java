@@ -46,47 +46,93 @@ final class RunCommands {
     static int start(CommandContext<CommandSourceStack> ctx, Collection<ServerPlayer> targets,
                      TimerRun.Mode mode) {
         String name = StringArgumentType.getString(ctx, "name");
+        CommandSourceStack source = ctx.getSource();
         TimerManager manager = TimerManager.getInstance();
 
         if (manager.getTimer(name).isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            source.sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
 
-        if (targets == null) {
+        Set<UUID> players = targets == null ? null : uuidsOf(targets);
+        boolean each = players != null && mode == TimerRun.Mode.EACH;
+
+        // What the operation is about to cost, in executions. Everything but
+        // 'each' is a single one however many players it reaches.
+        int runsToCreate = 1;
+        if (each) {
+            runsToCreate = 0;
+            for (UUID player : players) {
+                if (manager.findOverlapping(name, Audience.ofPlayer(player)) == null) runsToCreate++;
+            }
+        }
+
+        if (PendingConfirmations.required(source, runsToCreate)) {
+            final Set<UUID> staged = players;
+            final int count = runsToCreate;
+            PendingConfirmations.stage(PendingConfirmations.issuer(source),
+                    confirmed -> doStart(confirmed, name, staged, mode));
+            source.sendSuccess(() -> Component.translatable(
+                    each ? "ontime.command.confirm.required.each" : "ontime.command.confirm.required.shared",
+                    count, name), false);
+            source.sendSuccess(() -> Component.translatable("ontime.command.confirm.hint",
+                            PendingConfirmations.timeoutSeconds())
+                    .withStyle(style -> HelpStyle.run(style, "/timer confirm",
+                            Component.translatable("ontime.command.confirm.hover"))), false);
+            return 0;
+        }
+
+        return doStart(source, name, players, mode);
+    }
+
+    /**
+     * The start itself, split out so {@code /timer confirm} replays exactly the
+     * operation that was described — the selector is never resolved twice.
+     *
+     * @param players null for a global run
+     */
+    private static int doStart(CommandSourceStack source, String name, Set<UUID> players,
+                               TimerRun.Mode mode) {
+        TimerManager manager = TimerManager.getInstance();
+
+        if (players == null) {
             if (manager.startShared(name, Audience.global()) == null) {
-                ctx.getSource().sendFailure(Component.translatable("ontime.command.start.running", name));
+                source.sendFailure(Component.translatable("ontime.command.start.running", name));
                 return 0;
             }
-            ctx.getSource().sendSuccess(() ->
+            source.sendSuccess(() ->
                     Component.translatable("ontime.command.start.success", name), true);
             com.mateof24.network.TimerState.markDirty();
             return 1;
         }
 
-        Set<UUID> players = uuidsOf(targets);
         if (mode == TimerRun.Mode.EACH) {
             List<TimerRun> created = manager.startEach(name, players);
             if (created.isEmpty()) {
-                ctx.getSource().sendFailure(Component.translatable("ontime.command.start.running", name));
+                source.sendFailure(Component.translatable("ontime.command.start.running", name));
                 return 0;
             }
             int count = created.size();
-            ctx.getSource().sendSuccess(() ->
+            source.sendSuccess(() ->
                     Component.translatable("ontime.command.start.each", name, count), true);
             com.mateof24.network.TimerState.markDirty();
             return count;
         }
 
         if (manager.startShared(name, Audience.ofPlayers(players)) == null) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.start.running", name));
+            source.sendFailure(Component.translatable("ontime.command.start.running", name));
             return 0;
         }
         int count = players.size();
-        ctx.getSource().sendSuccess(() ->
+        source.sendSuccess(() ->
                 Component.translatable("ontime.command.start.shared", name, count), true);
         com.mateof24.network.TimerState.markDirty();
         return 1;
+    }
+
+    /** {@code /timer confirm} — runs whatever the caller staged. */
+    static int confirm(CommandContext<CommandSourceStack> ctx) {
+        return PendingConfirmations.confirm(ctx.getSource());
     }
 
     // ------------------------------------------------------------------

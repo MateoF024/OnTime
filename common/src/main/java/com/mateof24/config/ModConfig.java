@@ -61,6 +61,11 @@ public class ModConfig {
     // SAME moment (a scheduled point or the finish list). 0 = all in one
     // tick, the pre-4.0.0 behavior.
     private int commandDelayTicks = 0;
+    // How many executions a single command may create before it has to be
+    // confirmed. The gate is on the count, not on the selector: /timer start x
+    // @a is one execution and never asks, /timer start x @a each is one per
+    // player and does. 0 = always confirm, -1 = never.
+    private int confirmRunThreshold = 8;
 
 
     // Función para cargar parámetros
@@ -109,6 +114,9 @@ public class ModConfig {
                 commandDelayTicks = root.get("commandDelayTicks").getAsInt();
                 commandDelayTicks = Math.max(0, Math.min(1200, commandDelayTicks));
             }
+            if (root.has("confirmRunThreshold")) {
+                confirmRunThreshold = Math.max(-1, root.get("confirmRunThreshold").getAsInt());
+            }
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to load config", e);
         }
@@ -154,6 +162,7 @@ public class ModConfig {
             root.addProperty("webPanelPort", webPanelPort);
             root.addProperty("webPanelBindAddress", webPanelBindAddress);
             root.addProperty("commandDelayTicks", commandDelayTicks);
+            root.addProperty("confirmRunThreshold", confirmRunThreshold);
             com.mateof24.storage.AtomicJsonIO.write(GSON, CONFIG_FILE, root);
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to save config", e);
@@ -282,6 +291,14 @@ public class ModConfig {
     public int getWebPanelPort() { return webPanelPort; }
     public void setWebPanelPort(int port) { this.webPanelPort = port; dirty = true; }
     public String getWebPanelBindAddress() { return webPanelBindAddress; }
+
+    public int getConfirmRunThreshold() { return confirmRunThreshold; }
+    public void setConfirmRunThreshold(int threshold) {
+        int clamped = Math.max(-1, threshold);
+        if (clamped == confirmRunThreshold) return;
+        this.confirmRunThreshold = clamped;
+        dirty = true;
+    }
 
     public int getCommandDelayTicks() { return commandDelayTicks; }
     public void setCommandDelayTicks(int ticks) {

@@ -90,6 +90,7 @@
   "ontime.help.stop.desc": "Detener y restablecer ejecuciones",
   "ontime.help.reset.desc": "Restablecer ejecuciones a su tiempo inicial",
   "ontime.help.audience.desc": "Consultar o corregir quién ve un contador en curso",
+  "ontime.help.confirm.desc": "Ejecutar la operación masiva que acabas de preparar",
   "ontime.help.remove.desc": "Eliminar un contador permanentemente",
   "ontime.help.set.desc": "Establecer el contador a un tiempo específico",
   "ontime.help.add.desc": "Agregar tiempo a un contador",
@@ -188,5 +189,12 @@
   "ontime.command.audience.removed": "§aQuitado(s) §f%s §ajugador(es) de §f'%s' §a(§f%s §aejecución(es))",
   "ontime.mode.shared": "compartida",
   "ontime.mode.each": "individual",
-  "ontime.audience.global": "todos"
+  "ontime.audience.global": "todos",
+  "ontime.command.confirm.required.each": "§e[!] §fEsto creará §e%s §fcontadores independientes de §e'%s' §f(uno por jugador).",
+  "ontime.command.confirm.required.shared": "§e[!] §fEsto creará §e%s §fejecución(es) de §e'%s'§f.",
+  "ontime.command.confirm.hint": "§7    Escribe §f/timer confirm §7para ejecutarlo. Expira en %ss.",
+  "ontime.command.confirm.hover": "Ejecutar /timer confirm",
+  "ontime.command.confirm.none": "§cNo hay nada pendiente de confirmar",
+  "ontime.command.confirm.expired": "§cLa confirmación pendiente expiró. Vuelve a lanzar el comando.",
+  "ontime.command.confirm.player_only": "§cSolo un jugador puede confirmar; la consola y los bloques de comandos ejecutan las operaciones masivas directamente"
 }

@@ -195,6 +195,12 @@ public class TimerCommands {
                 .then(selection("resume", PermissionNodes.TIMER_PAUSE,
                         ctx -> RunCommands.setRunning(ctx, Boolean.TRUE, null, null),
                         (ctx, name, targets) -> RunCommands.setRunning(ctx, Boolean.TRUE, name, targets)))
+                // No permission of its own: it only replays something the
+                // caller already had the permission to stage, and the closure
+                // belongs to them alone.
+                .then(Commands.literal("confirm")
+                        .executes(RunCommands::confirm)
+                )
                 .then(Commands.literal("audience")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_AUDIENCE, 4))
                         .then(Commands.argument("name", StringArgumentType.word())

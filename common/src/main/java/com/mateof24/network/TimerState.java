@@ -47,6 +47,10 @@ public final class TimerState {
      * <p>Ordered by preset and then by run id so the z-order never flickers
      * between frames just because a map iterated differently.</p>
      */
+    /** Ordered by preset then run id, so the z-order cannot flicker. */
+    private static final Comparator<RunView> DRAW_ORDER =
+            Comparator.comparing(RunView::preset).thenComparing(v -> v.runId().toString());
+
     public static List<RunView> viewFor(UUID player) {
         List<RunView> views = new ArrayList<>();
         for (TimerRun run : TimerManager.getInstance().runsView()) {
@@ -54,7 +58,7 @@ public final class TimerState {
             if (!run.isVisibleTo(player)) continue;
             views.add(toView(run));
         }
-        views.sort(Comparator.comparing(RunView::preset).thenComparing(v -> v.runId().toString()));
+        views.sort(DRAW_ORDER);
         return views;
     }
 
@@ -64,11 +68,37 @@ public final class TimerState {
      *
      * <p>In the common case — a single global run — that is one payload for the
      * whole server, exactly as cheap as the old broadcast.</p>
+     *
+     * <p>Built by walking the runs and handing each one to its viewers, rather
+     * than asking every player which runs they see. Both answer the same
+     * question, but the second builds one {@link RunView} per player per run:
+     * a hundred per-player runs plus a hundred players is ten thousand objects
+     * a second for a hundred distinct payloads. This way each run is converted
+     * exactly once, and a global run's view is the same instance in every
+     * list.</p>
      */
     public static Map<List<RunView>, List<UUID>> groupByView(Iterable<UUID> players) {
+        Map<UUID, List<RunView>> perPlayer = new LinkedHashMap<>();
+        for (UUID player : players) perPlayer.put(player, new ArrayList<>());
+
+        for (TimerRun run : TimerManager.getInstance().runsView()) {
+            if (run.isAwaitingSequence()) continue;
+            RunView view = toView(run);
+            if (run.audience().isGlobal()) {
+                for (List<RunView> seen : perPlayer.values()) seen.add(view);
+            } else {
+                for (UUID member : run.audience().players()) {
+                    List<RunView> seen = perPlayer.get(member);
+                    // Offline members of a fixed audience simply have no list.
+                    if (seen != null) seen.add(view);
+                }
+            }
+        }
+
         Map<List<RunView>, List<UUID>> grouped = new LinkedHashMap<>();
-        for (UUID player : players) {
-            grouped.computeIfAbsent(viewFor(player), key -> new ArrayList<>()).add(player);
+        for (Map.Entry<UUID, List<RunView>> entry : perPlayer.entrySet()) {
+            entry.getValue().sort(DRAW_ORDER);
+            grouped.computeIfAbsent(entry.getValue(), key -> new ArrayList<>()).add(entry.getKey());
         }
         return grouped;
     }
