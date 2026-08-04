@@ -8,12 +8,12 @@ public class FabricTriggerHandler {
 
     public static void register() {
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
-            if (!(entity instanceof ServerPlayer)) return;
-            TriggerDispatcher.dispatch("player_death", null);
+            if (!(entity instanceof ServerPlayer player)) return;
+            TriggerDispatcher.dispatch("player_death", null, player.getUUID());
         });
 
         ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register((player, origin, destination) ->
-                TriggerDispatcher.dispatch("dimension_change", destination.dimension().location().toString())
+                TriggerDispatcher.dispatch("dimension_change", destination.dimension().location().toString(), player.getUUID())
         );
     }
 }

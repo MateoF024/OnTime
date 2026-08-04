@@ -119,7 +119,7 @@ public class TimerManager {
         timer.setTime(hours, minutes, seconds);
         // Manual jump: re-baseline scheduled commands so skipped-over
         // thresholds don't fire (only natural ticking fires them).
-        com.mateof24.tick.TimerTickHandler.resetCommandProgress();
+        resetCommandProgress(name);
         saveTimer(timer);
         return true;
     }
@@ -131,7 +131,7 @@ public class TimerManager {
         }
 
         timer.addTime(hours, minutes, seconds);
-        com.mateof24.tick.TimerTickHandler.resetCommandProgress();
+        resetCommandProgress(name);
         saveTimer(timer);
         return true;
     }
@@ -212,8 +212,37 @@ public class TimerManager {
         return runs.values().stream().findFirst();
     }
 
+    /**
+     * The timer the player would call "the current one".
+     *
+     * <p>A run waiting out a sequence cooldown is deliberately excluded: the
+     * display is cleared and nothing is ticking, and 4.0.0 reported no active
+     * timer in that window because it had cleared the pointer outright.</p>
+     */
     public Optional<Timer> getActiveTimer() {
-        return getActiveRun().map(TimerRun::timer);
+        return getActiveRun().filter(run -> !run.isAwaitingSequence()).map(TimerRun::timer);
+    }
+
+    /** True when any run is waiting out a repeat or sequence cooldown. */
+    public boolean hasPendingCooldown() {
+        return runs.values().stream().anyMatch(TimerRun::isInCooldown);
+    }
+
+    /** True when this timer already has an execution registered. */
+    public boolean hasRunOf(String timerName) {
+        return runs.values().stream().anyMatch(run -> run.timerName().equals(timerName));
+    }
+
+    /** Ends one execution. The definition itself is untouched. */
+    public void endRun(TimerRun run) {
+        runs.remove(run.runId());
+    }
+
+    /** Re-baselines the scheduled-command cursor of every run of this timer. */
+    public void resetCommandProgress(String timerName) {
+        for (TimerRun run : runs.values()) {
+            if (run.timerName().equals(timerName)) run.resetCommandProgress();
+        }
     }
 
     /** Live view over the executions in flight. Server thread only. */

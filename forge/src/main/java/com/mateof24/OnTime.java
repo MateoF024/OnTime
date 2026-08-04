@@ -139,14 +139,16 @@ public class OnTime {
     }
 
     private void onPlayerDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
-        if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer)) return;
-        com.mateof24.trigger.TriggerDispatcher.dispatch("player_death", null);
+        if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        com.mateof24.trigger.TriggerDispatcher.dispatch("player_death", null, player.getUUID());
     }
     private void onDimensionChange(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerChangedDimensionEvent event) {
-        com.mateof24.trigger.TriggerDispatcher.dispatch("dimension_change", com.mateof24.compat.VanillaCompat.keyId(event.getTo()));
+        com.mateof24.trigger.TriggerDispatcher.dispatch("dimension_change",
+                com.mateof24.compat.VanillaCompat.keyId(event.getTo()), event.getEntity().getUUID());
     }
     private void onAdvancementEarned(net.neoforged.neoforge.event.entity.player.AdvancementEvent.AdvancementEarnEvent event) {
-        com.mateof24.trigger.TriggerDispatcher.dispatch("advancement", event.getAdvancement().id().toString());
+        com.mateof24.trigger.TriggerDispatcher.dispatch("advancement",
+                event.getAdvancement().id().toString(), event.getEntity().getUUID());
     }
 
 }

@@ -9,14 +9,14 @@ public class FabricTriggerHandler {
 
     public static void register() {
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
-            if (!(entity instanceof ServerPlayer)) return;
-            TriggerDispatcher.dispatch("player_death", null);
+            if (!(entity instanceof ServerPlayer player)) return;
+            TriggerDispatcher.dispatch("player_death", null, player.getUUID());
         });
 
         // Fabric API 26.1 renamed ServerEntityWorldChangeEvents to
         // ServerEntityLevelChangeEvents ("world" -> "level").
         ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register((player, origin, destination) ->
-                TriggerDispatcher.dispatch("dimension_change", VanillaCompat.dimensionId(destination))
+                TriggerDispatcher.dispatch("dimension_change", VanillaCompat.dimensionId(destination), player.getUUID())
         );
     }
 }

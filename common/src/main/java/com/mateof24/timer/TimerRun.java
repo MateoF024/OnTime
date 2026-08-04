@@ -27,6 +27,16 @@ public final class TimerRun {
         EACH
     }
 
+    /** What a run is doing between ticks. */
+    public enum Phase {
+        /** Ticking, or paused — the timer is the current one either way. */
+        ACTIVE,
+        /** Finished a lap, waiting out the repeat cooldown before the next one. */
+        REPEAT_COOLDOWN,
+        /** Finished, waiting out the sequence cooldown before the next timer starts. */
+        SEQUENCE_COOLDOWN
+    }
+
     private final UUID runId;
     private final String timerName;
     private final Timer timer;
@@ -34,6 +44,34 @@ public final class TimerRun {
     /** Player this run belongs to for {@link Mode#EACH}; null otherwise. */
     private final UUID owner;
     private Audience audience;
+
+    // ---- per-run tick state ----
+    // All of this used to be static on TimerTickHandler, which is the reason a
+    // second execution was impossible: two runs would have shared one cooldown,
+    // one scheduled-command cursor and one command queue.
+
+    private Phase phase = Phase.ACTIVE;
+    private long cooldownRemaining = 0L;
+    /** Timer to start once a sequence cooldown elapses; null when not sequencing. */
+    private String pendingSequenceTimer = null;
+
+    /**
+     * Last displayed second, so scheduled commands fire exactly once when a
+     * threshold is crossed by natural ticking. -1 means "take a fresh baseline
+     * on the next tick", which is what a manual time jump wants: skipping over
+     * a threshold must not fire it.
+     */
+    private long lastCommandSecond = -1L;
+
+    /** Last second written to the scoreboard; -1 forces a write on the first tick. */
+    private long lastScoreboardSecond = -1L;
+
+    /**
+     * Commands waiting on the configured delay, with placeholders already
+     * resolved so {time} and {seconds} reflect the instant they were queued.
+     */
+    private final java.util.ArrayDeque<String> pendingCommands = new java.util.ArrayDeque<>();
+    private long commandDelayRemaining = 0L;
 
     private TimerRun(UUID runId, Timer timer, Audience audience, Mode mode, UUID owner) {
         this.runId = runId;
@@ -108,6 +146,96 @@ public final class TimerRun {
     public void reset() { timer.reset(); }
 
     public String getFormattedTime() { return timer.getFormattedTime(); }
+
+    // ---- phase and cooldowns ----
+
+    public Phase phase() { return phase; }
+
+    /**
+     * True while waiting for the next timer of a sequence. Such a run holds no
+     * timer the player would call "the current one" — the display is cleared
+     * and nothing is ticking — so it is deliberately not reported as active.
+     */
+    public boolean isAwaitingSequence() { return phase == Phase.SEQUENCE_COOLDOWN; }
+
+    public boolean isInCooldown() { return phase != Phase.ACTIVE; }
+
+    public void beginRepeatCooldown(long ticks) {
+        phase = Phase.REPEAT_COOLDOWN;
+        cooldownRemaining = ticks;
+    }
+
+    public void beginSequenceCooldown(String nextTimer, long ticks) {
+        phase = Phase.SEQUENCE_COOLDOWN;
+        pendingSequenceTimer = nextTimer;
+        cooldownRemaining = ticks;
+    }
+
+    /** @return true while the cooldown is still counting down */
+    public boolean tickCooldown() {
+        if (cooldownRemaining > 0) {
+            cooldownRemaining--;
+            return true;
+        }
+        return false;
+    }
+
+    public String pendingSequenceTimer() { return pendingSequenceTimer; }
+
+    public void endCooldown() {
+        phase = Phase.ACTIVE;
+        cooldownRemaining = 0L;
+        pendingSequenceTimer = null;
+    }
+
+    // ---- scheduled command progress ----
+
+    /**
+     * Re-baselines the scheduled-command cursor without firing anything. Used
+     * on a manual time jump: crossing a threshold by hand must not fire it.
+     */
+    public void resetCommandProgress() {
+        lastCommandSecond = -1L;
+    }
+
+    public long lastCommandSecond() { return lastCommandSecond; }
+
+    public void setLastCommandSecond(long second) { this.lastCommandSecond = second; }
+
+    public long lastScoreboardSecond() { return lastScoreboardSecond; }
+
+    public void setLastScoreboardSecond(long second) { this.lastScoreboardSecond = second; }
+
+    // ---- paced command queue ----
+
+    public void queueCommand(String resolvedCommand) { pendingCommands.add(resolvedCommand); }
+
+    public boolean hasPendingCommands() { return !pendingCommands.isEmpty(); }
+
+    public String pollPendingCommand() { return pendingCommands.poll(); }
+
+    public boolean tickCommandDelay() {
+        if (commandDelayRemaining > 0) {
+            commandDelayRemaining--;
+            return true;
+        }
+        return false;
+    }
+
+    public void setCommandDelay(long ticks) { this.commandDelayRemaining = ticks; }
+
+    public void clearPendingCommands() {
+        pendingCommands.clear();
+        commandDelayRemaining = 0L;
+    }
+
+    /** Full reset of the per-run tick state, for /timer stop and friends. */
+    public void cancelPending() {
+        endCooldown();
+        resetCommandProgress();
+        clearPendingCommands();
+        lastScoreboardSecond = -1L;
+    }
 
     @Override
     public String toString() {
