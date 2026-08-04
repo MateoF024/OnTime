@@ -310,9 +310,8 @@ final class RunCommands {
         for (TimerRun run : runs) {
             ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.audience.entry",
                     run.shortId(),
-                    Component.translatable(run.mode() == TimerRun.Mode.EACH
-                            ? "ontime.mode.each" : "ontime.mode.shared"),
-                    describe(ctx, run.audience())), false);
+                    CommandFormat.mode(run),
+                    CommandFormat.audience(ctx.getSource().getServer(), run.audience())), false);
         }
         return runs.size();
     }
@@ -422,20 +421,6 @@ final class RunCommands {
             ctx.getSource().sendSuccess(() ->
                     Component.translatable("ontime.command.selection.shared_note"), false);
         }
-    }
-
-    /** Readable form of an audience for chat: "global" or the player names. */
-    private static Component describe(CommandContext<CommandSourceStack> ctx, Audience audience) {
-        if (audience.isGlobal()) return Component.translatable("ontime.audience.global");
-
-        net.minecraft.server.MinecraftServer server = ctx.getSource().getServer();
-        List<String> names = new ArrayList<>();
-        for (UUID player : audience.players()) {
-            ServerPlayer online = server.getPlayerList().getPlayer(player);
-            names.add(online != null ? online.getName().getString()
-                    : player.toString().substring(0, 8));
-        }
-        return Component.literal(String.join(", ", names));
     }
 
     private static Set<UUID> uuidsOf(Collection<ServerPlayer> players) {

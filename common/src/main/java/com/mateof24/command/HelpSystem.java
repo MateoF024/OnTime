@@ -165,6 +165,13 @@ public class HelpSystem {
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
+                "status",
+                "ontime.help.status.desc",
+                "/timer status <name>",
+                "/timer status speedrun"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
                 "position",
                 "ontime.help.position.desc",
                 "/timer position <default|timer> <preset|clear> [x] [y]",
