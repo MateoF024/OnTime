@@ -303,6 +303,19 @@ public class TimerManager {
         if (runs.remove(run.runId()) != null) saveRuns();
     }
 
+    /**
+     * Ends several executions with a single write. {@code /timer stop} over a
+     * selector can reach every run at once, and one file write per run would
+     * make a mass stop cost as much as the runs it is cancelling.
+     */
+    public void endRuns(Collection<TimerRun> ending) {
+        boolean removed = false;
+        for (TimerRun run : ending) {
+            if (runs.remove(run.runId()) != null) removed = true;
+        }
+        if (removed) saveRuns();
+    }
+
     /** Re-baselines the scheduled-command cursor of every run of this timer. */
     public void resetCommandProgress(String timerName) {
         for (TimerRun run : runs.values()) {

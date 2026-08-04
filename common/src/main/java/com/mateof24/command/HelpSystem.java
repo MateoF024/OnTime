@@ -59,37 +59,53 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "start",
                 "ontime.help.start.desc",
-                "/timer start <name>",
-                "/timer start speedrun"
+                "/timer start <name> [targets] [shared|each]",
+                "/timer start speedrun",
+                "/timer start speedrun @a[team=red]",
+                "/timer start speedrun @a each"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
                 "pause",
                 "ontime.help.pause.desc",
-                "/timer pause [explicit]",
-                "/timer pause"
+                "/timer pause [name] [targets]",
+                "/timer pause",
+                "/timer pause speedrun",
+                "/timer pause speedrun @a[team=red]"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
                 "resume",
                 "ontime.help.resume.desc",
+                "/timer resume [name] [targets]",
                 "/timer resume",
-                "/timer resume"
+                "/timer resume speedrun"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
                 "stop",
                 "ontime.help.stop.desc",
+                "/timer stop [name] [targets]",
                 "/timer stop",
-                "/timer stop"
+                "/timer stop speedrun",
+                "/timer stop speedrun Bob"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
                 "reset",
                 "ontime.help.reset.desc",
-                "/timer reset [name]",
+                "/timer reset [name] [targets]",
                 "/timer reset",
                 "/timer reset speedrun"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "audience",
+                "ontime.help.audience.desc",
+                "/timer audience <name> <list|add|remove> [targets]",
+                "/timer audience speedrun list",
+                "/timer audience speedrun add Bob",
+                "/timer audience speedrun remove @a[team=red]"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(

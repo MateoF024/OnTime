@@ -3,7 +3,6 @@ package com.mateof24.command;
 import com.mateof24.config.ModConfig;
 import com.mateof24.manager.TimerManager;
 import com.mateof24.platform.Services;
-import com.mateof24.tick.TimerTickHandler;
 import com.mateof24.timer.Timer;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -14,10 +13,14 @@ import net.minecraft.network.chat.Component;
 import java.util.Optional;
 
 /**
- * Handlers for the timer lifecycle subcommands:
- * create / set / start / pause / remove / add / stop / reset and the
- * expression variants (expr create / expr set / expr add).
- * The command tree itself is registered by {@link TimerCommands}.
+ * Handlers for the subcommands that edit a timer <em>definition</em>:
+ * create / set / remove / add and the expression variants
+ * (expr create / expr set / expr add).
+ *
+ * <p>Everything that acts on an execution instead — start, pause, resume,
+ * stop, reset, audience — lives in {@link RunCommands}, because it all takes
+ * the same optional name-and-selector arguments and resolves them the same
+ * way. The command tree itself is registered by {@link TimerCommands}.</p>
  */
 final class LifecycleCommands {
 
@@ -134,117 +137,6 @@ final class LifecycleCommands {
         }
     }
 
-    static int startTimer(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-
-        Timer timer = timerOpt.get();
-        if (timer.isRunning()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.start.running", name));
-            return 0;
-        }
-
-        Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
-        if (activeTimer.isPresent() || TimerTickHandler.hasPendingCooldown()) {
-            String activeName = activeTimer.map(Timer::getName).orElse("(cooldown)");
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.start.active", activeName));
-            return 0;
-        }
-
-        if (TimerManager.getInstance().startTimer(name)) {
-            timer = TimerManager.getInstance().getTimer(name).orElseThrow();
-
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.start.success", name), true);
-
-            com.mateof24.network.TimerState.markDirty();
-            return 1;
-        }
-
-        return 0;
-    }
-
-    /** {@code /timer pause} — toggles, kept for compatibility with 4.0.0 scripts. */
-    static int pauseTimer(CommandContext<CommandSourceStack> ctx) {
-        return setRunning(ctx, null);
-    }
-
-    /** {@code /timer pause explicit} — always pauses, never resumes. */
-    static int pauseOnly(CommandContext<CommandSourceStack> ctx) {
-        return setRunning(ctx, Boolean.FALSE);
-    }
-
-    /** {@code /timer resume} — always resumes, never pauses. */
-    static int resumeTimer(CommandContext<CommandSourceStack> ctx) {
-        return setRunning(ctx, Boolean.TRUE);
-    }
-
-    /**
-     * @param running {@code null} toggles (legacy {@code /timer pause}
-     *                behaviour); {@code TRUE}/{@code FALSE} forces the state
-     *                and reports it as a no-op when it already matches.
-     */
-    private static int setRunning(CommandContext<CommandSourceStack> ctx, Boolean running) {
-        Optional<com.mateof24.timer.TimerRun> activeRun = TimerManager.getInstance().getActiveRun()
-                .filter(r -> !r.isAwaitingSequence());
-
-        if (activeRun.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.pause.none"));
-            return 0;
-        }
-
-        com.mateof24.timer.TimerRun run = activeRun.get();
-        Timer timer = run.timer();
-
-        if (running != null && running == run.isRunning()) {
-            ctx.getSource().sendFailure(Component.translatable(
-                    running ? "ontime.command.resume.already" : "ontime.command.pause.already",
-                    timer.getName()));
-            return 0;
-        }
-
-        if (run.isRunning()) {
-            run.setRunning(false);
-            run.mirrorToTimer();
-            TimerManager.getInstance().saveTimers();
-
-            com.mateof24.event.TimerEventBus.fireOnPause(
-                    new com.mateof24.api.TimerInfo(timer.getName(), timer.getCurrentTicks(), timer.getTargetTicks(),
-                            timer.isCountUp(), false, timer.isSilent(), timer.getCommand(),
-                            timer.isRepeat(), timer.getRepeatCount(), timer.getRepeatsDone()));
-
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.pause.success", timer.getName()), true);
-
-            com.mateof24.network.TimerState.markDirty();
-            return 1;
-        } else {
-            // 4.0.0 re-read the whole timers directory here so hand-edited
-            // command fields were picked up on resume. That is a full directory
-            // scan on the server thread every time anyone unpauses, for a case
-            // that is better served by an explicit reload.
-            run.setRunning(true);
-            run.mirrorToTimer();
-            TimerManager.getInstance().saveTimers();
-
-            com.mateof24.event.TimerEventBus.fireOnResume(
-                    new com.mateof24.api.TimerInfo(timer.getName(), timer.getCurrentTicks(), timer.getTargetTicks(),
-                            timer.isCountUp(), true, timer.isSilent(), timer.getCommand(),
-                            timer.isRepeat(), timer.getRepeatCount(), timer.getRepeatsDone()));
-
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.resume.success", timer.getName()), true);
-
-            com.mateof24.network.TimerState.markDirty();
-            return 1;
-        }
-    }
-
     static int removeTimer(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
 
@@ -296,98 +188,6 @@ final class LifecycleCommands {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
-    }
-
-    static int stopTimer(CommandContext<CommandSourceStack> ctx) {
-        Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
-        boolean hasCooldown = TimerTickHandler.hasPendingCooldown();
-
-        if (activeTimer.isEmpty() && !hasCooldown) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.stop.none"));
-            return 0;
-        }
-
-        TimerTickHandler.cancelCooldown();
-
-        if (activeTimer.isPresent()) {
-            Timer timer = activeTimer.get();
-            for (com.mateof24.timer.TimerRun r : TimerManager.getInstance().findRuns(timer.getName(), null)) {
-                r.resetRepeatsDone();
-                r.reset();
-                r.mirrorToTimer();
-            }
-            TimerManager.getInstance().clearActiveTimer();
-            TimerManager.getInstance().saveTimers();
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.stop.success", timer.getName()), true);
-        } else {
-            TimerManager.getInstance().saveTimers();
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.stop.cooldown_cancelled"), true);
-        }
-
-        com.mateof24.network.TimerState.markDirty();
-        return 1;
-    }
-
-    static int resetCurrentTimer(CommandContext<CommandSourceStack> ctx) {
-        Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
-
-        if (activeTimer.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.reset.noactive"));
-            return 0;
-        }
-
-        TimerTickHandler.cancelCooldown();
-
-        Timer timer = activeTimer.get();
-        boolean wasRunning = timer.isRunning();
-        for (com.mateof24.timer.TimerRun r : TimerManager.getInstance().findRuns(timer.getName(), null)) {
-            r.reset();
-            r.mirrorToTimer();
-        }
-        timer.reset();
-        TimerManager.getInstance().saveTimers();
-
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.reset.success", timer.getName()), true);
-
-        if (wasRunning) {
-            com.mateof24.network.TimerState.markDirty();
-        }
-        return 1;
-    }
-
-    static int resetNamedTimer(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-
-        Timer timer = timerOpt.get();
-        boolean wasActive = TimerManager.getInstance().getActiveTimer()
-                .map(t -> t.getName().equals(name))
-                .orElse(false);
-        boolean wasRunning = timer.isRunning();
-
-        for (com.mateof24.timer.TimerRun r : TimerManager.getInstance().findRuns(name, null)) {
-            r.reset();
-            r.mirrorToTimer();
-        }
-        timer.reset();
-        TimerManager.getInstance().saveTimers();
-
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.reset.success", name), true);
-
-        if (wasActive && wasRunning) {
-            com.mateof24.network.TimerState.markDirty();
-        }
-
-        return 1;
     }
 
     static int createTimerWithExpr(CommandContext<CommandSourceStack> ctx, boolean countUp) {

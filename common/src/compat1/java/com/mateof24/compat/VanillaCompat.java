@@ -54,6 +54,21 @@ public final class VanillaCompat {
                 name, Component.literal(name), server, null);
     }
 
+    /**
+     * Same OP level, but executed as the player and from where they stand, so
+     * a per-player timer's command can use {@code @s} and relative
+     * coordinates and mean the person the run belongs to.
+     */
+    public static CommandSourceStack createPlayerCommandSource(MinecraftServer server,
+                                                               net.minecraft.server.level.ServerPlayer player) {
+        // The accessor drifts inside this compat set: serverLevel() up to
+        // 1.21.5, level() covariantly narrowed to ServerLevel from 1.21.6.
+        // Entity.level() plus the cast is the one form both accept.
+        return new CommandSourceStack(server, player.position(), player.getRotationVector(),
+                (ServerLevel) player.level(), 4, player.getName().getString(), player.getDisplayName(),
+                server, player);
+    }
+
     // ------------------------------------------------------------------
     // Identifiers (ResourceLocation renamed to Identifier in 1.21.11)
     // ------------------------------------------------------------------

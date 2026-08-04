@@ -63,6 +63,46 @@ public class TimerCommands {
                                 StringArgumentType.getString(ctx, "text"))));
     }
 
+    /** A run-scoped lifecycle handler: {@code /timer <verb> [<name>] [<targets>]}. */
+    @FunctionalInterface
+    private interface SelectionCommand {
+        int run(CommandContext<CommandSourceStack> ctx, String name,
+                java.util.Collection<net.minecraft.server.level.ServerPlayer> targets)
+                throws com.mojang.brigadier.exceptions.CommandSyntaxException;
+    }
+
+    /**
+     * Builds one of the four lifecycle branches, all of which share the same
+     * shape: no argument (every run), a timer name, or a name and a selector.
+     *
+     * <p>The name argument is declared before the bare selector one on purpose.
+     * Brigadier tries argument children in declaration order, so a plain word
+     * means the timer of that name; {@code @}-selectors fail the word parse and
+     * fall through to the selector branch, which is what makes
+     * {@code /timer stop @a} work without making {@code /timer stop race}
+     * ambiguous.</p>
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> selection(
+            String verb, String permission,
+            com.mojang.brigadier.Command<CommandSourceStack> bare,
+            SelectionCommand selective) {
+        return Commands.literal(verb)
+                .requires(source -> PermissionHelper.hasPermission(source, permission, 4))
+                .executes(bare)
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .suggests(TIMER_SUGGESTIONS)
+                        .executes(ctx -> selective.run(ctx, StringArgumentType.getString(ctx, "name"), null))
+                        .then(Commands.argument("targets", EntityArgument.players())
+                                .executes(ctx -> selective.run(ctx,
+                                        StringArgumentType.getString(ctx, "name"),
+                                        EntityArgument.getPlayers(ctx, "targets")))
+                        )
+                )
+                .then(Commands.argument("targets", EntityArgument.players())
+                        .executes(ctx -> selective.run(ctx, null, EntityArgument.getPlayers(ctx, "targets")))
+                );
+    }
+
     static String formatTime(long totalSeconds) {
         long hours = totalSeconds / 3600;
         long minutes = (totalSeconds % 3600) / 60;
@@ -129,20 +169,48 @@ public class TimerCommands {
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_START, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
-                                .executes(LifecycleCommands::startTimer)
+                                // No selector: a global run, seen by whoever
+                                // connects later. Exactly the 4.0.0 shape.
+                                .executes(ctx -> RunCommands.start(ctx, null, com.mateof24.timer.TimerRun.Mode.SHARED))
+                                .then(Commands.argument("targets", EntityArgument.players())
+                                        .executes(ctx -> RunCommands.start(ctx,
+                                                EntityArgument.getPlayers(ctx, "targets"),
+                                                com.mateof24.timer.TimerRun.Mode.SHARED))
+                                        .then(Commands.literal("shared")
+                                                .executes(ctx -> RunCommands.start(ctx,
+                                                        EntityArgument.getPlayers(ctx, "targets"),
+                                                        com.mateof24.timer.TimerRun.Mode.SHARED)))
+                                        .then(Commands.literal("each")
+                                                .executes(ctx -> RunCommands.start(ctx,
+                                                        EntityArgument.getPlayers(ctx, "targets"),
+                                                        com.mateof24.timer.TimerRun.Mode.EACH)))
+                                )
                         )
                 )
-                .then(Commands.literal("pause")
-                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_PAUSE, 4))
-                        // No argument keeps the 4.0.0 toggle so existing
-                        // command blocks behave the same.
-                        .executes(LifecycleCommands::pauseTimer)
-                        .then(Commands.literal("explicit")
-                                .executes(LifecycleCommands::pauseOnly))
-                )
-                .then(Commands.literal("resume")
-                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_PAUSE, 4))
-                        .executes(LifecycleCommands::resumeTimer)
+                .then(selection("pause", PermissionNodes.TIMER_PAUSE,
+                        // Bare: the 4.0.0 toggle, so existing command blocks
+                        // behave the same. Any argument is explicit and pauses.
+                        ctx -> RunCommands.setRunning(ctx, null, null, null),
+                        (ctx, name, targets) -> RunCommands.setRunning(ctx, Boolean.FALSE, name, targets)))
+                .then(selection("resume", PermissionNodes.TIMER_PAUSE,
+                        ctx -> RunCommands.setRunning(ctx, Boolean.TRUE, null, null),
+                        (ctx, name, targets) -> RunCommands.setRunning(ctx, Boolean.TRUE, name, targets)))
+                .then(Commands.literal("audience")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_AUDIENCE, 4))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(RunCommands::audienceList)
+                                .then(Commands.literal("list")
+                                        .executes(RunCommands::audienceList))
+                                .then(Commands.literal("add")
+                                        .then(Commands.argument("targets", EntityArgument.players())
+                                                .executes(ctx -> RunCommands.audienceEdit(ctx, true,
+                                                        EntityArgument.getPlayers(ctx, "targets")))))
+                                .then(Commands.literal("remove")
+                                        .then(Commands.argument("targets", EntityArgument.players())
+                                                .executes(ctx -> RunCommands.audienceEdit(ctx, false,
+                                                        EntityArgument.getPlayers(ctx, "targets")))))
+                        )
                 )
                 .then(Commands.literal("remove")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_REMOVE, 4))
@@ -222,18 +290,10 @@ public class TimerCommands {
                                         .executes(ctx -> DisplayCommands.applyHideTargets(ctx, null)))
                         )
                 )
-                .then(Commands.literal("stop")
-                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_STOP, 4))
-                        .executes(LifecycleCommands::stopTimer)
-                )
-                .then(Commands.literal("reset")
-                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_RESET, 4))
-                        .executes(LifecycleCommands::resetCurrentTimer)
-                        .then(Commands.argument("name", StringArgumentType.word())
-                                .suggests(TIMER_SUGGESTIONS)
-                                .executes(LifecycleCommands::resetNamedTimer)
-                        )
-                )
+                .then(selection("stop", PermissionNodes.TIMER_STOP,
+                        ctx -> RunCommands.stop(ctx, null, null), RunCommands::stop))
+                .then(selection("reset", PermissionNodes.TIMER_RESET,
+                        ctx -> RunCommands.reset(ctx, null, null), RunCommands::reset))
                 .then(Commands.literal("help")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_HELP, 4))
                         .executes(ctx -> HelpSystem.showHelpPage(ctx.getSource(), 1))

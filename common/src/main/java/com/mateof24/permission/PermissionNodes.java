@@ -26,4 +26,5 @@ public class PermissionNodes {
     public static final String TIMER_WEBPANEL = "ontime.command.webpanel";
     public static final String TIMER_TRIGGER   = "ontime.command.trigger";
     public static final String TIMER_TITLE     = "ontime.command.title";
+    public static final String TIMER_AUDIENCE  = "ontime.command.audience";
 }

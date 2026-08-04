@@ -180,8 +180,7 @@ public class TimerTickHandler {
 
         long currentSecond = run.getCurrentTicks() / 20L;
         if (currentSecond != run.lastScoreboardSecond()) {
-            Services.PLATFORM.updateScoreboardTimer(server,
-                    timer.getName(), currentSecond, run.getTargetTicks() / 20L);
+            updateScoreboard(server, run, currentSecond);
             run.setLastScoreboardSecond(currentSecond);
         }
 
@@ -250,6 +249,30 @@ public class TimerTickHandler {
         if (TimerManager.getInstance().isPrimaryRunOf(run)) run.mirrorToTimer();
     }
 
+    /**
+     * Publishes the run's clock to the {@code ontime_active} objective.
+     *
+     * <p>The timer-name holder keeps meaning what it did in 4.0.0 — the
+     * primary run's clock — so existing {@code /execute if score} setups are
+     * untouched. A run bound to a player <em>adds</em> a holder under that
+     * player's name, which is what makes {@code @s} work per player without
+     * anyone having to create an objective. Both holders can be live at once;
+     * they answer different questions.</p>
+     */
+    private static void updateScoreboard(MinecraftServer server, TimerRun run, long currentSecond) {
+        long targetSecond = run.getTargetTicks() / 20L;
+        if (TimerManager.getInstance().isPrimaryRunOf(run)) {
+            Services.PLATFORM.updateScoreboardTimer(server, run.timerName(), currentSecond, targetSecond);
+        }
+        if (run.owner() != null) {
+            var player = server.getPlayerList().getPlayer(run.owner());
+            if (player != null) {
+                Services.PLATFORM.updateScoreboardTimer(server,
+                        player.getScoreboardName(), currentSecond, targetSecond);
+            }
+        }
+    }
+
     private static void clearDisplay(MinecraftServer server) {
         Services.PLATFORM.clearScoreboardTimer(server);
         com.mateof24.network.TimerState.markDirty();
@@ -258,17 +281,16 @@ public class TimerTickHandler {
     /**
      * Starts any timer whose start trigger or start condition is met.
      *
-     * <p>Nothing is evaluated while a run already exists, and the loop stops at
-     * the first match. Both are deliberate <em>for now</em>: {@link
-     * TimerManager#startTimer} still clears the registry, so evaluating past a
-     * live run would silently kill it. Lifting this is what actually fixes the
-     * long-standing limitation — a timer with a start trigger can never fire
-     * while another one runs — and it can only land once concurrent runs are
-     * legal, in the selectors phase.</p>
+     * <p>Up to 4.0.0 this bailed out entirely while anything was running, and
+     * stopped at the first match — it had to, because starting a timer cleared
+     * the single active pointer, so evaluating past a live run would have
+     * silently killed it. That is the long-standing limitation where a timer
+     * with a start trigger could never fire while another one ran. Concurrent
+     * runs make both guards unnecessary: every eligible timer starts, each in
+     * its own run.</p>
      */
     private static void checkStartConditions(MinecraftServer server) {
         TimerManager manager = TimerManager.getInstance();
-        if (manager.runCount() > 0) return;
 
         for (Timer t : manager.timersView()) {
             if (t.isRunning() || manager.hasRunOf(t.getName())) continue;
@@ -289,7 +311,6 @@ public class TimerTickHandler {
             if (shouldStart) {
                 manager.startTimer(t.getName());
                 com.mateof24.network.TimerState.markDirty();
-                return;
             }
         }
     }
@@ -339,13 +360,13 @@ public class TimerTickHandler {
         if (delayTicks > 0) {
             for (String command : commands) {
                 run.queueCommand(com.mateof24.command.PlaceholderSystem
-                        .replacePlaceholders(command, run.timer()));
+                        .replacePlaceholders(command, run, server));
             }
             return;
         }
         for (String command : commands) {
-            executeResolvedCommand(server,
-                    com.mateof24.command.PlaceholderSystem.replacePlaceholders(command, run.timer()));
+            executeResolvedCommand(server, run,
+                    com.mateof24.command.PlaceholderSystem.replacePlaceholders(command, run, server));
         }
     }
 
@@ -353,18 +374,32 @@ public class TimerTickHandler {
     private static void drainPendingCommands(MinecraftServer server, TimerRun run) {
         if (!run.hasPendingCommands()) return;
         if (run.tickCommandDelay()) return;
-        executeResolvedCommand(server, run.pollPendingCommand());
+        executeResolvedCommand(server, run, run.pollPendingCommand());
         if (run.hasPendingCommands()) {
             run.setCommandDelay(Math.max(1,
                     com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks()));
         }
     }
 
-    private static void executeResolvedCommand(MinecraftServer server, String processedCommand) {
+    /**
+     * Runs the command as the run's own player when it has one, so {@code @s}
+     * and relative coordinates mean that player. A shared or global run has no
+     * owner and keeps the synthetic overworld source.
+     */
+    private static void executeResolvedCommand(MinecraftServer server, TimerRun run, String processedCommand) {
         try {
-            ServerLevel overworld = server.getLevel(ServerLevel.OVERWORLD);
-            if (overworld == null) return;
-            CommandSourceStack source = com.mateof24.compat.VanillaCompat.createCommandSource(server, overworld, "OnTime");
+            CommandSourceStack source = null;
+            if (run != null && run.owner() != null) {
+                var player = server.getPlayerList().getPlayer(run.owner());
+                if (player != null) {
+                    source = com.mateof24.compat.VanillaCompat.createPlayerCommandSource(server, player);
+                }
+            }
+            if (source == null) {
+                ServerLevel overworld = server.getLevel(ServerLevel.OVERWORLD);
+                if (overworld == null) return;
+                source = com.mateof24.compat.VanillaCompat.createCommandSource(server, overworld, "OnTime");
+            }
             server.getCommands().performPrefixedCommand(source, processedCommand);
         } catch (Exception e) {
             com.mateof24.OnTimeConstants.LOGGER.error("Failed to execute timer command: " + processedCommand, e);
