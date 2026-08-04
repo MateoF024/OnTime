@@ -95,6 +95,19 @@ final class RunCommands {
                                TimerRun.Mode mode) {
         TimerManager manager = TimerManager.getInstance();
 
+        // A slot holds one execution per viewer. Checked here as well as when a
+        // position is set, because the two ways to end up with two timers in
+        // the boss bar are moving one onto the other and starting one where the
+        // other already is.
+        Audience requested = players == null ? Audience.global() : Audience.ofPlayers(players);
+        Timer definition = manager.getTimer(name).orElseThrow();
+        String preset = com.mateof24.manager.DisplaySlots.presetOf(definition);
+        TimerRun occupant = com.mateof24.manager.DisplaySlots.occupant(preset, requested, name);
+        if (occupant != null) {
+            DisplayCommands.reportConflict(source, name, requested, preset, occupant);
+            return 0;
+        }
+
         if (players == null) {
             if (manager.startShared(name, Audience.global()) == null) {
                 source.sendFailure(Component.translatable("ontime.command.start.running", name));

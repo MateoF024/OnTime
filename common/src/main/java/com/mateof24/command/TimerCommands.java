@@ -112,6 +112,46 @@ public class TimerCommands {
 
     private static final TimerNameSuggestionProvider TIMER_SUGGESTIONS = new TimerNameSuggestionProvider();
 
+    /** First argument of /timer position: a preset (legacy form), "default", or a timer. */
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestPresetsAndTimers(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        String remaining = builder.getRemaining().toLowerCase();
+        if ("default".startsWith(remaining)) builder.suggest("default");
+        for (TimerPositionPreset preset : TimerPositionPreset.values()) {
+            String name = preset.name().toLowerCase();
+            if (name.startsWith(remaining)) builder.suggest(name);
+        }
+        for (Timer timer : TimerManager.getInstance().timersView()) {
+            if (timer.getName().toLowerCase().startsWith(remaining)) builder.suggest(timer.getName());
+        }
+        return builder.buildFuture();
+    }
+
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestPresetsAndClear(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        String remaining = builder.getRemaining().toLowerCase();
+        if ("clear".startsWith(remaining)) builder.suggest("clear");
+        for (TimerPositionPreset preset : TimerPositionPreset.values()) {
+            String name = preset.name().toLowerCase();
+            if (name.startsWith(remaining)) builder.suggest(name);
+        }
+        return builder.buildFuture();
+    }
+
+    /** First argument of /timer scale: a number (legacy form), "default", or a timer. */
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestScaleAndTimers(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        String remaining = builder.getRemaining().toLowerCase();
+        if ("default".startsWith(remaining)) builder.suggest("default");
+        for (String value : new String[]{"0.5", "1.0", "1.5", "2.0"}) {
+            if (value.startsWith(remaining)) builder.suggest(value);
+        }
+        for (Timer timer : TimerManager.getInstance().timersView()) {
+            if (timer.getName().toLowerCase().startsWith(remaining)) builder.suggest(timer.getName());
+        }
+        return builder.buildFuture();
+    }
+
     private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestDimensions(
             CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
         net.minecraft.server.MinecraftServer server = ctx.getSource().getServer();
@@ -315,18 +355,28 @@ public class TimerCommands {
                                 })
                         )
                 )
+                // position and scale both take "<default|timer> <value>" plus
+                // the 4.0.0 one-argument form that means the global default.
+                // The tree cannot separate them — a preset name and a timer
+                // name are both words — so both shapes share one argument and
+                // the handler decides. That is what keeps every existing
+                // /timer position bossbar parsing.
                 .then(Commands.literal("position")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_POSITION, 4))
-                        .then(Commands.argument("preset", StringArgumentType.word())
-                                .suggests((context, builder) -> {
-                                    for (TimerPositionPreset preset : TimerPositionPreset.values()) {
-                                        String presetName = preset.name().toLowerCase();
-                                        if (presetName.startsWith(builder.getRemaining().toLowerCase()))
-                                            builder.suggest(presetName);
-                                    }
-                                    return builder.buildFuture();
-                                })
-                                .executes(DisplayCommands::setPosition)
+                        .then(Commands.argument("first", StringArgumentType.word())
+                                .suggests(TimerCommands::suggestPresetsAndTimers)
+                                .executes(DisplayCommands::position)
+                                .then(Commands.argument("second", StringArgumentType.word())
+                                        .suggests(TimerCommands::suggestPresetsAndClear)
+                                        .executes(DisplayCommands::position2)
+                                        .then(Commands.argument("x", IntegerArgumentType.integer())
+                                                .then(Commands.argument("y", IntegerArgumentType.integer(0))
+                                                        .executes(ctx -> DisplayCommands.positionCustom(ctx,
+                                                                IntegerArgumentType.getInteger(ctx, "x"),
+                                                                IntegerArgumentType.getInteger(ctx, "y")))
+                                                )
+                                        )
+                                )
                         )
                 )
                 .then(Commands.literal("sound")
@@ -351,8 +401,18 @@ public class TimerCommands {
                 )
                 .then(Commands.literal("scale")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SCALE, 4))
-                        .then(Commands.argument("scale", FloatArgumentType.floatArg(0.1f, 5.0f))
-                                .executes(ctx -> DisplayCommands.setScale(ctx, FloatArgumentType.getFloat(ctx, "scale")))
+                        .then(Commands.argument("first", StringArgumentType.word())
+                                .suggests(TimerCommands::suggestScaleAndTimers)
+                                .executes(DisplayCommands::scale)
+                                .then(Commands.argument("second", StringArgumentType.word())
+                                        .suggests((ctx, builder) -> {
+                                            for (String option : new String[]{"clear", "0.5", "1.0", "1.5", "2.0"}) {
+                                                if (option.startsWith(builder.getRemaining())) builder.suggest(option);
+                                            }
+                                            return builder.buildFuture();
+                                        })
+                                        .executes(DisplayCommands::scale2)
+                                )
                         )
                 )
                 .then(Commands.literal("command")

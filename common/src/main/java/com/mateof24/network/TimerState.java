@@ -107,9 +107,7 @@ public final class TimerState {
         Timer timer = run.timer();
         ModConfig config = ModConfig.getInstance();
 
-        String preset = timer.getPosition() != null
-                ? timer.getPosition()
-                : config.getPositionPreset().name();
+        String preset = com.mateof24.manager.DisplaySlots.presetOf(timer);
         int x = timer.getTimerX() != null ? timer.getTimerX() : config.getTimerX();
         int y = timer.getTimerY() != null ? timer.getTimerY() : config.getTimerY();
         float scale = timer.getScale() != null ? timer.getScale() : config.getTimerScale();
