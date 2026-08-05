@@ -115,6 +115,7 @@ public final class AdminOps {
                 case "timer.setPosition" -> setPosition(args);
                 case "timer.setScale" -> setScale(args);
                 case "timer.setSilent" -> setSilent(args);
+            case "timer.setDisplay" -> setDisplay(args);
 
                 case "run.start" -> startRun(server, args);
                 case "run.pause" -> runAction(args, OnTimeAPI.getInstance()::pauseRun, "It is already paused");
@@ -447,6 +448,65 @@ public final class AdminOps {
                 ? args.get("scale").getAsFloat() : null;
         if (scale != null && (scale < 0.1f || scale > 5.0f)) return Result.fail("Scale must be between 0.1 and 5");
         return OnTimeAPI.getInstance().setTimerScale(name, scale) ? Result.ok() : Result.fail("Could not set the scale");
+    }
+
+    /**
+     * One field of one timer's look or sound.
+     *
+     * <p>Deliberately shaped like {@code config.set}: same key names, same one
+     * key per message. A panel that sent the whole block back would silently
+     * undo whatever another admin changed between the snapshot it drew and the
+     * button that was pressed — and these are now twelve settings per timer,
+     * so the window is not small.</p>
+     */
+    private static Result setDisplay(JsonObject args) {
+        String name = requireTimer(args);
+        if (name == null) return Result.fail("No such timer");
+        String key = str(args, "key");
+        if (key == null || !args.has("value")) return Result.fail("Missing key or value");
+
+        com.mateof24.timer.Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
+        if (timer == null) return Result.fail("No such timer");
+        com.mateof24.timer.TimerDisplay display = timer.display();
+
+        switch (key) {
+            case "preset" -> {
+                String preset = args.get("value").getAsString();
+                if (TimerPositionPreset.parse(preset) == null) return Result.fail("Unknown preset");
+                // Through the API so the slot rule gets its say: two counters
+                // on one anchor would draw on top of each other.
+                if (!OnTimeAPI.getInstance().setTimerPosition(name, preset)) {
+                    return Result.fail("That slot is taken for this audience");
+                }
+                return Result.ok();
+            }
+            case "x" -> display.setX(args.get("value").getAsInt());
+            case "y" -> display.setY(args.get("value").getAsInt());
+            case "scale" -> {
+                float scale = (float) args.get("value").getAsDouble();
+                if (scale < 0.1f || scale > 5.0f) return Result.fail("Scale must be between 0.1 and 5");
+                display.setScale(scale);
+            }
+            case "colorHigh" -> display.setColorHigh(args.get("value").getAsInt());
+            case "colorMid" -> display.setColorMid(args.get("value").getAsInt());
+            case "colorLow" -> display.setColorLow(args.get("value").getAsInt());
+            case "thresholdMid" -> display.setThresholdMid(args.get("value").getAsInt());
+            case "thresholdLow" -> display.setThresholdLow(args.get("value").getAsInt());
+            case "soundId" -> {
+                String id = args.get("value").getAsString().trim();
+                if (id.isEmpty()) return Result.fail("Sound id cannot be empty");
+                display.setSoundId(id);
+            }
+            case "soundVolume" -> display.setSoundVolume((float) args.get("value").getAsDouble());
+            case "soundPitch" -> display.setSoundPitch((float) args.get("value").getAsDouble());
+            default -> {
+                return Result.fail("Unknown display setting '" + key + "'");
+            }
+        }
+
+        TimerManager.getInstance().saveTimer(timer);
+        com.mateof24.network.TimerState.markDirty();
+        return Result.ok();
     }
 
     private static Result setSilent(JsonObject args) {

@@ -43,13 +43,28 @@ public final class SettingsForm {
      * One line of the form. A row with a {@code header} is a section title and
      * has no control.
      */
-    public record Row(String header, String key, Kind kind) {
+    public record Row(String header, String key, Kind kind, String displayKey) {
 
-        static Row header(String header) { return new Row(header, null, null); }
+        static Row header(String header) { return new Row(header, null, null, null); }
 
-        static Row of(String key, Kind kind) { return new Row(null, key, kind); }
+        static Row of(String key, Kind kind) { return new Row(null, key, kind, null); }
+
+        /**
+         * A setting that also exists on a timer, and the name it goes by there.
+         *
+         * <p>The two differ — the server calls it {@code timerScale} because it
+         * is the default for every timer, a timer calls it {@code scale}
+         * because it is simply its scale — and carrying both here is what lets
+         * one row definition serve both forms.</p>
+         */
+        static Row of(String key, Kind kind, String displayKey) {
+            return new Row(null, key, kind, displayKey);
+        }
 
         public boolean isHeader() { return header != null; }
+
+        /** True when this setting can be given per timer as well. */
+        public boolean perTimer() { return displayKey != null; }
     }
 
     /** Presets in the order the cycle button walks them. */
@@ -59,22 +74,22 @@ public final class SettingsForm {
 
     private static final List<Row> ROWS = List.of(
             Row.header("display"),
-            Row.of("positionPreset", Kind.PRESET),
-            Row.of("timerX", Kind.INT),
-            Row.of("timerY", Kind.INT),
-            Row.of("timerScale", Kind.FLOAT),
+            Row.of("positionPreset", Kind.PRESET, "preset"),
+            Row.of("timerX", Kind.INT, "x"),
+            Row.of("timerY", Kind.INT, "y"),
+            Row.of("timerScale", Kind.FLOAT, "scale"),
 
             Row.header("colors"),
-            Row.of("colorHigh", Kind.COLOR),
-            Row.of("colorMid", Kind.COLOR),
-            Row.of("colorLow", Kind.COLOR),
-            Row.of("thresholdMid", Kind.INT),
-            Row.of("thresholdLow", Kind.INT),
+            Row.of("colorHigh", Kind.COLOR, "colorHigh"),
+            Row.of("colorMid", Kind.COLOR, "colorMid"),
+            Row.of("colorLow", Kind.COLOR, "colorLow"),
+            Row.of("thresholdMid", Kind.INT, "thresholdMid"),
+            Row.of("thresholdLow", Kind.INT, "thresholdLow"),
 
             Row.header("sound"),
-            Row.of("timerSoundId", Kind.STRING),
-            Row.of("timerSoundVolume", Kind.FLOAT),
-            Row.of("timerSoundPitch", Kind.FLOAT),
+            Row.of("timerSoundId", Kind.STRING, "soundId"),
+            Row.of("timerSoundVolume", Kind.FLOAT, "soundVolume"),
+            Row.of("timerSoundPitch", Kind.FLOAT, "soundPitch"),
 
             Row.header("server"),
             Row.of("maxTimerSeconds", Kind.INT),
@@ -87,6 +102,30 @@ public final class SettingsForm {
             Row.of("webPanelPort", Kind.INT));
 
     public static List<Row> rows() { return ROWS; }
+
+    /** The subset a timer owns a copy of, headers included. */
+    public static List<Row> displayRows() { return DISPLAY_ROWS; }
+
+    private static final List<Row> DISPLAY_ROWS = buildDisplayRows();
+
+    private static List<Row> buildDisplayRows() {
+        List<Row> out = new ArrayList<>();
+        String header = null;
+        for (Row row : ROWS) {
+            if (row.isHeader()) {
+                header = row.header();
+            } else if (row.perTimer()) {
+                // The group heading comes along, but only once something under
+                // it turns out to belong to a timer.
+                if (header != null) {
+                    out.add(Row.header(header));
+                    header = null;
+                }
+                out.add(row);
+            }
+        }
+        return List.copyOf(out);
+    }
 
     /** Edits not yet applied, by key. */
     private final Map<String, String> pending = new LinkedHashMap<>();

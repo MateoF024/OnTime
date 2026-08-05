@@ -65,7 +65,8 @@ public final class AdminModel {
             long sequenceCooldownTicks,
             boolean hasTitles,
             List<Scheduled> scheduled,
-            List<String> finishCommands
+            List<String> finishCommands,
+            JsonObject display
     ) {
 
         public boolean hasCommands() { return !scheduled.isEmpty() || !finishCommands.isEmpty(); }
@@ -159,6 +160,13 @@ public final class AdminModel {
     public List<RunRow> runs() { return runs; }
 
     public List<TimerRow> timers() { return timers; }
+
+    /** The definition by name, or null when it has gone. */
+    public TimerRow timer(String name) {
+        if (name == null) return null;
+        for (TimerRow row : timers) if (row.name().equals(name)) return row;
+        return null;
+    }
 
     /** The definition a run belongs to, or null when it has gone. */
     public TimerRow timerOf(RunRow run) {
@@ -272,7 +280,9 @@ public final class AdminModel {
                     num(json, "sequenceCooldownTicks"),
                     hasTitles,
                     List.copyOf(scheduled),
-                    List.copyOf(finish)));
+                    List.copyOf(finish),
+                    json.has("display") && json.get("display").isJsonObject()
+                            ? json.getAsJsonObject("display") : new JsonObject()));
         }
         return out;
     }
