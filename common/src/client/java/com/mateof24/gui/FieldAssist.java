@@ -1,6 +1,7 @@
 package com.mateof24.gui;
 
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,6 +48,9 @@ public final class FieldAssist {
         SOUNDS
     }
 
+    /** Clearance the list keeps from the edge of the screen. */
+    private static final int MARGIN = 12;
+
     // Taken from CommandSuggestions so the list is indistinguishable from the
     // one chat draws.
     private static final int MAX_SHOWN = 10;
@@ -71,7 +75,8 @@ public final class FieldAssist {
     public static final int KEY_KP_ENTER = 335;
     public static final int KEY_ESCAPE = 256;
 
-    private record Field(EditBox box, Predicate<String> valid, Source source, java.util.function.IntSupplier tint) {}
+    private record Field(EditBox box, Predicate<String> valid, Source source,
+                        java.util.function.IntSupplier tint, Tooltip tooltip) {}
 
     private final List<Field> fields = new ArrayList<>();
     private final List<String> matches = new ArrayList<>();
@@ -95,22 +100,27 @@ public final class FieldAssist {
         this.host = host;
     }
 
+    /**
+     * Registers a field.
+     *
+     * <p>The tooltip is handed over rather than left on the widget because it
+     * has to come off again: vanilla shows a widget's tooltip while it is
+     * <em>focused</em>, not only while it is hovered, so one left on a text
+     * field hangs over the text being typed into it and will not go away.</p>
+     *
+     * @param tint the colour for valid text, or null for the ordinary one
+     */
+    public void add(EditBox box, Predicate<String> valid, Source source,
+                    Tooltip tooltip, java.util.function.IntSupplier tint) {
+        if (box != null) fields.add(new Field(box, valid, source, tint, tooltip));
+    }
+
     public void add(EditBox box, Predicate<String> valid, Source source) {
-        if (box != null) fields.add(new Field(box, valid, source, null));
+        add(box, valid, source, null, null);
     }
 
     public void add(EditBox box, Predicate<String> valid) {
-        add(box, valid, Source.NONE);
-    }
-
-    /**
-     * A field whose valid text has a colour of its own — the hex colour fields,
-     * which read in the colour they name.
-     *
-     * @param tint the colour to draw valid text in, computed fresh each frame
-     */
-    public void addTinted(EditBox box, Predicate<String> valid, java.util.function.IntSupplier tint) {
-        if (box != null) fields.add(new Field(box, valid, Source.NONE, tint));
+        add(box, valid, Source.NONE, null, null);
     }
 
     // ---- rules ----
@@ -180,12 +190,23 @@ public final class FieldAssist {
         EditBox focused = null;
         Source source = Source.NONE;
         for (Field field : fields) {
-            String text = field.box().getValue();
+            EditBox box = field.box();
+            String text = box.getValue();
             boolean bad = !text.isBlank() && !field.valid().test(text);
-            int good = field.tint() != null ? field.tint().getAsInt() : VALID_TEXT;
-            field.box().setTextColor(bad ? INVALID_TEXT : good);
-            if (focused == null && field.box().isFocused() && field.source() != Source.NONE) {
-                focused = field.box();
+            // Only ask a tinted field for its colour once the text is known to
+            // parse. Asking first is what crashed the game: half of #FF8800 is
+            // not a colour, and the supplier had nothing to return.
+            box.setTextColor(bad || field.tint() == null
+                    ? (bad ? INVALID_TEXT : VALID_TEXT)
+                    : field.tint().getAsInt());
+
+            // Off while this field is being typed into, back on when it is not.
+            if (field.tooltip() != null) {
+                box.setTooltip(box.isFocused() ? null : field.tooltip());
+            }
+
+            if (focused == null && box.isFocused() && field.source() != Source.NONE) {
+                focused = box;
                 source = field.source();
             }
         }
@@ -209,8 +230,9 @@ public final class FieldAssist {
     private void hover(int mouseX, int mouseY) {
         if (matches.isEmpty()) return;
         int row = (mouseY - popupTop()) / LINE_HEIGHT;
-        int x = target.getX() - 1;
-        if (row >= 0 && row < shownCount() && mouseX >= x && mouseX <= x + width()) {
+        int w = width();
+        int x = popupX(w);
+        if (row >= 0 && row < shownCount() && mouseX >= x && mouseX <= x + w) {
             selected = offset + row;
             clampOffset();
         }
@@ -265,16 +287,30 @@ public final class FieldAssist {
         return soundIds;
     }
 
-    /** Writes the rest of the highlighted entry into the field as ghost text, as commands do. */
+    /**
+     * Writes the rest of the highlighted entry into the field as ghost text.
+     *
+     * <p>Trimmed to what is left of the field. Vanilla draws the suggestion
+     * straight after the visible text and clips nothing, so an untrimmed one
+     * runs out of the box and across whatever is beside it — and a sound id is
+     * routinely longer than the field it goes in.</p>
+     */
     private void updateGhost(String typed) {
         if (target == null) return;
         String selection = selectedText();
-        if (selection != null && selection.length() > typed.length()
-                && selection.regionMatches(true, 0, typed, 0, typed.length())) {
-            target.setSuggestion(selection.substring(typed.length()));
-        } else {
+        if (selection == null || selection.length() <= typed.length()
+                || !selection.regionMatches(true, 0, typed, 0, typed.length())) {
             target.setSuggestion(null);
+            return;
         }
+
+        String rest = selection.substring(typed.length());
+        net.minecraft.client.gui.Font font = host != null ? host.font() : null;
+        if (font != null) {
+            int room = target.getInnerWidth() - font.width(typed);
+            rest = room <= 0 ? "" : font.plainSubstrByWidth(rest, room);
+        }
+        target.setSuggestion(rest.isEmpty() ? null : rest);
     }
 
     private String selectedText() {
@@ -352,8 +388,10 @@ public final class FieldAssist {
         if (isEmpty()) return false;
         int row = (int) ((mouseY - popupTop()) / LINE_HEIGHT);
         int index = offset + row;
+        int w = width();
+        int x = popupX(w);
         if (row < 0 || row >= shownCount() || index >= matches.size()
-                || mouseX < target.getX() - 1 || mouseX > target.getX() - 1 + width()) {
+                || mouseX < x || mouseX > x + w) {
             return false;
         }
         selected = index;
@@ -373,10 +411,10 @@ public final class FieldAssist {
      */
     public void render(Painter painter) {
         if (isEmpty()) return;
-        int x = target.getX() - 1;
         int top = popupTop();
         int w = width();
         int rows = shownCount();
+        int x = popupX(w);
 
         painter.rect(x, top, w, rows * LINE_HEIGHT, PANEL_COLOR);
         for (int i = 0; i < rows; i++) {
@@ -392,6 +430,17 @@ public final class FieldAssist {
 
     private int popupTop() {
         return target.getY() + target.getHeight();
+    }
+
+    /**
+     * Left edge of the list: under its field, but pulled back inside the
+     * screen when the entries are wider than the room to the right of it.
+     */
+    private int popupX(int width) {
+        int x = target.getX() - 1;
+        if (host == null) return x;
+        int limit = host.panelWidth() - MARGIN - width;
+        return Math.max(MARGIN, Math.min(x, limit));
     }
 
     private int width() {

@@ -294,9 +294,8 @@ public final class AdminPanel {
                 box.setMaxLength(64);
                 box.setValue(settings.displayed(model, row));
                 box.setResponder(text -> settings.put(row.key(), text));
-                box.setTooltip(Tooltip.create(Component.translatable(tooltipKey)));
                 host.addWidget(box);
-                register(box, row);
+                register(box, row, Tooltip.create(Component.translatable(tooltipKey)));
             }
         }
     }
@@ -307,22 +306,29 @@ public final class AdminPanel {
      * <p>One statement per kind, so a field cannot end up validating against
      * one rule and completing from another.</p>
      */
-    private void register(EditBox box, SettingsForm.Row row) {
+    private void register(EditBox box, SettingsForm.Row row, Tooltip tooltip) {
         switch (row.kind()) {
-            case COLOR ->
+            case COLOR -> {
                 // Valid text reads in the colour it names, so a wrong digit is
-                // visible before it is applied.
-                    assist.addTinted(box, FieldAssist.hexColor(),
-                            () -> 0xFF000000 | SettingsForm.colorOf(box.getValue()));
-            case STRING -> {
-                if ("timerSoundId".equals(row.key())) {
-                    assist.add(box, FieldAssist.id(), FieldAssist.Source.SOUNDS);
-                } else {
-                    assist.add(box, text -> true);
-                }
+                // visible before it is applied. Only ever asked once the text
+                // has been found to parse.
+                Integer parsed = SettingsForm.colorOf(box.getValue());
+                assist.add(box, FieldAssist.hexColor(), FieldAssist.Source.NONE, tooltip,
+                        () -> {
+                            Integer color = SettingsForm.colorOf(box.getValue());
+                            return color == null ? 0xFFFFFFFF : 0xFF000000 | color;
+                        });
+                if (parsed == null) box.setTextColor(COLOR_ERROR);
             }
-            case INT -> assist.add(box, FieldAssist.intBetween(intFloor(row.key()), Integer.MAX_VALUE));
-            case FLOAT -> assist.add(box, FieldAssist.decimalBetween(floatFloor(row.key()), floatCeil(row.key())));
+            case STRING -> assist.add(box,
+                    "timerSoundId".equals(row.key()) ? FieldAssist.id() : text -> true,
+                    "timerSoundId".equals(row.key()) ? FieldAssist.Source.SOUNDS : FieldAssist.Source.NONE,
+                    tooltip, null);
+            case INT -> assist.add(box, FieldAssist.intBetween(intFloor(row.key()), Integer.MAX_VALUE),
+                    FieldAssist.Source.NONE, tooltip, null);
+            case FLOAT -> assist.add(box,
+                    FieldAssist.decimalBetween(floatFloor(row.key()), floatCeil(row.key())),
+                    FieldAssist.Source.NONE, tooltip, null);
             default -> { }
         }
     }
