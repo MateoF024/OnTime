@@ -49,10 +49,7 @@ public class AdminScreen extends Screen implements PanelHost {
         panel.init();
         // A snapshot landing while the panel is open reloads the data and lays
         // it out again, so another admin's changes appear without a keypress.
-        AdminClientState.setListener(() -> {
-            panel.refresh(AdminClientState.get());
-            panel.init();
-        });
+        AdminClientState.setListener(() -> panel.onSnapshot(AdminClientState.get()));
     }
 
     /**

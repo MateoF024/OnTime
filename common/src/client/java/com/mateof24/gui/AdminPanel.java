@@ -3,6 +3,7 @@ package com.mateof24.gui;
 import com.google.gson.JsonObject;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
 
@@ -101,6 +102,12 @@ public final class AdminPanel {
      */
     private String confirmOp = null;
 
+    private final SettingsForm settings = new SettingsForm();
+
+    /** Row height of the settings form: a control plus air. */
+    private static final int SETTING_HEIGHT = 22;
+    private int settingsRows = 1;
+
     /** {@code {x, y, colour}} per visible row, for the state mark in the gutter. */
     private final List<int[]> rowMarks = new ArrayList<>();
     /** The rows currently on screen, parallel to {@link #rowMarks}. */
@@ -114,6 +121,20 @@ public final class AdminPanel {
 
     public void refresh(JsonObject state) {
         model.apply(state);
+    }
+
+    /**
+     * A snapshot landed while the panel is open.
+     *
+     * <p>The runs list is rebuilt, because its content is exactly what
+     * changed. The settings form is not: rebuilding it once a second would
+     * take the caret out of whichever field is being typed in. It reloads when
+     * the tab is entered or the edits are discarded, which is when its values
+     * can have moved without the operator doing it.</p>
+     */
+    public void onSnapshot(JsonObject state) {
+        model.apply(state);
+        if (model.tab() != AdminModel.Tab.SETTINGS) init();
     }
 
     // ==================================================================
@@ -193,7 +214,71 @@ public final class AdminPanel {
         if (model.tab() == AdminModel.Tab.RUNS) {
             buildRunRows();
             buildRunActions();
+        } else if (model.tab() == AdminModel.Tab.SETTINGS) {
+            buildSettings();
         }
+    }
+
+    // ---- the settings form ----
+
+    private int settingsTop() {
+        return headerRowY;
+    }
+
+    private void buildSettings() {
+        int top = settingsTop();
+        settingsRows = Math.max(1, (contentBottom - top) / SETTING_HEIGHT);
+        List<SettingsForm.Row> rows = SettingsForm.rows();
+        scroll = Math.max(0, Math.min(Math.max(0, rows.size() - settingsRows), scroll));
+
+        int controlWidth = Math.min(140, (width - 2 * GUTTER) / 2);
+        int controlX = width - GUTTER - controlWidth;
+
+        for (int i = 0; i < settingsRows && scroll + i < rows.size(); i++) {
+            SettingsForm.Row row = rows.get(scroll + i);
+            if (row.isHeader()) continue;
+            int y = top + i * SETTING_HEIGHT;
+            String tooltipKey = "ontime.config." + snake(row.key()) + ".tooltip";
+
+            if (row.kind() == SettingsForm.Kind.BOOL || row.kind() == SettingsForm.Kind.PRESET) {
+                // A button that shows its value and advances on click. That is
+                // what CycleButton looks like, without CycleButton's drift:
+                // 26.2 changed its builder and dropped withInitialValue.
+                String value = settings.displayed(model, row);
+                host.addWidget(Button.builder(cycleLabel(row, value), b -> {
+                            settings.put(row.key(), settings.cycled(row, value));
+                            init();
+                        })
+                        .bounds(controlX, y, controlWidth, 18)
+                        .tooltip(Tooltip.create(Component.translatable(tooltipKey)))
+                        .build());
+            } else {
+                EditBox box = new EditBox(host.font(), controlX, y, controlWidth, 18,
+                        Component.translatable("ontime.config." + snake(row.key())));
+                box.setMaxLength(64);
+                box.setValue(settings.displayed(model, row));
+                box.setResponder(text -> settings.put(row.key(), text));
+                box.setTooltip(Tooltip.create(Component.translatable(tooltipKey)));
+                host.addWidget(box);
+            }
+        }
+    }
+
+    private Component cycleLabel(SettingsForm.Row row, String value) {
+        if (row.kind() == SettingsForm.Kind.BOOL) {
+            return Component.translatable(Boolean.parseBoolean(value) ? "options.on" : "options.off");
+        }
+        return Component.literal(value);
+    }
+
+    /** {@code timerSoundId} to {@code timer_sound_id}, which is how the keys read. */
+    private static String snake(String camel) {
+        StringBuilder out = new StringBuilder();
+        for (char c : camel.toCharArray()) {
+            if (Character.isUpperCase(c)) out.append('_').append(Character.toLowerCase(c));
+            else out.append(c);
+        }
+        return out.toString();
     }
 
     // ---- the confirmation ----
@@ -238,6 +323,28 @@ public final class AdminPanel {
                 .bounds(doneX, 5, doneWidth, 20)
                 .build());
 
+        if (model.tab() == AdminModel.Tab.SETTINGS) {
+            int applyWidth = 62;
+            int discardWidth = 62;
+            Button apply = Button.builder(Component.translatable("ontime.gui.settings.apply"),
+                            b -> applySettings())
+                    .bounds(doneX - 6 - applyWidth, 5, applyWidth, 20)
+                    .tooltip(Tooltip.create(Component.translatable("ontime.gui.settings.apply.tip")))
+                    .build();
+            apply.active = settings.isDirty();
+            host.addWidget(apply);
+
+            Button discard = Button.builder(Component.translatable("ontime.gui.settings.discard"), b -> {
+                        settings.discard();
+                        model.clearMessage();
+                        init();
+                    })
+                    .bounds(doneX - 12 - applyWidth - discardWidth, 5, discardWidth, 20)
+                    .build();
+            discard.active = settings.isDirty();
+            host.addWidget(discard);
+        }
+
         if (model.tab() == AdminModel.Tab.RUNS && !model.runs().isEmpty()) {
             int stopAllWidth = 76;
             // Red, and it asks first: it sits next to Done, it ends every
@@ -268,6 +375,7 @@ public final class AdminPanel {
                             b -> {
                                 model.setTab(tab);
                                 model.clearMessage();
+                                settings.discard();
                                 scroll = 0;
                                 init();
                             })
@@ -400,8 +508,39 @@ public final class AdminPanel {
             case RUNS -> drawRuns(painter);
             case TIMERS -> painter.text(Component.translatable("ontime.gui.timers.pending"),
                     GUTTER, contentTop, COLOR_TEXT);
-            case SETTINGS -> painter.text(Component.translatable("ontime.gui.settings.pending"),
-                    GUTTER, contentTop, COLOR_TEXT);
+            case SETTINGS -> drawSettings(painter);
+        }
+    }
+
+    private void drawSettings(Painter painter) {
+        int top = settingsTop();
+        List<SettingsForm.Row> rows = SettingsForm.rows();
+
+        for (int i = 0; i < settingsRows && scroll + i < rows.size(); i++) {
+            SettingsForm.Row row = rows.get(scroll + i);
+            int y = top + i * SETTING_HEIGHT;
+
+            if (row.isHeader()) {
+                painter.text(Component.translatable("ontime.gui.settings.group." + row.header()),
+                        GUTTER, y + 6, COLOR_TEXT);
+                painter.rect(GUTTER, y + 6 + LINE - 1, width - 2 * GUTTER, 1, COLOR_RULE);
+                continue;
+            }
+
+            // An edited row is marked in the gutter the same way a running
+            // execution is: colour, in the margin, no glyph.
+            if (settings.isEdited(row.key())) {
+                painter.rect(GUTTER - 6, y + 2, MARK_WIDTH, 14, COLOR_PAUSED);
+            }
+            painter.text(Component.translatable("ontime.config." + snake(row.key())),
+                    GUTTER, y + 5, COLOR_TEXT);
+        }
+
+        if (rows.size() > settingsRows) {
+            Component range = Component.translatable("ontime.gui.runs.scroll",
+                    scroll + 1, Math.min(scroll + settingsRows, rows.size()), rows.size());
+            painter.text(range, width - GUTTER - painter.textWidth(range),
+                    contentBottom - LINE, COLOR_TEXT);
         }
     }
 
@@ -498,8 +637,9 @@ public final class AdminPanel {
                 detailX, y + 14, COLOR_TEXT);
 
         painter.text(Component.translatable("ontime.gui.runs.detail.clock",
-                        clockWithArrow(row),
+                        com.mateof24.render.ClientTimerState.formatTicks(row.currentTicks()),
                         com.mateof24.render.ClientTimerState.formatTicks(row.targetTicks()),
+                        arrowOf(row),
                         Component.translatable(row.countUp()
                                 ? "ontime.mode.countup" : "ontime.mode.countdown")),
                 detailX, y + 14 + LINE, COLOR_TEXT);
@@ -546,8 +686,12 @@ public final class AdminPanel {
      * a countdown is going reads without spending a word on it.
      */
     private static Component clockWithArrow(AdminModel.RunRow row) {
-        return Component.literal((row.countUp() ? "↑ " : "↓ ")
+        return Component.literal(arrowOf(row) + " "
                 + com.mateof24.render.ClientTimerState.formatTicks(row.currentTicks()));
+    }
+
+    private static String arrowOf(AdminModel.RunRow row) {
+        return row.countUp() ? "↑" : "↓";
     }
 
     private static Component audienceOf(AdminModel.RunRow row) {
@@ -581,11 +725,21 @@ public final class AdminPanel {
      * range, which is why it is the only one the screen overrides.
      */
     public boolean mouseScrolled(double amount) {
-        if (model.tab() != AdminModel.Tab.RUNS) return false;
-        if (model.runs().size() <= visibleRows) return false;
+        int total;
+        int shown;
+        if (model.tab() == AdminModel.Tab.RUNS) {
+            total = model.runs().size();
+            shown = visibleRows;
+        } else if (model.tab() == AdminModel.Tab.SETTINGS) {
+            total = SettingsForm.rows().size();
+            shown = settingsRows;
+        } else {
+            return false;
+        }
+        if (total <= shown) return false;
+
         int before = scroll;
-        scroll -= (int) Math.signum(amount);
-        clampScroll();
+        scroll = Math.max(0, Math.min(total - shown, scroll - (int) Math.signum(amount)));
         if (scroll == before) return false;
         init();
         return true;
@@ -612,6 +766,28 @@ public final class AdminPanel {
         request.addProperty("op", op);
         request.add("args", args);
         host.sendAction(request.toString());
+    }
+
+    /**
+     * Sends every pending edit, one {@code config.set} each.
+     *
+     * <p>One key at a time is deliberate on the server side: a panel that sent
+     * the whole config back would silently undo whatever another admin changed
+     * between the snapshot it drew and the button that was pressed.</p>
+     */
+    private void applySettings() {
+        SettingsForm.Result result = settings.build();
+        for (JsonObject args : result.requests()) {
+            JsonObject request = new JsonObject();
+            request.addProperty("op", "config.set");
+            request.add("args", args);
+            host.sendAction(request.toString());
+        }
+        if (!result.rejected().isEmpty()) {
+            model.setMessage(String.join(", ", result.rejected()), true);
+        }
+        settings.discard();
+        init();
     }
 
     /** Tells the server the panel is gone, so it stops pushing state. */
