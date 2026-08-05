@@ -134,6 +134,9 @@ public final class AdminPanel {
      */
     private Button applyButton, discardButton;
 
+    /** Set by Apply, cleared by the snapshot that carries the answer. */
+    private boolean awaitingApply = false;
+
     /** Field validation and the completion list, for every text field on the panel. */
     private final FieldAssist assist = new FieldAssist();
 
@@ -168,7 +171,16 @@ public final class AdminPanel {
     public void onSnapshot(JsonObject state) {
         model.apply(state);
         clock.onSnapshot(model.runs());
-        if (model.tab() != AdminModel.Tab.SETTINGS) init();
+        if (model.tab() != AdminModel.Tab.SETTINGS) {
+            init();
+        } else if (awaitingApply) {
+            // The one snapshot the settings tab does want. Applying sends the
+            // values and the server answers a moment later; without this the
+            // fields keep showing what was there before the click, for good,
+            // because this tab deliberately ignores every other snapshot.
+            awaitingApply = false;
+            init();
+        }
     }
 
     // ==================================================================
@@ -1131,6 +1143,7 @@ public final class AdminPanel {
             model.setMessage(String.join(", ", result.rejected()), true);
         }
         settings.discard();
+        awaitingApply = !result.requests().isEmpty();
         init();
     }
 

@@ -87,6 +87,9 @@ public final class FieldAssist {
 
     private PanelHost host;
 
+    /** Where the pointer was last frame, so a still one stops voting. */
+    private int lastMouseX = Integer.MIN_VALUE, lastMouseY = Integer.MIN_VALUE;
+
     /** Cached because a registry walk per frame is a walk per frame. */
     private static List<String> soundIds = null;
 
@@ -226,9 +229,22 @@ public final class FieldAssist {
         updateGhost(target.getValue());
     }
 
-    /** Moves the highlight to the row the pointer is over, if it is over one. */
+    /**
+     * Moves the highlight to the row the pointer is over — but only when the
+     * pointer has actually moved.
+     *
+     * <p>This runs every frame, and the list opens directly under the field
+     * that was just clicked, so the pointer is usually resting on it. Voting
+     * unconditionally meant an arrow key moved the highlight and the very next
+     * frame put it back under the cursor: the keyboard looked dead and only the
+     * mouse appeared to work at all.</p>
+     */
     private void hover(int mouseX, int mouseY) {
-        if (matches.isEmpty()) return;
+        boolean moved = mouseX != lastMouseX || mouseY != lastMouseY;
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
+        if (!moved || matches.isEmpty()) return;
+
         int row = (mouseY - popupTop()) / LINE_HEIGHT;
         int w = width();
         int x = popupX(w);
@@ -244,7 +260,7 @@ public final class FieldAssist {
         if (typed.isEmpty()) return;
 
         for (String candidate : candidates(source)) {
-            if (candidate.equals(typed)) {
+            if (candidate.equals(typed) || candidate.equals("minecraft:" + typed)) {
                 matches.clear();
                 return; // already an exact match; nothing useful left to offer
             }
@@ -258,13 +274,43 @@ public final class FieldAssist {
     }
 
     /**
-     * Whether a candidate answers to what has been typed, the way a command
-     * argument does: with no namespace given, the path alone is enough.
+     * Whether a candidate answers to what has been typed, by vanilla's rule.
+     *
+     * <p>Read out of {@code SharedSuggestionProvider} rather than guessed at:
+     * the needle has to start a <em>segment</em>, where a segment begins at the
+     * front of the string or straight after one of {@code . _ /}. That is why
+     * typing {@code exp} into {@code /playsound} finds
+     * {@code entity.experience_orb.pickup} and {@code entity.generic.explode}
+     * alike, and it is the difference between a completion list and a filter.
+     * With no namespace typed, the namespace and the path are each tried, the
+     * path only for {@code minecraft} — the same two chances vanilla gives.</p>
      */
     private static boolean startsWithLoosely(String candidate, String needle) {
-        if (candidate.startsWith(needle)) return true;
+        if (needle.indexOf(':') >= 0) return matchesSegment(candidate, needle);
+
         int colon = candidate.indexOf(':');
-        return !needle.contains(":") && colon >= 0 && candidate.substring(colon + 1).startsWith(needle);
+        String namespace = colon < 0 ? "minecraft" : candidate.substring(0, colon);
+        String path = colon < 0 ? candidate : candidate.substring(colon + 1);
+        return matchesSegment(namespace, needle)
+                || ("minecraft".equals(namespace) && matchesSegment(path, needle));
+    }
+
+    /** True when {@code needle} starts the text or any segment of it. */
+    private static boolean matchesSegment(String text, String needle) {
+        for (int i = 0; !text.startsWith(needle, i); i++) {
+            i = indexOfSplitter(text, i);
+            if (i < 0) return false;
+        }
+        return true;
+    }
+
+    /** The separators vanilla treats as the start of a new segment. */
+    private static int indexOfSplitter(String text, int from) {
+        for (int i = Math.max(0, from); i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '.' || c == '_' || c == '/') return i;
+        }
+        return -1;
     }
 
     private static List<String> candidates(Source source) {
