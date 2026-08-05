@@ -263,7 +263,6 @@
   "ontime.gui.runs.empty": "Nothing is running.",
   "ontime.gui.runs.none_hint": "Start one from the Timers tab, or with /timer start.",
   "ontime.gui.runs.pick_hint": "Pick an execution to act on it",
-  "ontime.gui.runs.row": "%s      %s      %s",
   "ontime.gui.runs.scroll": "%s–%s of %s",
   "ontime.gui.runs.stop_all": "Stop all",
   "ontime.gui.runs.detail.audience": "Seen by %s (%s)",
@@ -274,5 +273,18 @@
   "ontime.gui.action.stop": "Stop",
   "ontime.gui.timers.pending": "Coming in the next step",
   "ontime.gui.settings.pending": "Coming in the next step",
-  "ontime.gui.runs.detail.id": "Execution %s"
+  "ontime.gui.runs.detail.id": "Execution %s",
+  "ontime.gui.runs.col.timer": "TIMER",
+  "ontime.gui.runs.col.audience": "SEEN BY",
+  "ontime.gui.runs.col.time": "TIME",
+  "ontime.gui.runs.row.tip": "Show and control this execution of %s",
+  "ontime.gui.runs.stop_all.tip": "End every execution on the server",
+  "ontime.gui.action.pause.tip": "Freeze this execution's clock",
+  "ontime.gui.action.resume.tip": "Let this execution's clock run again",
+  "ontime.gui.action.reset.tip": "Back to its starting time, still running",
+  "ontime.gui.action.stop.tip": "End it: the clock resets and the execution is gone",
+  "ontime.gui.state.running": "RUNNING",
+  "ontime.gui.state.paused": "PAUSED",
+  "ontime.gui.state.repeat_cooldown": "REPEAT COOLDOWN",
+  "ontime.gui.state.sequence_cooldown": "SEQUENCE COOLDOWN"
 }

@@ -137,15 +137,6 @@ public class AdminScreen extends Screen implements PanelHost {
             graphics.drawString(font(), text, x, y, argb, true);
         }
 
-        @Override
-        public void flatText(Component text, int x, int y, int argb) {
-            graphics.drawString(font(), text, x, y, argb, false);
-        }
-
-        @Override
-        public void centeredText(Component text, int centerX, int y, int argb) {
-            graphics.drawString(font(), text, centerX - font().width(text) / 2, y, argb, true);
-        }
 
         @Override
         public void rect(int x, int y, int width, int height, int argb) {

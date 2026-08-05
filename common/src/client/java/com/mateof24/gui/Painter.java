@@ -17,14 +17,16 @@ import net.minecraft.network.chat.Component;
  */
 public interface Painter {
 
-    /** Text with a drop shadow, which is what vanilla uses for anything on a dark panel. */
+    /**
+     * Text, always with a drop shadow.
+     *
+     * <p>There is deliberately no unshadowed variant. The panel floats over the
+     * world, and grey text without a shadow disappears entirely against a
+     * bright sky — which is exactly what happened to the first version of this
+     * screen. Hierarchy comes from position and spacing; colour is reserved for
+     * saying what state something is in.</p>
+     */
     void text(Component text, int x, int y, int argb);
-
-    /** Text without a shadow, for dimmer secondary rows. */
-    void flatText(Component text, int x, int y, int argb);
-
-    /** Text centred horizontally on {@code centerX}. */
-    void centeredText(Component text, int centerX, int y, int argb);
 
     /** Filled rectangle, x/y being the top-left corner. */
     void rect(int x, int y, int width, int height, int argb);

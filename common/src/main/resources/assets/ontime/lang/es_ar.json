@@ -263,7 +263,6 @@
   "ontime.gui.runs.empty": "No hay nada en curso.",
   "ontime.gui.runs.none_hint": "Arranca uno desde la pestaña Contadores, o con /timer start.",
   "ontime.gui.runs.pick_hint": "Elige una ejecución para actuar sobre ella",
-  "ontime.gui.runs.row": "%s      %s      %s",
   "ontime.gui.runs.scroll": "%s–%s de %s",
   "ontime.gui.runs.stop_all": "Detener todo",
   "ontime.gui.runs.detail.audience": "La ven %s (%s)",
@@ -274,5 +273,18 @@
   "ontime.gui.action.stop": "Detener",
   "ontime.gui.timers.pending": "Llega en el siguiente paso",
   "ontime.gui.settings.pending": "Llega en el siguiente paso",
-  "ontime.gui.runs.detail.id": "Ejecución %s"
+  "ontime.gui.runs.detail.id": "Ejecución %s",
+  "ontime.gui.runs.col.timer": "CONTADOR",
+  "ontime.gui.runs.col.audience": "LO VEN",
+  "ontime.gui.runs.col.time": "TIEMPO",
+  "ontime.gui.runs.row.tip": "Ver y controlar esta ejecución de %s",
+  "ontime.gui.runs.stop_all.tip": "Terminar todas las ejecuciones del servidor",
+  "ontime.gui.action.pause.tip": "Congelar el reloj de esta ejecución",
+  "ontime.gui.action.resume.tip": "Dejar que el reloj vuelva a correr",
+  "ontime.gui.action.reset.tip": "Vuelve a su tiempo inicial, sigue en curso",
+  "ontime.gui.action.stop.tip": "Terminarla: el reloj se reinicia y la ejecución desaparece",
+  "ontime.gui.state.running": "EN MARCHA",
+  "ontime.gui.state.paused": "PAUSADA",
+  "ontime.gui.state.repeat_cooldown": "ESPERA DE REPETICIÓN",
+  "ontime.gui.state.sequence_cooldown": "ESPERA DE SECUENCIA"
 }
