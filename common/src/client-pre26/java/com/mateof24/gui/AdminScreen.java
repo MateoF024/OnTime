@@ -51,10 +51,19 @@ public class AdminScreen extends Screen implements PanelHost {
         });
     }
 
+    /**
+     * Bands first, then the screen, then the text.
+     *
+     * <p>The order is the whole trick. Anything filled that is drawn after
+     * {@code super} lands on top of every button and greys the lot — which is
+     * exactly what happened the first time this was written.</p>
+     */
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        Painter painter = new GfxPainter(graphics);
+        panel.drawBands(painter);
         super.render(graphics, mouseX, mouseY, partialTick);
-        panel.draw(new GfxPainter(graphics), mouseX, mouseY);
+        panel.drawContent(painter);
     }
 
     /** The one input override that is identical on every version in range. */
