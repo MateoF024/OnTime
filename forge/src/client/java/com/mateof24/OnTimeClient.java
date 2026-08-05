@@ -18,6 +18,12 @@ public class OnTimeClient {
         // No config screen extension point any more: the mod's settings live on
         // the server and are edited from /timer gui, which cannot be opened
         // from the mod list because there is no state without a server.
+        // The panel's two ends: the per-version screen registers how to open
+        // itself, the loader registers how to send an action.
+        com.mateof24.gui.AdminScreen.register();
+        com.mateof24.gui.AdminClientState.setSender(
+                com.mateof24.network.ClientAdminSender::sendAdminAction);
+
         NeoForge.EVENT_BUS.addListener(OnTimeClient::onRenderGui);
         NeoForge.EVENT_BUS.addListener(OnTimeClient::onClientTick);
     }

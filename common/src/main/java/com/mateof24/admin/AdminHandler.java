@@ -65,9 +65,18 @@ public final class AdminHandler {
         }
     }
 
-    /** Opens the panel for a player who ran {@code /timer gui}. */
+    /**
+     * Opens the panel for a player who ran {@code /timer gui}.
+     *
+     * <p>This snapshot is flagged {@code open}; the heartbeats that follow are
+     * not. Without the distinction the client could not tell "you asked for
+     * this" from "here is the state again", and closing the panel would fight
+     * the next push a second later.</p>
+     */
     public static void open(MinecraftServer server, ServerPlayer player) {
         AdminSubscriptions.subscribe(player);
-        Services.PLATFORM.sendAdminState(player, AdminOps.state(server).toString());
+        JsonObject state = AdminOps.state(server);
+        state.addProperty("open", true);
+        Services.PLATFORM.sendAdminState(player, state.toString());
     }
 }

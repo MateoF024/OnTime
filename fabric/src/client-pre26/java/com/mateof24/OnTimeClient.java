@@ -12,6 +12,10 @@ public class OnTimeClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ClientNetworkHandler.registerClientPackets();
+        // The panel's two ends: the per-version screen registers how to open
+        // itself, the loader registers how to send an action.
+        com.mateof24.gui.AdminScreen.register();
+        com.mateof24.gui.AdminClientState.setSender(ClientNetworkHandler::sendAdminAction);
         HudRenderCallback.EVENT.register(TimerRenderer::render);
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             ClientTimerState.tick();

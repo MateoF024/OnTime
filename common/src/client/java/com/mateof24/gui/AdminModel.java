@@ -1,0 +1,251 @@
+package com.mateof24.gui;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * The panel's state: the server's snapshot read into plain rows, plus what the
+ * operator has selected.
+ *
+ * <p>No Minecraft types anywhere in here, which is the point — this is the half
+ * of the screen that can be written once and read without knowing anything
+ * about widgets. What is left for the per-version files is drawing and input,
+ * and nothing else.</p>
+ */
+public final class AdminModel {
+
+    /** The three jobs the panel is for, which is why there are three tabs. */
+    public enum Tab { RUNS, TIMERS, SETTINGS }
+
+    public record RunRow(
+            String runId,
+            String timerName,
+            long currentTicks,
+            long targetTicks,
+            boolean countUp,
+            boolean running,
+            String mode,
+            String phase,
+            String ownerName,
+            boolean audienceGlobal,
+            List<String> audienceNames
+    ) {
+        public boolean inCooldown() { return !"ACTIVE".equals(phase); }
+
+        public boolean each() { return "EACH".equals(mode); }
+
+        /** How many players it reaches, or -1 for a global audience. */
+        public int audienceSize() { return audienceGlobal ? -1 : audienceNames.size(); }
+    }
+
+    public record TimerRow(
+            String name,
+            long targetTicks,
+            boolean countUp,
+            boolean silent,
+            String resolvedPreset,
+            boolean inheritsPreset,
+            Float scale,
+            int runCount,
+            boolean repeat,
+            String nextTimer,
+            boolean hasTitles,
+            boolean hasCommands
+    ) {}
+
+    public record PlayerRow(String uuid, String name, String team) {}
+
+    private Tab tab = Tab.RUNS;
+    private String selectedRunId = null;
+    private String selectedTimer = null;
+    private String filter = "";
+    private String message = null;
+    private boolean messageIsError = false;
+
+    private List<RunRow> runs = List.of();
+    private List<TimerRow> timers = List.of();
+    private List<PlayerRow> players = List.of();
+    private JsonObject config = new JsonObject();
+
+    /**
+     * Reloads from a snapshot, keeping the selection when what was selected is
+     * still there.
+     *
+     * <p>The panel is repainted from the server once a second, so a selection
+     * that reset on every snapshot would be unusable — you would lose the row
+     * you were about to click.</p>
+     */
+    public void apply(JsonObject state) {
+        if (state == null) return;
+        runs = readRuns(state.getAsJsonArray("runs"));
+        timers = readTimers(state.getAsJsonArray("timers"));
+        players = readPlayers(state.getAsJsonArray("players"));
+        config = state.has("config") ? state.getAsJsonObject("config") : new JsonObject();
+
+        if (selectedRunId != null && runs.stream().noneMatch(r -> r.runId().equals(selectedRunId))) {
+            selectedRunId = null;
+        }
+        if (selectedTimer != null && timers.stream().noneMatch(t -> t.name().equals(selectedTimer))) {
+            selectedTimer = null;
+        }
+    }
+
+    // ---- selection and view state ----
+
+    public Tab tab() { return tab; }
+
+    public void setTab(Tab tab) { this.tab = tab; }
+
+    public String selectedRunId() { return selectedRunId; }
+
+    public void selectRun(String runId) {
+        selectedRunId = runId != null && runId.equals(selectedRunId) ? null : runId;
+    }
+
+    public RunRow selectedRun() {
+        if (selectedRunId == null) return null;
+        for (RunRow row : runs) if (row.runId().equals(selectedRunId)) return row;
+        return null;
+    }
+
+    public String selectedTimer() { return selectedTimer; }
+
+    public void selectTimer(String name) {
+        selectedTimer = name != null && name.equals(selectedTimer) ? null : name;
+    }
+
+    public String filter() { return filter; }
+
+    public void setFilter(String filter) { this.filter = filter == null ? "" : filter; }
+
+    /** Last thing the server said about an action, shown in the panel rather than in chat. */
+    public void setMessage(String message, boolean error) {
+        this.message = message;
+        this.messageIsError = error;
+    }
+
+    public String message() { return message; }
+
+    public boolean messageIsError() { return messageIsError; }
+
+    public void clearMessage() { message = null; }
+
+    // ---- data ----
+
+    public List<RunRow> runs() { return runs; }
+
+    public List<TimerRow> timers() { return timers; }
+
+    /** Definitions matching the search box, or all of them when it is empty. */
+    public List<TimerRow> filteredTimers() {
+        if (filter.isEmpty()) return timers;
+        String needle = filter.toLowerCase(Locale.ROOT);
+        List<TimerRow> out = new ArrayList<>();
+        for (TimerRow row : timers) {
+            if (row.name().toLowerCase(Locale.ROOT).contains(needle)) out.add(row);
+        }
+        return out;
+    }
+
+    public List<PlayerRow> players() { return players; }
+
+    public JsonObject config() { return config; }
+
+    public int configInt(String key, int fallback) {
+        return config.has(key) && !config.get(key).isJsonNull() ? config.get(key).getAsInt() : fallback;
+    }
+
+    public float configFloat(String key, float fallback) {
+        return config.has(key) && !config.get(key).isJsonNull() ? config.get(key).getAsFloat() : fallback;
+    }
+
+    public String configString(String key, String fallback) {
+        return config.has(key) && !config.get(key).isJsonNull() ? config.get(key).getAsString() : fallback;
+    }
+
+    public boolean configBool(String key, boolean fallback) {
+        return config.has(key) && !config.get(key).isJsonNull() ? config.get(key).getAsBoolean() : fallback;
+    }
+
+    // ---- reading ----
+
+    private static List<RunRow> readRuns(JsonArray array) {
+        List<RunRow> out = new ArrayList<>();
+        if (array == null) return out;
+        for (JsonElement element : array) {
+            JsonObject json = element.getAsJsonObject();
+            List<String> names = new ArrayList<>();
+            if (json.has("audience")) {
+                for (JsonElement member : json.getAsJsonArray("audience")) {
+                    names.add(str(member.getAsJsonObject(), "name", "?"));
+                }
+            }
+            out.add(new RunRow(
+                    str(json, "runId", ""),
+                    str(json, "timerName", ""),
+                    num(json, "currentTicks"),
+                    num(json, "targetTicks"),
+                    bool(json, "countUp"),
+                    bool(json, "running"),
+                    str(json, "mode", "SHARED"),
+                    str(json, "phase", "ACTIVE"),
+                    str(json, "ownerName", null),
+                    "GLOBAL".equals(str(json, "audienceScope", "GLOBAL")),
+                    List.copyOf(names)));
+        }
+        return out;
+    }
+
+    private static List<TimerRow> readTimers(JsonArray array) {
+        List<TimerRow> out = new ArrayList<>();
+        if (array == null) return out;
+        for (JsonElement element : array) {
+            JsonObject json = element.getAsJsonObject();
+            boolean hasTitles = json.has("titles") && json.getAsJsonObject("titles").size() > 0;
+            boolean hasCommands = (json.has("finishCommand") && !json.get("finishCommand").isJsonNull())
+                    || (json.has("finishCommands") && json.getAsJsonArray("finishCommands").size() > 0)
+                    || (json.has("scheduled") && json.getAsJsonArray("scheduled").size() > 0);
+            out.add(new TimerRow(
+                    str(json, "name", ""),
+                    num(json, "targetTicks"),
+                    bool(json, "countUp"),
+                    bool(json, "silent"),
+                    str(json, "resolvedPreset", "BOSSBAR"),
+                    !json.has("position") || json.get("position").isJsonNull(),
+                    json.has("scale") && !json.get("scale").isJsonNull() ? json.get("scale").getAsFloat() : null,
+                    (int) num(json, "runCount"),
+                    bool(json, "repeat"),
+                    str(json, "nextTimer", null),
+                    hasTitles,
+                    hasCommands));
+        }
+        return out;
+    }
+
+    private static List<PlayerRow> readPlayers(JsonArray array) {
+        List<PlayerRow> out = new ArrayList<>();
+        if (array == null) return out;
+        for (JsonElement element : array) {
+            JsonObject json = element.getAsJsonObject();
+            out.add(new PlayerRow(str(json, "uuid", ""), str(json, "name", "?"), str(json, "team", null)));
+        }
+        return out;
+    }
+
+    private static String str(JsonObject json, String key, String fallback) {
+        return json.has(key) && !json.get(key).isJsonNull() ? json.get(key).getAsString() : fallback;
+    }
+
+    private static long num(JsonObject json, String key) {
+        return json.has(key) && !json.get(key).isJsonNull() ? json.get(key).getAsLong() : 0L;
+    }
+
+    private static boolean bool(JsonObject json, String key) {
+        return json.has(key) && !json.get(key).isJsonNull() && json.get(key).getAsBoolean();
+    }
+}

@@ -14,6 +14,10 @@ public class OnTimeClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ClientNetworkHandler.registerClientPackets();
+        // The panel's two ends: the per-version screen registers how to open
+        // itself, the loader registers how to send an action.
+        com.mateof24.gui.AdminScreen.register();
+        com.mateof24.gui.AdminClientState.setSender(ClientNetworkHandler::sendAdminAction);
         // HudRenderCallback was removed in Fabric API 26.1: the HUD is now a
         // registry of named elements. Attached after the boss bar so the timer
         // draws in the same order as the old end-of-frame callback.

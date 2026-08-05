@@ -20,8 +20,16 @@ public final class AdminClientState {
 
     private static JsonObject state = null;
     private static Runnable listener = null;
+    private static Runnable opener = null;
+    private static java.util.function.Consumer<String> sender = null;
 
-    /** Applies a snapshot. Called on the client thread. */
+    /**
+     * Applies a snapshot. Called on the client thread.
+     *
+     * <p>Only the first snapshot after {@code /timer gui} carries {@code open},
+     * and only that one opens the screen. The heartbeats that follow must not,
+     * or closing the panel would fight the next push a second later.</p>
+     */
     public static void accept(String json) {
         try {
             state = JsonParser.parseString(json).getAsJsonObject();
@@ -29,7 +37,24 @@ public final class AdminClientState {
             com.mateof24.OnTimeConstants.LOGGER.warn("[OnTime/Admin] unreadable panel state", e);
             return;
         }
-        if (listener != null) listener.run();
+        boolean open = state.has("open") && state.get("open").getAsBoolean();
+        if (open && opener != null) opener.run();
+        else if (listener != null) listener.run();
+    }
+
+    /** Registered by the per-version screen, which is the only place that can build one. */
+    public static void setOpener(Runnable onOpen) {
+        opener = onOpen;
+    }
+
+    /** Registered by the loader, which is the only place that knows how to send. */
+    public static void setSender(java.util.function.Consumer<String> onSend) {
+        sender = onSend;
+    }
+
+    /** Sends one action. Silently does nothing when no loader registered a sender. */
+    public static void send(String json) {
+        if (sender != null) sender.accept(json);
     }
 
     /** The current snapshot, or null when no panel has been opened this session. */
