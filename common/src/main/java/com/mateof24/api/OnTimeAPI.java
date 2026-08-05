@@ -173,7 +173,7 @@ public class OnTimeAPI {
                 return false;
             }
         }
-        timer.setPosition(preset);
+        timer.display().setPreset(resolved);
         TimerManager.getInstance().saveTimer(timer);
         com.mateof24.network.TimerState.markDirty();
         return true;
@@ -182,18 +182,26 @@ public class OnTimeAPI {
     /** Pins this timer at screen coordinates, which also puts it on {@code CUSTOM}. */
     public boolean setTimerCustomPosition(String name, int x, int y) {
         return TimerManager.getInstance().getTimer(name).map(timer -> {
-            timer.setPosition(com.mateof24.config.TimerPositionPreset.CUSTOM.name());
-            timer.setCustomPosition(x, y);
+            timer.display().setPreset(com.mateof24.config.TimerPositionPreset.CUSTOM.name());
+            timer.display().setX(x);
+            timer.display().setY(y);
             TimerManager.getInstance().saveTimer(timer);
             com.mateof24.network.TimerState.markDirty();
             return true;
         }).orElse(false);
     }
 
-    /** Text scale for this timer, or null to inherit the server default. */
+    /**
+     * Text scale for this timer.
+     *
+     * <p>Null means "take the current server default" rather than "inherit
+     * it": a timer owns its own scale from the moment it is created, so there
+     * is nothing left to inherit from.</p>
+     */
     public boolean setTimerScale(String name, Float scale) {
         return TimerManager.getInstance().getTimer(name).map(timer -> {
-            timer.setScale(scale);
+            timer.display().setScale(scale != null ? scale
+                    : com.mateof24.config.ModConfig.getInstance().getTimerScale());
             TimerManager.getInstance().saveTimer(timer);
             com.mateof24.network.TimerState.markDirty();
             return true;

@@ -32,7 +32,6 @@ public class ModConfig {
     }
 
     // Variables Configurables (Valores Predeterminados)
-    public static Runnable onSaveHook = null;
     private int timerX = -1;
     private int timerY = 4;
     private TimerPositionPreset positionPreset = TimerPositionPreset.BOSSBAR;
@@ -125,13 +124,12 @@ public class ModConfig {
 
     /**
      * Set by the setters, cleared by {@link #save()}. Every setter used to
-     * write the file AND fire {@link #onSaveHook}, which broadcasts the
-     * display config to every client — so saving a config screen produced one
-     * disk write and one broadcast per field touched.
+     * write the file on the spot, so saving a config screen produced one disk
+     * write per field touched.
      */
     private boolean dirty = false;
 
-    /** Writes and broadcasts only if a setter actually changed something. */
+    /** Writes only if a setter actually changed something. */
     public void flush() {
         if (!dirty) return;
         save();
@@ -167,7 +165,6 @@ public class ModConfig {
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to save config", e);
         }
-        if (onSaveHook != null) onSaveHook.run();
     }
 
 

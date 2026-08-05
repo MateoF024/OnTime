@@ -35,9 +35,7 @@ public final class DisplaySlots {
      * check must never disagree about where a timer is.</p>
      */
     public static String presetOf(Timer timer) {
-        TimerPositionPreset preset = timer.getPosition() != null
-                ? TimerPositionPreset.parse(timer.getPosition())
-                : null;
+        TimerPositionPreset preset = TimerPositionPreset.parse(timer.display().preset());
         if (preset == null) preset = ModConfig.getInstance().getPositionPreset();
         return preset.name();
     }

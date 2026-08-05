@@ -58,7 +58,11 @@ public final class PlaceholderResolvers {
     }
 
     private static Component coloured(TimerRunInfo run) {
-        int color = ModConfig.getInstance().getColorForPercentage(run.percentage());
+        // The timer's own colours. Falling back to the defaults would colour a
+        // placeholder differently from the counter it is quoting.
+        int color = com.mateof24.manager.TimerManager.getInstance().getTimer(run.timerName())
+                .map(timer -> timer.display().colorFor(run.percentage()))
+                .orElseGet(() -> ModConfig.getInstance().getColorForPercentage(run.percentage()));
         return Component.literal(run.formattedTime()).withStyle(s -> s.withColor(0xFF000000 | color));
     }
 

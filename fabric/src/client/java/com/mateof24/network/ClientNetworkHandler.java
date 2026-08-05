@@ -18,15 +18,6 @@ public class ClientNetworkHandler {
                 context.client().execute(() -> ClientTimerState.setPlayerSilent(payload.silent()))
         );
 
-        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.TimerDisplayConfigPayload.TYPE, (payload, context) ->
-                context.client().execute(() -> ClientTimerState.updateDisplayConfig(
-                        payload.timerX(), payload.timerY(), payload.positionPreset(), payload.scale(),
-                        payload.colorHigh(), payload.colorMid(), payload.colorLow(),
-                        payload.thresholdMid(), payload.thresholdLow(),
-                        payload.soundId(), payload.soundVolume(), payload.soundPitch()
-                ))
-        );
-
         ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.AdminStatePayload.TYPE, (payload, context) ->
                 context.client().execute(() -> com.mateof24.gui.AdminClientState.accept(payload.json()))
         );

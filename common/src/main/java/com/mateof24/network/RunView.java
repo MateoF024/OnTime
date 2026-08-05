@@ -7,9 +7,11 @@ package com.mateof24.network;
  * it free of Minecraft types lets the whole "what does this player see"
  * decision live in common, with the per-loader code reduced to a codec.</p>
  *
- * <p>{@code preset}, {@code x}, {@code y} and {@code scale} are already
- * resolved here — the timer's own override if it has one, the global default
- * otherwise — so the client never has to know which of the two it got.</p>
+ * <p>Everything about how the run looks and sounds travels with it. It used to
+ * be two packets — the runs in one, a single global set of colours and a sound
+ * in another — which is exactly why editing a colour repainted every counter
+ * on the server. Now each timer owns its own, so each run carries its own, and
+ * there is nothing global left to accidentally share.</p>
  */
 public record RunView(
         java.util.UUID runId,
@@ -26,6 +28,21 @@ public record RunView(
         String preset,
         int x,
         int y,
-        float scale
+        float scale,
+        int colorHigh,
+        int colorMid,
+        int colorLow,
+        int thresholdMid,
+        int thresholdLow,
+        String soundId,
+        float soundVolume,
+        float soundPitch
 ) {
+
+    /** The colour this run wears right now, at a given percentage of its span. */
+    public int colorFor(float percentage) {
+        if (percentage >= thresholdMid) return colorHigh;
+        if (percentage >= thresholdLow) return colorMid;
+        return colorLow;
+    }
 }

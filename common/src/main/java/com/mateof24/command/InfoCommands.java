@@ -153,26 +153,15 @@ final class InfoCommands {
         return 1;
     }
 
-    /** Preset and scale, each marked when it comes from the global default. */
+    /** Where this timer draws and how big. Its own values, always. */
     private static Component display(Timer timer) {
         String preset = DisplaySlots.presetOf(timer);
         String presetName = TimerPositionPreset.valueOf(preset).getDisplayName();
-        if (timer.getPosition() == null) {
-            presetName = presetName + " " + inheritedMark();
-        } else if (TimerPositionPreset.CUSTOM.name().equals(preset)) {
-            ModConfig config = ModConfig.getInstance();
-            int x = timer.getTimerX() != null ? timer.getTimerX() : config.getTimerX();
-            int y = timer.getTimerY() != null ? timer.getTimerY() : config.getTimerY();
-            presetName = presetName + " (" + x + ", " + y + ")";
+        if (TimerPositionPreset.CUSTOM.name().equals(preset)) {
+            presetName = presetName + " (" + timer.display().x() + ", " + timer.display().y() + ")";
         }
-
-        float scale = timer.getScale() != null ? timer.getScale() : ModConfig.getInstance().getTimerScale();
-        String scaleText = String.valueOf(scale) + (timer.getScale() == null ? " " + inheritedMark() : "");
-        return Component.translatable("ontime.command.status.display", presetName, scaleText);
-    }
-
-    private static String inheritedMark() {
-        return "§7(*)§f";
+        return Component.translatable("ontime.command.status.display",
+                presetName, String.valueOf(timer.display().scale()));
     }
 
     private static Component titles(Timer timer) {

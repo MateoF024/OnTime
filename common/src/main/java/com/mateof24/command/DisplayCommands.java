@@ -79,13 +79,15 @@ final class DisplayCommands {
         }
 
         if (CLEAR.equalsIgnoreCase(second)) {
-            String inherited = ModConfig.getInstance().getPositionPreset().name();
-            if (!checkSlot(ctx, timer, inherited)) return 0;
-            timer.setPosition(null);
-            timer.setCustomPosition(null, null);
+            ModConfig config = ModConfig.getInstance();
+            String fresh = config.getPositionPreset().name();
+            if (!checkSlot(ctx, timer, fresh)) return 0;
+            timer.display().setPreset(fresh);
+            timer.display().setX(config.getTimerX());
+            timer.display().setY(config.getTimerY());
             TimerManager.getInstance().saveTimer(timer);
             ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.position.cleared", first), true);
+                    Component.translatable("ontime.command.position.reset", first), true);
             com.mateof24.network.TimerState.markDirty();
             return 1;
         }
@@ -97,7 +99,7 @@ final class DisplayCommands {
         }
         if (!checkSlot(ctx, timer, preset.name())) return 0;
 
-        timer.setPosition(preset.name());
+        timer.display().setPreset(preset.name());
         TimerManager.getInstance().saveTimer(timer);
         ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.position.timer",
                 first, preset.getDisplayName()), true);
@@ -140,8 +142,9 @@ final class DisplayCommands {
             return 0;
         }
 
-        timer.setPosition(preset);
-        timer.setCustomPosition(x, y);
+        timer.display().setPreset(preset);
+        timer.display().setX(x);
+        timer.display().setY(y);
         TimerManager.getInstance().saveTimer(timer);
         ctx.getSource().sendSuccess(() ->
                 Component.translatable("ontime.command.position.custom", first, x, y), true);
@@ -150,17 +153,8 @@ final class DisplayCommands {
     }
 
     private static int setDefaultPosition(CommandContext<CommandSourceStack> ctx, TimerPositionPreset preset) {
-        // Runs that inherit the default all move at once, so the change can
-        // collide two of them that were fine a moment ago.
-        for (TimerRun run : TimerManager.getInstance().runsView()) {
-            if (run.timer().getPosition() != null) continue;
-            TimerRun other = DisplaySlots.occupant(preset.name(), run.audience(), run.timerName());
-            if (other != null) {
-                reportConflict(ctx.getSource(), run.timerName(), run.audience(), preset.name(), other);
-                return 0;
-            }
-        }
-
+        // No slot check: this sets what the next timer will be created with,
+        // and nothing already on screen moves because of it.
         ModConfig.getInstance().setPositionPreset(preset);
         ctx.getSource().sendSuccess(() ->
                 Component.translatable("ontime.command.position.success", preset.getDisplayName()), true);
@@ -183,9 +177,7 @@ final class DisplayCommands {
     private static int showTimerPosition(CommandContext<CommandSourceStack> ctx, String name) {
         Timer timer = TimerManager.getInstance().getTimer(name).orElseThrow();
         String preset = DisplaySlots.presetOf(timer);
-        boolean inherited = timer.getPosition() == null;
-        ctx.getSource().sendSuccess(() -> Component.translatable(
-                inherited ? "ontime.command.position.view_inherited" : "ontime.command.position.view",
+        ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.position.view",
                 name, TimerPositionPreset.valueOf(preset).getDisplayName()), false);
         return 1;
     }
@@ -264,11 +256,9 @@ final class DisplayCommands {
 
         if (TimerManager.getInstance().hasTimer(first)) {
             Timer timer = TimerManager.getInstance().getTimer(first).orElseThrow();
-            float value = timer.getScale() != null ? timer.getScale() : ModConfig.getInstance().getTimerScale();
-            boolean inherited = timer.getScale() == null;
-            ctx.getSource().sendSuccess(() -> Component.translatable(
-                    inherited ? "ontime.command.scale.view_inherited" : "ontime.command.scale.view",
-                    first, value), false);
+            float value = timer.display().scale();
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.scale.view", first, value), false);
             return 1;
         }
 
@@ -311,10 +301,10 @@ final class DisplayCommands {
         }
 
         if (CLEAR.equalsIgnoreCase(second)) {
-            timer.setScale(null);
+            timer.display().setScale(ModConfig.getInstance().getTimerScale());
             TimerManager.getInstance().saveTimer(timer);
             ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.scale.cleared", first), true);
+                    Component.translatable("ontime.command.scale.reset", first), true);
             com.mateof24.network.TimerState.markDirty();
             return 1;
         }
@@ -324,9 +314,9 @@ final class DisplayCommands {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.display.unknown", second));
             return 0;
         }
-        timer.setScale(value);
+        timer.display().setScale(value);
         TimerManager.getInstance().saveTimer(timer);
-        final float applied = timer.getScale();
+        final float applied = timer.display().scale();
         ctx.getSource().sendSuccess(() ->
                 Component.translatable("ontime.command.scale.timer", first, applied), true);
         com.mateof24.network.TimerState.markDirty();

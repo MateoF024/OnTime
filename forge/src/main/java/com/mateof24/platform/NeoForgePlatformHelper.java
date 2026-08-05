@@ -1,6 +1,5 @@
 package com.mateof24.platform;
 
-import com.mateof24.config.ModConfig;
 import com.mateof24.network.NetworkHandler;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.loading.FMLPaths;
@@ -38,16 +37,6 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
     @Override
     public void sendSilentPacket(ServerPlayer player, boolean silent) {
         NetworkHandler.syncSilentToClient(player, silent);
-    }
-
-    @Override
-    public void sendDisplayConfigPacket(ServerPlayer player) {
-        NetworkHandler.syncDisplayConfigToClient(player, ModConfig.getInstance());
-    }
-
-    @Override
-    public void sendDisplayConfigPacketToAll(MinecraftServer server) {
-        NetworkHandler.syncDisplayConfigToAllClients(server, ModConfig.getInstance());
     }
 
     @Override

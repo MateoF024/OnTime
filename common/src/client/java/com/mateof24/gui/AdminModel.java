@@ -33,7 +33,12 @@ public final class AdminModel {
             String phase,
             String ownerName,
             boolean audienceGlobal,
-            List<String> audienceNames
+            List<String> audienceNames,
+            int colorHigh,
+            int colorMid,
+            int colorLow,
+            int thresholdMid,
+            int thresholdLow
     ) {
         public boolean inCooldown() { return !"ACTIVE".equals(phase); }
 
@@ -49,7 +54,6 @@ public final class AdminModel {
             boolean countUp,
             boolean silent,
             String resolvedPreset,
-            boolean inheritsPreset,
             Float scale,
             int runCount,
             boolean repeat,
@@ -179,6 +183,8 @@ public final class AdminModel {
         if (array == null) return out;
         for (JsonElement element : array) {
             JsonObject json = element.getAsJsonObject();
+            JsonObject display = json.has("display") && json.get("display").isJsonObject()
+                    ? json.getAsJsonObject("display") : null;
             List<String> names = new ArrayList<>();
             if (json.has("audience")) {
                 for (JsonElement member : json.getAsJsonArray("audience")) {
@@ -196,7 +202,14 @@ public final class AdminModel {
                     str(json, "phase", "ACTIVE"),
                     str(json, "ownerName", null),
                     "GLOBAL".equals(str(json, "audienceScope", "GLOBAL")),
-                    List.copyOf(names)));
+                    List.copyOf(names),
+                    // The timer's own colours, which is why they travel with
+                    // the run rather than being looked up in the defaults.
+                    (int) numOf(display, "colorHigh", 0xFFFFFF),
+                    (int) numOf(display, "colorMid", 0xFFFF00),
+                    (int) numOf(display, "colorLow", 0xFF0000),
+                    (int) numOf(display, "thresholdMid", 30),
+                    (int) numOf(display, "thresholdLow", 10)));
         }
         return out;
     }
@@ -216,7 +229,6 @@ public final class AdminModel {
                     bool(json, "countUp"),
                     bool(json, "silent"),
                     str(json, "resolvedPreset", "BOSSBAR"),
-                    !json.has("position") || json.get("position").isJsonNull(),
                     json.has("scale") && !json.get("scale").isJsonNull() ? json.get("scale").getAsFloat() : null,
                     (int) num(json, "runCount"),
                     bool(json, "repeat"),
@@ -239,6 +251,11 @@ public final class AdminModel {
 
     private static String str(JsonObject json, String key, String fallback) {
         return json.has(key) && !json.get(key).isJsonNull() ? json.get(key).getAsString() : fallback;
+    }
+
+    private static long numOf(JsonObject json, String key, long fallback) {
+        if (json == null || !json.has(key) || json.get(key).isJsonNull()) return fallback;
+        return json.get(key).getAsLong();
     }
 
     private static long num(JsonObject json, String key) {

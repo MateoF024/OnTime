@@ -15,13 +15,11 @@ public class NetworkHandler {
     public static final Identifier TIMER_STATE_ID = Identifier.fromNamespaceAndPath(OnTime.MOD_ID, "timer_state");
     public static final Identifier TIMER_VISIBILITY_ID = Identifier.fromNamespaceAndPath(OnTime.MOD_ID, "timer_visibility");
     public static final Identifier TIMER_SILENT_ID = Identifier.fromNamespaceAndPath(OnTime.MOD_ID, "timer_silent");
-    public static final Identifier TIMER_DISPLAY_CONFIG_ID = Identifier.fromNamespaceAndPath(OnTime.MOD_ID, "timer_display_config");
 
     public static void registerPackets() {
         PayloadTypeRegistry.clientboundPlay().register(TimerStatePayload.TYPE, TimerStatePayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(TimerVisibilityPayload.TYPE, TimerVisibilityPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(TimerSilentPayload.TYPE, TimerSilentPayload.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(TimerDisplayConfigPayload.TYPE, TimerDisplayConfigPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(AdminStatePayload.TYPE, AdminStatePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(AdminActionPayload.TYPE, AdminActionPayload.CODEC);
         ServerPlayNetworking.registerGlobalReceiver(AdminActionPayload.TYPE,
@@ -61,26 +59,6 @@ public class NetworkHandler {
         ServerPlayNetworking.send(player, new TimerSilentPayload(silent));
     }
 
-    public static void syncDisplayConfigToClient(ServerPlayer player, ModConfig cfg) {
-        ServerPlayNetworking.send(player, buildDisplayConfigPayload(cfg));
-    }
-
-    public static void syncDisplayConfigToAllClients(MinecraftServer server, ModConfig cfg) {
-        TimerDisplayConfigPayload payload = buildDisplayConfigPayload(cfg);
-        for (var player : server.getPlayerList().getPlayers()) {
-            ServerPlayNetworking.send(player, payload);
-        }
-    }
-
-    private static TimerDisplayConfigPayload buildDisplayConfigPayload(ModConfig cfg) {
-        return new TimerDisplayConfigPayload(
-                cfg.getTimerX(), cfg.getTimerY(), cfg.getPositionPreset().name(), cfg.getTimerScale(),
-                cfg.getColorHigh(), cfg.getColorMid(), cfg.getColorLow(),
-                cfg.getThresholdMid(), cfg.getThresholdLow(),
-                cfg.getTimerSoundId(), cfg.getTimerSoundVolume(), cfg.getTimerSoundPitch()
-        );
-    }
-
     public record TimerVisibilityPayload(boolean visible) implements CustomPacketPayload {
         public static final Type<TimerVisibilityPayload> TYPE = new Type<>(TIMER_VISIBILITY_ID);
         public static final StreamCodec<FriendlyByteBuf, TimerVisibilityPayload> CODEC = StreamCodec.of(
@@ -95,31 +73,6 @@ public class NetworkHandler {
         public static final StreamCodec<FriendlyByteBuf, TimerSilentPayload> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeBoolean(p.silent()),
                 buf -> new TimerSilentPayload(buf.readBoolean())
-        );
-        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
-    }
-
-    public record TimerDisplayConfigPayload(
-            int timerX, int timerY, String positionPreset, float scale,
-            int colorHigh, int colorMid, int colorLow,
-            int thresholdMid, int thresholdLow,
-            String soundId, float soundVolume, float soundPitch
-    ) implements CustomPacketPayload {
-        public static final Type<TimerDisplayConfigPayload> TYPE = new Type<>(TIMER_DISPLAY_CONFIG_ID);
-        public static final StreamCodec<FriendlyByteBuf, TimerDisplayConfigPayload> CODEC = StreamCodec.of(
-                (buf, p) -> {
-                    buf.writeInt(p.timerX()); buf.writeInt(p.timerY());
-                    buf.writeUtf(p.positionPreset()); buf.writeFloat(p.scale());
-                    buf.writeInt(p.colorHigh()); buf.writeInt(p.colorMid()); buf.writeInt(p.colorLow());
-                    buf.writeInt(p.thresholdMid()); buf.writeInt(p.thresholdLow());
-                    buf.writeUtf(p.soundId()); buf.writeFloat(p.soundVolume()); buf.writeFloat(p.soundPitch());
-                },
-                buf -> new TimerDisplayConfigPayload(
-                        buf.readInt(), buf.readInt(), buf.readUtf(), buf.readFloat(),
-                        buf.readInt(), buf.readInt(), buf.readInt(),
-                        buf.readInt(), buf.readInt(),
-                        buf.readUtf(), buf.readFloat(), buf.readFloat()
-                )
         );
         @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
     }
@@ -156,6 +109,10 @@ public class NetworkHandler {
                         buf.writeUtf(v.preset());
                         buf.writeVarInt(v.x()); buf.writeVarInt(v.y());
                         buf.writeFloat(v.scale());
+                        buf.writeInt(v.colorHigh()); buf.writeInt(v.colorMid()); buf.writeInt(v.colorLow());
+                        buf.writeVarInt(v.thresholdMid()); buf.writeVarInt(v.thresholdLow());
+                        buf.writeUtf(v.soundId());
+                        buf.writeFloat(v.soundVolume()); buf.writeFloat(v.soundPitch());
                     }
                 },
                 buf -> {
@@ -166,7 +123,10 @@ public class NetworkHandler {
                                 buf.readUUID(), buf.readUtf(), buf.readLong(), buf.readLong(),
                                 buf.readBoolean(), buf.readBoolean(), buf.readBoolean(),
                                 buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(),
-                                buf.readUtf(), buf.readVarInt(), buf.readVarInt(), buf.readFloat()));
+                                buf.readUtf(), buf.readVarInt(), buf.readVarInt(), buf.readFloat(),
+                                buf.readInt(), buf.readInt(), buf.readInt(),
+                                buf.readVarInt(), buf.readVarInt(),
+                                buf.readUtf(), buf.readFloat(), buf.readFloat()));
                     }
                     return new TimerStatePayload(runs);
                 }

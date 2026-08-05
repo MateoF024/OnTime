@@ -15,9 +15,10 @@ import java.util.UUID;
  * Everything the client knows about the executions it can see.
  *
  * <p>This used to hold exactly one timer's worth of fields. It now keeps a view
- * per execution — each with its own prediction anchor, titles and placement —
- * while the display defaults, the per-player visibility flag and the sound
- * settings stay global, because they are.</p>
+ * per execution — each with its own prediction anchor, titles, placement,
+ * colours and sound. All that is left global is whether this player wants to
+ * see the counters at all and whether they may hear them, which really are
+ * properties of the player.</p>
  */
 public class ClientTimerState {
 
@@ -25,26 +26,6 @@ public class ClientTimerState {
 
     private static boolean visible = true;
     private static boolean playerSilent = false;
-
-    private static int displayColorHigh = 0xFFFFFF;
-    private static int displayColorMid = 0xFFFF00;
-    private static int displayColorLow = 0xFF0000;
-    private static int displayThresholdMid = 30;
-    private static int displayThresholdLow = 10;
-    private static String displaySoundId = "minecraft:block.note_block.hat";
-    private static float displaySoundVolume = 1.0f;
-    private static float displaySoundPitch = 2.0f;
-
-    public static void updateDisplayConfig(int x, int y, String preset, float scale,
-                                           int colorHigh, int colorMid, int colorLow,
-                                           int thresholdMid, int thresholdLow,
-                                           String soundId, float soundVolume, float soundPitch) {
-        // Position and scale now ride the state snapshot, already resolved per
-        // timer, so only the genuinely global settings are taken from here.
-        displayColorHigh = colorHigh; displayColorMid = colorMid; displayColorLow = colorLow;
-        displayThresholdMid = thresholdMid; displayThresholdLow = thresholdLow;
-        displaySoundId = soundId; displaySoundVolume = soundVolume; displaySoundPitch = soundPitch;
-    }
 
     /**
      * Replaces the tracked executions with the server's snapshot, keeping the
@@ -57,6 +38,11 @@ public class ClientTimerState {
             views.computeIfAbsent(view.runId(), ClientRunView::new).apply(view);
         }
         views.keySet().removeIf(id -> !seen.contains(id));
+    }
+
+    /** One tracked execution by id, or null when this client cannot see it. */
+    public static ClientRunView viewOf(java.util.UUID runId) {
+        return runId == null ? null : views.get(runId);
     }
 
     /** Executions to draw, in the order the server sent them. */
@@ -109,9 +95,13 @@ public class ClientTimerState {
             if (crossed && view == sounding) play = true;
         }
 
-        if (play && ticksSinceSound >= MIN_SOUND_GAP_TICKS
+        // The sound is the elected run's own, not a server-wide one: two timers
+        // may legitimately want different clocks, and only one of them is
+        // audible at a time anyway.
+        if (play && sounding != null && ticksSinceSound >= MIN_SOUND_GAP_TICKS
                 && mc.player != null && mc.level != null) {
-            VanillaClientCompat.playLocalTimerSound(displaySoundId, displaySoundVolume, displaySoundPitch);
+            VanillaClientCompat.playLocalTimerSound(
+                    sounding.soundId(), sounding.soundVolume(), sounding.soundPitch());
             ticksSinceSound = 0;
         }
     }
@@ -160,12 +150,6 @@ public class ClientTimerState {
         long hours = totalSeconds / 3600, minutes = (totalSeconds % 3600) / 60, seconds = totalSeconds % 60;
         return hours > 0 ? String.format("%02d:%02d:%02d", hours, minutes, seconds)
                 : String.format("%02d:%02d", minutes, seconds);
-    }
-
-    public static int getColorForPercentage(float percentage) {
-        if (percentage >= displayThresholdMid) return displayColorHigh;
-        else if (percentage >= displayThresholdLow) return displayColorMid;
-        else return displayColorLow;
     }
 
     public static void clear() {

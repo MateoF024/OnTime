@@ -46,7 +46,11 @@ public record TimerStatePayload(List<RunView> runs) implements CustomPacketPaylo
                         decodeString(buffer), decodeString(buffer),
                         decodeString(buffer),
                         buffer.readInt(), buffer.readInt(),
-                        buffer.readFloat()));
+                        buffer.readFloat(),
+                        buffer.readInt(), buffer.readInt(), buffer.readInt(),
+                        buffer.readInt(), buffer.readInt(),
+                        decodeString(buffer),
+                        buffer.readFloat(), buffer.readFloat()));
             }
             return new TimerStatePayload(runs);
         }
@@ -71,6 +75,14 @@ public record TimerStatePayload(List<RunView> runs) implements CustomPacketPaylo
                 buffer.writeInt(v.x());
                 buffer.writeInt(v.y());
                 buffer.writeFloat(v.scale());
+                buffer.writeInt(v.colorHigh());
+                buffer.writeInt(v.colorMid());
+                buffer.writeInt(v.colorLow());
+                buffer.writeInt(v.thresholdMid());
+                buffer.writeInt(v.thresholdLow());
+                encodeString(buffer, v.soundId());
+                buffer.writeFloat(v.soundVolume());
+                buffer.writeFloat(v.soundPitch());
             }
         }
 

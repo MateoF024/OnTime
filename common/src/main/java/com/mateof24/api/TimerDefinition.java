@@ -12,9 +12,10 @@ import java.util.Map;
  * with no execution in flight is perfectly normal and is what
  * {@code /timer create} leaves behind.</p>
  *
- * <p>Unset optional settings are null rather than a sentinel, and null means
- * "inherit the server default" for {@code position}, {@code customX},
- * {@code customY} and {@code scale}.</p>
+ * <p>Unset optional settings are null rather than a sentinel. The display
+ * fields are never among them: a timer copies the server defaults when it is
+ * created and keeps its own, so {@code position}, {@code customX},
+ * {@code customY} and {@code scale} always hold this timer's real values.</p>
  */
 public record TimerDefinition(
         String name,
@@ -56,7 +57,11 @@ public record TimerDefinition(
         /** "start" or "finish". */
         String triggerAction,
 
-        /** Preset name, or null to inherit the server default. */
+        /**
+         * Where this timer draws and how big. Always set: a timer copies the
+         * server defaults when it is created and owns them from then on, so
+         * there is no "inherited" case left to report.
+         */
         String position,
         Integer customX,
         Integer customY,
@@ -68,9 +73,4 @@ public record TimerDefinition(
     public boolean hasScheduledCommands() { return !scheduledCommands.isEmpty(); }
 
     public boolean hasTitles() { return !titles.isEmpty(); }
-
-    /** True when this timer overrides any of the server display defaults. */
-    public boolean hasDisplayOverride() {
-        return position != null || customX != null || customY != null || scale != null;
-    }
 }

@@ -16,8 +16,7 @@ public class TimerRenderer {
         for (ClientRunView view : ClientTimerState.visibleViews()) {
         long ticks = view.getInterpolatedTicks();
         String timeText = ClientTimerState.formatTicks(ticks);
-        float percentage = view.getPercentage();
-        int textColor = ClientTimerState.getColorForPercentage(percentage);
+        int textColor = view.currentColor();
 
         int screenWidth = graphics.guiWidth();
         int screenHeight = graphics.guiHeight();

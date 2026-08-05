@@ -1,6 +1,5 @@
 package com.mateof24.network;
 
-import com.mateof24.config.ModConfig;
 import com.mateof24.manager.TimerManager;
 import com.mateof24.platform.Services;
 import com.mateof24.timer.Timer;
@@ -105,12 +104,8 @@ public final class TimerState {
 
     private static RunView toView(TimerRun run) {
         Timer timer = run.timer();
-        ModConfig config = ModConfig.getInstance();
-
+        com.mateof24.timer.TimerDisplay display = timer.display();
         String preset = com.mateof24.manager.DisplaySlots.presetOf(timer);
-        int x = timer.getTimerX() != null ? timer.getTimerX() : config.getTimerX();
-        int y = timer.getTimerY() != null ? timer.getTimerY() : config.getTimerY();
-        float scale = timer.getScale() != null ? timer.getScale() : config.getTimerScale();
 
         return new RunView(
                 run.runId(),
@@ -124,7 +119,10 @@ public final class TimerState {
                 orEmpty(timer.getTitleBelow()),
                 orEmpty(timer.getTitleLeft()),
                 orEmpty(timer.getTitleRight()),
-                preset, x, y, scale);
+                preset, display.x(), display.y(), display.scale(),
+                display.colorHigh(), display.colorMid(), display.colorLow(),
+                display.thresholdMid(), display.thresholdLow(),
+                display.soundId(), display.soundVolume(), display.soundPitch());
     }
 
     private static String orEmpty(String value) {

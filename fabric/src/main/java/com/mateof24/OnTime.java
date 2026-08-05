@@ -37,7 +37,6 @@ public class OnTime implements ModInitializer {
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             serverInstance = server;
-            ModConfig.onSaveHook = () -> Services.PLATFORM.sendDisplayConfigPacketToAll(serverInstance);
             com.mateof24.integration.FTBQuestsIntegration.tryInit();
 
             TimerManager.getInstance().loadTimers();
@@ -66,7 +65,6 @@ public class OnTime implements ModInitializer {
             UUID playerUUID = handler.getPlayer().getUUID();
             Services.PLATFORM.sendVisibilityPacket(handler.getPlayer(), PlayerPreferences.getTimerVisibility(playerUUID));
             Services.PLATFORM.sendSilentPacket(handler.getPlayer(), PlayerPreferences.getTimerSilent(playerUUID));
-            Services.PLATFORM.sendDisplayConfigPacket(handler.getPlayer());
 
             // The joiner gets their own view: global runs plus any fixed
             // audience they belong to.
@@ -77,7 +75,6 @@ public class OnTime implements ModInitializer {
             com.mateof24.websocket.TimerWebSocketServer.getInstance().stop();
             com.mateof24.webpanel.TimerWebPanel.getInstance().stop();
             com.mateof24.trigger.FTBQuestsPoller.resetAll();
-            ModConfig.onSaveHook = null;
             serverInstance = null;
 
             TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {

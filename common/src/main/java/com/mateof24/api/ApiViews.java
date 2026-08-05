@@ -64,10 +64,10 @@ public final class ApiViews {
                 timer.getConditionExpressionAction(),
                 timer.getTriggerType(),
                 timer.getTriggerAction(),
-                timer.getPosition(),
-                timer.getTimerX(),
-                timer.getTimerY(),
-                timer.getScale());
+                timer.display().preset(),
+                timer.display().x(),
+                timer.display().y(),
+                timer.display().scale());
     }
 
     /**

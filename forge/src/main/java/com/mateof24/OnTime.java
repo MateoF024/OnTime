@@ -66,7 +66,6 @@ public class OnTime {
 
     private void onServerStarted(ServerStartedEvent event) {
         serverInstance = event.getServer();
-        ModConfig.onSaveHook = () -> Services.PLATFORM.sendDisplayConfigPacketToAll(serverInstance);
         com.mateof24.integration.FTBQuestsIntegration.tryInit();
 
         TimerManager.getInstance().loadTimers();
@@ -97,7 +96,6 @@ public class OnTime {
         UUID playerUUID = player.getUUID();
         NetworkHandler.syncVisibilityToClient(player, PlayerPreferences.getTimerVisibility(playerUUID));
         NetworkHandler.syncSilentToClient(player, PlayerPreferences.getTimerSilent(playerUUID));
-        Services.PLATFORM.sendDisplayConfigPacket(player);
 
         // The joiner gets their own view: global runs plus any fixed audience
         // they belong to.
@@ -108,7 +106,6 @@ public class OnTime {
         com.mateof24.websocket.TimerWebSocketServer.getInstance().stop();
         com.mateof24.webpanel.TimerWebPanel.getInstance().stop();
         com.mateof24.trigger.FTBQuestsPoller.resetAll();
-        ModConfig.onSaveHook = null;
         serverInstance = null;
 
         TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {

@@ -34,6 +34,18 @@ public final class ClientRunView {
     private int y = 4;
     private float scale = 1.0f;
 
+    // This run's own look and sound, not a shared default. Seeded with the
+    // vanilla-ish values only so a view that has never been synced draws
+    // something rather than black.
+    private int colorHigh = 0xFFFFFF;
+    private int colorMid = 0xFFFF00;
+    private int colorLow = 0xFF0000;
+    private int thresholdMid = 30;
+    private int thresholdLow = 10;
+    private String soundId = "minecraft:block.note_block.hat";
+    private float soundVolume = 1.0f;
+    private float soundPitch = 2.0f;
+
     // Raw title specs plus a Component cache keyed by the raw string. Slot
     // order matches TitleLayout: 0=above 1=below 2=left 3=right.
     private final String[] titleRaw = {"", "", "", ""};
@@ -104,6 +116,14 @@ public final class ClientRunView {
         x = view.x();
         y = view.y();
         scale = view.scale();
+        colorHigh = view.colorHigh();
+        colorMid = view.colorMid();
+        colorLow = view.colorLow();
+        thresholdMid = view.thresholdMid();
+        thresholdLow = view.thresholdLow();
+        soundId = view.soundId();
+        soundVolume = view.soundVolume();
+        soundPitch = view.soundPitch();
         setTitles(view.titleAbove(), view.titleBelow(), view.titleLeft(), view.titleRight());
 
         long current = view.currentTicks();
@@ -212,6 +232,23 @@ public final class ClientRunView {
 
     public String getFormattedTime() {
         return ClientTimerState.formatTicks(getInterpolatedTicks());
+    }
+
+    public String soundId() { return soundId; }
+    public float soundVolume() { return soundVolume; }
+    public float soundPitch() { return soundPitch; }
+
+    /**
+     * The colour to draw this run in, right now.
+     *
+     * <p>One method, used by the HUD and by the admin panel alike, so the two
+     * cannot disagree about where a threshold falls.</p>
+     */
+    public int currentColor() {
+        float percentage = getPercentage();
+        if (percentage >= thresholdMid) return colorHigh;
+        if (percentage >= thresholdLow) return colorMid;
+        return colorLow;
     }
 
     public float getPercentage() {

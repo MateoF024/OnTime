@@ -105,6 +105,9 @@ public final class AdminPanel {
 
     private final SettingsForm settings = new SettingsForm();
 
+    /** Keeps the panel's clocks reading the same as the ones on screen. */
+    private final RunClock clock = new RunClock();
+
     /** Row height of the settings form: a control plus air. */
     private static final int SETTING_HEIGHT = 22;
     private int settingsRows = 1;
@@ -143,6 +146,7 @@ public final class AdminPanel {
 
     public void refresh(JsonObject state) {
         model.apply(state);
+        clock.onSnapshot(model.runs());
     }
 
     /**
@@ -156,6 +160,7 @@ public final class AdminPanel {
      */
     public void onSnapshot(JsonObject state) {
         model.apply(state);
+        clock.onSnapshot(model.runs());
         if (model.tab() != AdminModel.Tab.SETTINGS) init();
     }
 
@@ -187,9 +192,7 @@ public final class AdminPanel {
             detailX = listX + listWidth + GUTTER;
             detailWidth = width - GUTTER - detailX;
             listTop = contentTop;
-            // One line at the foot for the "x-y of n" indicator, so turning
-            // the list from unscrollable to scrollable never moves a row.
-            listBottom = contentBottom - LINE;
+            listBottom = contentBottom;
             detailTop = contentTop;
             // Level with the tab row, and its rule on the tabs' bottom edge:
             // the two columns then start their content at the same height
@@ -203,7 +206,7 @@ public final class AdminPanel {
             detailWidth = width - 2 * GUTTER;
             int split = contentTop + (contentBottom - contentTop) * 55 / 100;
             listTop = contentTop;
-            listBottom = split - 6 - LINE;
+            listBottom = split - 6;
             detailTop = split + 4;
             // Stacked, the detail has no tab row to line up with.
             detailTitleY = detailTop;
@@ -249,16 +252,13 @@ public final class AdminPanel {
 
     // ---- the settings form ----
 
-    /** Below the note that says what this whole tab is. */
     private int settingsTop() {
-        return headerRowY + LINE + 4;
+        return headerRowY;
     }
 
     private void buildSettings() {
         int top = settingsTop();
-        // A line at the foot for the range indicator, so it stops landing on
-        // top of the last row's control.
-        settingsRows = Math.max(1, (contentBottom - top - LINE) / SETTING_HEIGHT);
+        settingsRows = Math.max(1, (contentBottom - top) / SETTING_HEIGHT);
         List<SettingsForm.Row> rows = SettingsForm.rows();
         scroll = Math.max(0, Math.min(Math.max(0, rows.size() - settingsRows), scroll));
 
@@ -664,14 +664,8 @@ public final class AdminPanel {
                     GUTTER, y + 5, COLOR_TEXT);
         }
 
-        painter.text(Component.translatable("ontime.gui.settings.note"), GUTTER, headerRowY, COLOR_TEXT);
-
-        if (rows.size() > settingsRows) {
-            Component range = Component.translatable("ontime.gui.runs.scroll",
-                    scroll + 1, Math.min(scroll + settingsRows, rows.size()), rows.size());
-            painter.text(range, width - GUTTER - painter.textWidth(range),
-                    contentBottom - LINE + 2, COLOR_TEXT);
-        }
+        drawScrollbar(painter, width - GUTTER + 2, top, contentBottom,
+                rows.size(), settingsRows);
     }
 
     /**
@@ -757,15 +751,15 @@ public final class AdminPanel {
             painter.text(audienceOf(row), colAudience, y, COLOR_TEXT);
             // The arrow is the same one /timer list uses, and it says which
             // way the clock is going without spending a column on the word.
-            Component clock = clockWithArrow(row);
-            painter.text(clock, colTimeRight - painter.textWidth(clock), y, COLOR_TEXT);
+            // Coloured by the same rule as the counter on screen, because
+            // the operator is looking at both and they are the same clock.
+            Component reading = clockWithArrow(row);
+            painter.text(reading, colTimeRight - painter.textWidth(reading), y,
+                    0xFF000000 | clock.color(row));
         }
 
-        if (rows.size() > visibleRows) {
-            Component range = Component.translatable("ontime.gui.runs.scroll",
-                    scroll + 1, Math.min(scroll + visibleRows, rows.size()), rows.size());
-            painter.text(range, listX + listWidth - painter.textWidth(range), listBottom + 2, COLOR_TEXT);
-        }
+        drawScrollbar(painter, listX + listWidth + 3, listTop, listBottom,
+                rows.size(), visibleRows);
 
         if (twoColumn) {
             painter.rect(detailX - GUTTER / 2, dividerTop, 1, contentBottom - dividerTop, COLOR_RULE);
@@ -803,7 +797,7 @@ public final class AdminPanel {
                 detailX, y + 14, COLOR_TEXT);
 
         painter.text(Component.translatable("ontime.gui.runs.detail.clock",
-                        com.mateof24.render.ClientTimerState.formatTicks(row.currentTicks()),
+                        com.mateof24.render.ClientTimerState.formatTicks(clock.ticks(row)),
                         com.mateof24.render.ClientTimerState.formatTicks(row.targetTicks()),
                         arrowOf(row),
                         Component.translatable(row.countUp()
@@ -851,9 +845,29 @@ public final class AdminPanel {
      * The clock with the direction arrow {@code /timer list} uses, so the way
      * a countdown is going reads without spending a word on it.
      */
-    private static Component clockWithArrow(AdminModel.RunRow row) {
+    private Component clockWithArrow(AdminModel.RunRow row) {
         return Component.literal(arrowOf(row) + " "
-                + com.mateof24.render.ClientTimerState.formatTicks(row.currentTicks()));
+                + com.mateof24.render.ClientTimerState.formatTicks(clock.ticks(row)));
+    }
+
+    /**
+     * A plain bar saying how far down a list you are.
+     *
+     * <p>It replaces a line of text that read "1-11 of 23", which told you the
+     * arithmetic but not the thing you wanted to know: that there is more below
+     * and roughly how much. A bar says both at a glance, and takes no row away
+     * from the list to do it.</p>
+     */
+    private void drawScrollbar(Painter painter, int x, int top, int bottom, int total, int shown) {
+        if (total <= shown) return;
+        int height = bottom - top;
+        if (height < 16) return;
+
+        painter.rect(x, top, 2, height, COLOR_BAND);
+        int thumb = Math.max(12, height * shown / total);
+        int travel = height - thumb;
+        int offset = total == shown ? 0 : travel * scroll / (total - shown);
+        painter.rect(x, top + offset, 2, thumb, COLOR_RULE);
     }
 
     private static String arrowOf(AdminModel.RunRow row) {
@@ -911,7 +925,19 @@ public final class AdminPanel {
         return true;
     }
 
+    /**
+     * Keeps the runs list from scrolling past its end.
+     *
+     * <p>Only the runs list: every tab shares one scroll position, and this
+     * used to run on every layout regardless of which tab was up. With a
+     * handful of executions and a screenful of rows the runs list is not
+     * scrollable at all, so it pinned the position at zero — and since a wheel
+     * turn lays the panel out again, the settings list could never move off
+     * its first row. That is what made the sound settings unreachable rather
+     * than merely off screen. Each tab's builder clamps its own list.</p>
+     */
     private void clampScroll() {
+        if (model.tab() != AdminModel.Tab.RUNS) return;
         scroll = Math.max(0, Math.min(Math.max(0, model.runs().size() - visibleRows), scroll));
     }
 

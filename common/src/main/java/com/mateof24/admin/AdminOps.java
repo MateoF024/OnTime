@@ -202,10 +202,10 @@ public final class AdminOps {
         json.addProperty("customX", def.customX());
         json.addProperty("customY", def.customY());
         json.addProperty("scale", def.scale());
-        // The slot it actually draws in, default resolved — a panel showing
-        // which anchors are free must not resolve inheritance itself.
-        TimerManager.getInstance().getTimer(def.name())
-                .ifPresent(timer -> json.addProperty("resolvedPreset", DisplaySlots.presetOf(timer)));
+        TimerManager.getInstance().getTimer(def.name()).ifPresent(timer -> {
+            json.addProperty("resolvedPreset", DisplaySlots.presetOf(timer));
+            json.add("display", timer.display().toJson());
+        });
         json.addProperty("runCount", OnTimeAPI.getInstance().getRunsOf(def.name()).size());
         return json;
     }
@@ -234,6 +234,8 @@ public final class AdminOps {
             members.add(member);
         }
         json.add("audience", members);
+        TimerManager.getInstance().getTimer(run.timerName())
+                .ifPresent(timer -> json.add("display", timer.display().toJson()));
         return json;
     }
 

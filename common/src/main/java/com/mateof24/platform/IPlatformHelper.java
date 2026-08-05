@@ -15,8 +15,6 @@ public interface IPlatformHelper {
     void sendTimerState(ServerPlayer player);
     void sendVisibilityPacket(ServerPlayer player, boolean visible);
     void sendSilentPacket(ServerPlayer player, boolean silent);
-    default void sendDisplayConfigPacket(ServerPlayer player) {}
-    default void sendDisplayConfigPacketToAll(MinecraftServer server) {}
     void registerPackets();
 
     /** Pushes the admin panel snapshot to one subscribed player. */
