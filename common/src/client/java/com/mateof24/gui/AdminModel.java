@@ -59,20 +59,73 @@ public final class AdminModel {
             Float scale,
             int runCount,
             boolean repeat,
-            int repeatCount,
-            long repeatCooldownTicks,
             String nextTimer,
-            long sequenceCooldownTicks,
             boolean hasTitles,
             List<Scheduled> scheduled,
             List<String> finishCommands,
-            JsonObject display
+            JsonObject display,
+            /**
+             * The server's whole object for this timer.
+             *
+             * <p>The editor reads twenty-odd more fields than the list does,
+             * and naming every one of them here would be twenty more record
+             * components that only one screen ever looks at. The named ones
+             * above stay named because the list draws them on every frame.</p>
+             */
+            JsonObject raw
     ) {
 
         public boolean hasCommands() { return !scheduled.isEmpty() || !finishCommands.isEmpty(); }
 
+        // ---- what only the editor reads ----
+
+        public String title(String slot) {
+            if (raw == null || !raw.has("titles") || !raw.get("titles").isJsonObject()) return "";
+            return str(raw.getAsJsonObject("titles"), slot, "");
+        }
+
+        public int repeatCount() { return (int) numOr(raw, "repeatCount", -1); }
+
+        public long repeatCooldownTicks() { return num(raw, "repeatCooldownTicks"); }
+
+        public long sequenceCooldownTicks() { return num(raw, "sequenceCooldownTicks"); }
+
+        public String conditionObjective() { return str(raw, "conditionObjective", ""); }
+
+        public int conditionScore() { return (int) num(raw, "conditionScore"); }
+
+        public String conditionTarget() { return str(raw, "conditionTarget", "*"); }
+
+        public String scoreAction() { return str(raw, "conditionAction", "finish"); }
+
+        public String conditionExpression() { return str(raw, "conditionExpression", ""); }
+
+        public String expressionAction() { return str(raw, "conditionExpressionAction", "finish"); }
+
+        public String triggerType() { return str(raw, "triggerType", ""); }
+
+        public String triggerAction() { return str(raw, "triggerAction", "finish"); }
+
+        /**
+         * Every command this timer runs, numbered as the server numbers them.
+         *
+         * <p>{@code atSeconds} is null for a finish command. The numbering is
+         * the server's own, so removing row three removes what row three said.
+         * </p>
+         */
+        public List<Scheduled> commandList() {
+            List<Scheduled> out = new ArrayList<>();
+            if (raw == null || !raw.has("commandList") || !raw.get("commandList").isJsonArray()) return out;
+            for (JsonElement element : raw.getAsJsonArray("commandList")) {
+                JsonObject entry = element.getAsJsonObject();
+                Long at = entry.has("at") && !entry.get("at").isJsonNull() ? entry.get("at").getAsLong() : null;
+                out.add(new Scheduled(at == null ? -1L : at, List.of(str(entry, "command", ""))));
+            }
+            return out;
+        }
+
         /** Repeats for ever when no count was given. */
-        public boolean repeatsForever() { return repeat && repeatCount < 0; }
+        public boolean repeatsForever() { return repeat && repeatCount() < 0; }
     }
 
     /** Commands due at a point on the clock, as the panel lists them. */
@@ -274,15 +327,13 @@ public final class AdminModel {
                     json.has("scale") && !json.get("scale").isJsonNull() ? json.get("scale").getAsFloat() : null,
                     (int) num(json, "runCount"),
                     bool(json, "repeat"),
-                    (int) numOr(json, "repeatCount", -1),
-                    num(json, "repeatCooldownTicks"),
                     str(json, "nextTimer", null),
-                    num(json, "sequenceCooldownTicks"),
                     hasTitles,
                     List.copyOf(scheduled),
                     List.copyOf(finish),
                     json.has("display") && json.get("display").isJsonObject()
-                            ? json.getAsJsonObject("display") : new JsonObject()));
+                            ? json.getAsJsonObject("display") : new JsonObject(),
+                    json));
         }
         return out;
     }

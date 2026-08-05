@@ -45,7 +45,9 @@ public final class FieldAssist {
     public enum Source {
         NONE,
         /** Every sound event the client knows about. */
-        SOUNDS
+        SOUNDS,
+        /** The timers that exist right now, which the panel refreshes each layout. */
+        TIMERS
     }
 
     /** Clearance the list keeps from the edge of the screen. */
@@ -92,6 +94,13 @@ public final class FieldAssist {
 
     /** Cached because a registry walk per frame is a walk per frame. */
     private static List<String> soundIds = null;
+
+    /** Set by the panel: what exists is not something this class can know. */
+    private List<String> timerNames = List.of();
+
+    public void setTimerNames(List<String> names) {
+        timerNames = names == null ? List.of() : names;
+    }
 
     /** Forgets every field; call when the screen rebuilds its widgets. */
     public void clear() {
@@ -260,11 +269,15 @@ public final class FieldAssist {
         if (typed.isEmpty()) return;
 
         for (String candidate : candidates(source)) {
-            if (candidate.equals(typed) || candidate.equals("minecraft:" + typed)) {
+            // Matched in lower case, offered as written: a sound id is already
+            // lower case, but a timer is called whatever somebody called it,
+            // and typing 'tur' should still find 'Turno'.
+            String folded = candidate.toLowerCase(Locale.ROOT);
+            if (folded.equals(typed) || folded.equals("minecraft:" + typed)) {
                 matches.clear();
                 return; // already an exact match; nothing useful left to offer
             }
-            if (startsWithLoosely(candidate, typed)) {
+            if (startsWithLoosely(folded, typed)) {
                 matches.add(candidate);
                 if (matches.size() >= MAX_SHOWN * 4) {
                     break; // enough to scroll through; the rest would never be reached
@@ -313,7 +326,8 @@ public final class FieldAssist {
         return -1;
     }
 
-    private static List<String> candidates(Source source) {
+    private List<String> candidates(Source source) {
+        if (source == Source.TIMERS) return timerNames;
         if (source != Source.SOUNDS) return List.of();
         if (soundIds == null) {
             List<String> ids = new ArrayList<>();

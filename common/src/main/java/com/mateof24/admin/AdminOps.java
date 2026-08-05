@@ -115,7 +115,11 @@ public final class AdminOps {
                 case "timer.setPosition" -> setPosition(args);
                 case "timer.setScale" -> setScale(args);
                 case "timer.setSilent" -> setSilent(args);
-            case "timer.setDisplay" -> setDisplay(args);
+                case "timer.setDisplay" -> setDisplay(args);
+                case "timer.addCommand" -> addCommand(args);
+                case "timer.removeCommand" -> removeCommand(args);
+                case "timer.setCondition" -> setCondition(args);
+                case "timer.setTrigger" -> setTrigger(args);
 
                 case "run.start" -> startRun(server, args);
                 case "run.pause" -> runAction(args, OnTimeAPI.getInstance()::pauseRun, "It is already paused");
@@ -208,6 +212,20 @@ public final class AdminOps {
             json.add("display", timer.display().toJson());
         });
         json.addProperty("runCount", OnTimeAPI.getInstance().getRunsOf(def.name()).size());
+
+        // The flattened list, numbered exactly as timer.removeCommand takes it:
+        // a panel that built its own numbering would delete the wrong row the
+        // first time somebody used a command instead.
+        TimerManager.getInstance().getTimer(def.name()).ifPresent(timer -> {
+            JsonArray entries = new JsonArray();
+            for (com.mateof24.timer.Timer.ScheduledEntry entry : timer.scheduledEntries()) {
+                JsonObject row = new JsonObject();
+                if (entry.atSeconds() != null) row.addProperty("at", entry.atSeconds());
+                row.addProperty("command", entry.command());
+                entries.add(row);
+            }
+            json.add("commandList", entries);
+        });
         return json;
     }
 
@@ -506,6 +524,102 @@ public final class AdminOps {
 
         TimerManager.getInstance().saveTimer(timer);
         com.mateof24.network.TimerState.markDirty();
+        return Result.ok();
+    }
+
+    /**
+     * Adds one command, either at a point on the clock or on finish.
+     *
+     * <p>{@code atSeconds} absent means a finish command. The two lists are
+     * different things — one fires while the clock is running, the other when
+     * it ends — but they are added the same way and the panel lists them
+     * together, so one operation serves both.</p>
+     */
+    private static Result addCommand(JsonObject args) {
+        String name = requireTimer(args);
+        if (name == null) return Result.fail("No such timer");
+        String command = str(args, "command");
+        if (command == null || command.isBlank()) return Result.fail("Command cannot be empty");
+
+        com.mateof24.timer.Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
+        if (timer == null) return Result.fail("No such timer");
+
+        boolean ok;
+        if (args.has("atSeconds") && !args.get("atSeconds").isJsonNull()) {
+            long at = args.get("atSeconds").getAsLong();
+            if (at <= 0) return Result.fail("A time must be greater than zero");
+            if (at * 20L > timer.getTargetTicks()) {
+                return Result.fail("That is past the end of this timer");
+            }
+            ok = timer.addScheduledCommand(at, command);
+        } else {
+            ok = timer.addFinishCommand(command);
+        }
+        if (!ok) return Result.fail("This timer already holds as many commands as it may");
+
+        TimerManager.getInstance().saveTimer(timer);
+        return Result.ok();
+    }
+
+    /**
+     * Removes one command by its place in the flattened list.
+     *
+     * <p>The same numbering {@code /timer commands list} shows and
+     * {@code /timer commands remove} takes, so a panel and a command line
+     * cannot disagree about which one row three is.</p>
+     */
+    private static Result removeCommand(JsonObject args) {
+        String name = requireTimer(args);
+        if (name == null) return Result.fail("No such timer");
+        com.mateof24.timer.Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
+        if (timer == null) return Result.fail("No such timer");
+
+        int index = intOf(args, "index", -1);
+        if (!timer.removeScheduledEntry(index)) return Result.fail("No command at that position");
+
+        TimerManager.getInstance().saveTimer(timer);
+        return Result.ok();
+    }
+
+    /** The scoreboard condition and the expression, which share one screen. */
+    private static Result setCondition(JsonObject args) {
+        String name = requireTimer(args);
+        if (name == null) return Result.fail("No such timer");
+        com.mateof24.timer.Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
+        if (timer == null) return Result.fail("No such timer");
+
+        if (args.has("objective")) {
+            String objective = str(args, "objective");
+            if (objective == null || objective.isBlank()) {
+                timer.setCondition(null, 0, "*");
+            } else {
+                String target = str(args, "target");
+                timer.setCondition(objective, intOf(args, "score", 0),
+                        target == null || target.isBlank() ? "*" : target);
+            }
+            timer.setScoreConditionAction(str(args, "scoreAction"));
+        }
+        if (args.has("expression")) {
+            String expression = str(args, "expression");
+            timer.setConditionExpression(expression == null || expression.isBlank() ? null : expression);
+            timer.setConditionExpressionAction(str(args, "expressionAction"));
+        }
+
+        TimerManager.getInstance().saveTimer(timer);
+        return Result.ok();
+    }
+
+    private static Result setTrigger(JsonObject args) {
+        String name = requireTimer(args);
+        if (name == null) return Result.fail("No such timer");
+        com.mateof24.timer.Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
+        if (timer == null) return Result.fail("No such timer");
+
+        String type = str(args, "type");
+        timer.setTriggerType(type == null || type.isBlank() ? null : type);
+        timer.setTriggerAction(str(args, "action"));
+
+        TimerManager.getInstance().saveTimer(timer);
         return Result.ok();
     }
 

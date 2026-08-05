@@ -102,7 +102,6 @@ public final class AdminPanel {
     /** The detail column scrolls on its own in the timers tab. */
     private int detailScroll = 0;
     private int timerRowsShown = 1;
-    private int timerFormRows = 1;
     private EditBox searchBox;
 
     /** Height the search box takes off the top of the timers list. */
@@ -151,8 +150,10 @@ public final class AdminPanel {
     /** Set by Apply, cleared by the snapshot that carries the answer. */
     private boolean awaitingApply = false;
 
-    /** The selected timer's own twelve settings. */
-    private final TimerForm timerForm = new TimerForm();
+    /** The whole-timer editor, open or not. */
+    private final TimerEditor editor = new TimerEditor();
+
+    private int editorRowsShown = 1;
 
     /** Text fields a dialog is asking for, in the order it asks. */
     private final List<EditBox> dialogFields = new ArrayList<>();
@@ -197,8 +198,8 @@ public final class AdminPanel {
         clock.onSnapshot(model.runs());
         if (model.tab() == AdminModel.Tab.RUNS) {
             init();
-        } else if (awaitingApply || model.tab() == AdminModel.Tab.TIMERS && !timerForm.isDirty(
-                model.timer(model.selectedTimer()))) {
+        } else if (awaitingApply || model.tab() == AdminModel.Tab.TIMERS
+                && !editor.isDirty(model.timer(editor.timerName()))) {
             // The one snapshot the settings tab does want. Applying sends the
             // values and the server answers a moment later; without this the
             // fields keep showing what was there before the click, for good,
@@ -272,6 +273,9 @@ public final class AdminPanel {
         rowData.clear();
         assist.clear();
         assist.setHost(host);
+        // Refreshed every layout: a timer created a second ago should be
+        // offered a second ago.
+        assist.setTimerNames(model.timers().stream().map(AdminModel.TimerRow::name).toList());
         timerMarks.clear();
         timerData.clear();
         dialogFields.clear();
@@ -294,16 +298,23 @@ public final class AdminPanel {
         } else if (model.tab() == AdminModel.Tab.SETTINGS) {
             buildSettings();
         } else if (model.tab() == AdminModel.Tab.TIMERS) {
-            buildTimerRows();
-            buildTimerDetail();
+            if (editor.isOpen()) buildEditor(); else buildTimerList();
         }
     }
 
-    // ---- the timers tab ----
+    // ==================================================================
+    // Timers: the list
+    // ==================================================================
 
-    /** The search box, then one button per visible definition. */
-    private void buildTimerRows() {
-        EditBox search = new EditBox(host.font(), listX, listTop, listWidth, 16,
+    /**
+     * A search box and one button per definition, across the whole width.
+     *
+     * <p>No detail column: a timer has some thirty properties, and a column
+     * beside a list can show about six of them. Picking one opens the editor
+     * instead, which has the room to show all of it.</p>
+     */
+    private void buildTimerList() {
+        EditBox search = new EditBox(host.font(), listX, contentTop, listWidth, 16,
                 Component.translatable("ontime.gui.timers.search"));
         search.setMaxLength(32);
         search.setValue(model.filter());
@@ -321,95 +332,237 @@ public final class AdminPanel {
             }
         });
         searchBox = host.addWidget(search);
-        assist.add(search, text -> true);
+        // Completes against the timers that exist, which is the only useful
+        // thing to type in here.
+        assist.add(search, text -> true, FieldAssist.Source.TIMERS);
 
         List<AdminModel.TimerRow> rows = model.filteredTimers();
-        timerRowsShown = Math.max(1, (listBottom - listTop - SEARCH_HEIGHT + ROW_GAP) / (ROW_HEIGHT + ROW_GAP));
+        int top = contentTop + SEARCH_HEIGHT;
+        timerRowsShown = Math.max(1, (contentBottom - top + ROW_GAP) / (ROW_HEIGHT + ROW_GAP));
         scroll = Math.max(0, Math.min(Math.max(0, rows.size() - timerRowsShown), scroll));
 
         for (int i = 0; i < timerRowsShown && scroll + i < rows.size(); i++) {
             AdminModel.TimerRow row = rows.get(scroll + i);
-            int y = listTop + SEARCH_HEIGHT + i * (ROW_HEIGHT + ROW_GAP);
-
-            Button button = Button.builder(Component.empty(), b -> {
+            int y = top + i * (ROW_HEIGHT + ROW_GAP);
+            host.addWidget(Button.builder(Component.empty(), b -> {
+                        editor.open(row.name());
                         model.selectTimer(row.name());
-                        timerForm.focus(model.selectedTimer());
                         model.clearMessage();
                         init();
                     })
                     .bounds(listX, y, listWidth, ROW_HEIGHT)
                     .tooltip(Tooltip.create(Component.translatable("ontime.gui.timers.row.tip",
                             Component.literal(row.name()))))
-                    .build();
-            button.active = !row.name().equals(model.selectedTimer());
-            host.addWidget(button);
-
+                    .build());
             timerMarks.add(new int[]{listX - MARK_WIDTH - 3, y, row.runCount() > 0 ? COLOR_RUNNING : COLOR_BAND});
             timerData.add(row);
         }
     }
 
-    /**
-     * The selected timer's twelve settings, then what can be done to it.
-     *
-     * <p>The same twelve the Settings tab serves as defaults, which is the
-     * point: a default is only a starting value, and every one of them can be
-     * changed here for this timer alone.</p>
-     */
-    private void buildTimerDetail() {
-        AdminModel.TimerRow timer = model.timer(model.selectedTimer());
-        timerForm.focus(timer == null ? null : timer.name());
-        if (timer == null) return;
+    // ==================================================================
+    // Timers: the editor
+    // ==================================================================
 
-        int actionsY = contentBottom - 20;
-        int buttonWidth = Math.min(84, (detailWidth - 12) / 3);
-        int startX = detailX + (detailWidth - (3 * buttonWidth + 12)) / 2;
-        String[] ops = {"start", "clone", "delete"};
+    /** Width of the rail that names the groups. */
+    private static final int RAIL_WIDTH = 96;
+
+    private int editorFieldTop, editorFieldX, editorControlX, editorControlWidth;
+
+    /**
+     * The whole timer, in six groups.
+     *
+     * <p>A rail on the left names what a timer has; the rest of the panel is
+     * whichever group is open. The footer holds the three things you do
+     * <em>to</em> a timer rather than <em>with</em> it.</p>
+     */
+    private void buildEditor() {
+        AdminModel.TimerRow timer = model.timer(editor.timerName());
+
+        int railX = GUTTER;
+        int railTop = contentTop;
+        List<TimerEditor.Section> sections = editor.sections();
+        for (int i = 0; i < sections.size(); i++) {
+            TimerEditor.Section item = sections.get(i);
+            Button button = Button.builder(
+                            Component.translatable("ontime.gui.editor.section." + item.name().toLowerCase(Locale.ROOT)),
+                            b -> { editor.setSection(item); init(); })
+                    .bounds(railX, railTop + i * 22, RAIL_WIDTH, 20)
+                    .build();
+            // The open group is the one you cannot press, exactly as the tabs
+            // above say which tab you are on.
+            button.active = editor.section() != item;
+            host.addWidget(button);
+        }
+
+        editorFieldX = railX + RAIL_WIDTH + GUTTER + 6;
+        editorFieldTop = contentTop + 2;
+        editorControlWidth = Math.min(180, (width - editorFieldX - GUTTER) / 2);
+        editorControlX = width - GUTTER - editorControlWidth;
+
+        int footerY = contentBottom - 20;
+        if (editor.section() == TimerEditor.Section.COMMANDS && !editor.isCreating()) {
+            buildCommandRows(timer, footerY - 30);
+        } else {
+            buildEditorFields(timer, footerY - 8);
+        }
+
+        if (!editor.isCreating()) buildEditorFooter(timer, footerY);
+    }
+
+    private void buildEditorFields(AdminModel.TimerRow timer, int bottom) {
+        List<TimerEditor.Field> fields = TimerEditor.fieldsOf(editor.section());
+        editorRowsShown = Math.max(1, (bottom - editorFieldTop) / SETTING_HEIGHT);
+        detailScroll = Math.max(0, Math.min(Math.max(0, fields.size() - editorRowsShown), detailScroll));
+
+        for (int i = 0; i < editorRowsShown && detailScroll + i < fields.size(); i++) {
+            TimerEditor.Field field = fields.get(detailScroll + i);
+            int y = editorFieldTop + i * SETTING_HEIGHT;
+            String value = editor.displayed(timer, field);
+            Tooltip tip = Tooltip.create(Component.translatable(
+                    "ontime.gui.editor.field." + field.label() + ".tip"));
+
+            switch (field.kind()) {
+                case BOOL, PRESET, ACTION, TRIGGER -> host.addWidget(
+                        Button.builder(cycleLabelFor(field, value), b -> {
+                                    editor.put(field.key(), editor.cycled(field, value));
+                                    init();
+                                })
+                                .bounds(editorControlX, y, editorControlWidth, 18)
+                                .tooltip(tip)
+                                .build());
+                default -> {
+                    EditBox box = new EditBox(host.font(), editorControlX, y, editorControlWidth, 18,
+                            Component.literal(field.key()));
+                    box.setMaxLength(field.kind() == TimerEditor.Kind.TEXT ? 256 : 32);
+                    box.setValue(value);
+                    box.setResponder(text -> editor.put(field.key(), text));
+                    host.addWidget(box);
+                    registerEditorField(box, field, tip);
+                }
+            }
+        }
+    }
+
+    private Component cycleLabelFor(TimerEditor.Field field, String value) {
+        return switch (field.kind()) {
+            case BOOL -> "countUp".equals(field.key())
+                    ? Component.translatable(Boolean.parseBoolean(value)
+                            ? "ontime.mode.countup" : "ontime.mode.countdown")
+                    : Component.translatable(Boolean.parseBoolean(value) ? "options.on" : "options.off");
+            case ACTION -> Component.translatable("ontime.gui.editor.action." + value);
+            case TRIGGER -> Component.translatable(value.isEmpty()
+                    ? "ontime.gui.editor.trigger.none" : "ontime.gui.editor.trigger." + value);
+            default -> Component.literal(value);
+        };
+    }
+
+    private void registerEditorField(EditBox box, TimerEditor.Field field, Tooltip tip) {
+        switch (field.kind()) {
+            case COLOR -> assist.add(box, FieldAssist.hexColor(), FieldAssist.Source.NONE, tip,
+                    () -> {
+                        Integer color = SettingsForm.colorOf(box.getValue());
+                        return color == null ? 0xFFFFFFFF : 0xFF000000 | color;
+                    });
+            case INT -> assist.add(box, FieldAssist.intBetween(Integer.MIN_VALUE, Integer.MAX_VALUE),
+                    FieldAssist.Source.NONE, tip, null);
+            case FLOAT -> assist.add(box, FieldAssist.decimalBetween(-1e6f, 1e6f),
+                    FieldAssist.Source.NONE, tip, null);
+            default -> {
+                if ("display.soundId".equals(field.key())) {
+                    assist.add(box, FieldAssist.id(), FieldAssist.Source.SOUNDS, tip, null);
+                } else if ("nextTimer".equals(field.key())) {
+                    assist.add(box, text -> true, FieldAssist.Source.TIMERS, tip, null);
+                } else {
+                    assist.add(box, text -> true, FieldAssist.Source.NONE, tip, null);
+                }
+            }
+        }
+    }
+
+    /**
+     * The commands this timer runs, each with the way to take it off again,
+     * and one row at the foot to add another.
+     *
+     * <p>These are not held until Apply like the fields are. A list is not a
+     * value: adding a command and then applying five other things would make
+     * the order it happened in matter, and it does not.</p>
+     */
+    private void buildCommandRows(AdminModel.TimerRow timer, int bottom) {
+        List<AdminModel.Scheduled> entries = timer == null ? List.of() : timer.commandList();
+        editorRowsShown = Math.max(1, (bottom - editorFieldTop) / 20);
+        detailScroll = Math.max(0, Math.min(Math.max(0, entries.size() - editorRowsShown), detailScroll));
+
+        for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
+            final int index = detailScroll + i;
+            int y = editorFieldTop + i * 20;
+            host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.command.remove"),
+                            b -> {
+                                JsonObject args = new JsonObject();
+                                args.addProperty("name", timer.name());
+                                args.addProperty("index", index + 1);
+                                send("timer.removeCommand", args);
+                                awaitingApply = true;
+                            })
+                    .bounds(width - GUTTER - 20, y, 20, 18)
+                    .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.command.remove.tip")))
+                    .build());
+        }
+
+        // The adding row, at the foot and always there.
+        int y = bottom + 6;
+        EditBox at = new EditBox(host.font(), editorFieldX, y, 54, 18,
+                Component.translatable("ontime.gui.editor.command.at"));
+        at.setHint(Component.translatable("ontime.gui.editor.command.at"));
+        at.setMaxLength(8);
+        host.addWidget(at);
+        assist.add(at, FieldAssist.intBetween(0, Integer.MAX_VALUE));
+
+        EditBox command = new EditBox(host.font(), editorFieldX + 60, y,
+                width - GUTTER - 54 - (editorFieldX + 60), 18,
+                Component.translatable("ontime.gui.editor.command.text"));
+        command.setHint(Component.translatable("ontime.gui.editor.command.text"));
+        command.setMaxLength(256);
+        host.addWidget(command);
+        assist.add(command, text -> true);
+
+        host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.command.add"), b -> {
+                    if (timer == null || command.getValue().isBlank()) return;
+                    JsonObject args = new JsonObject();
+                    args.addProperty("name", timer.name());
+                    args.addProperty("command", command.getValue().trim());
+                    // No time means a finish command, which is what an empty
+                    // box should mean: "when it ends".
+                    if (!at.getValue().isBlank()) {
+                        try {
+                            args.addProperty("atSeconds", Long.parseLong(at.getValue().trim()));
+                        } catch (NumberFormatException e) {
+                            model.setMessage(at.getValue(), true);
+                            return;
+                        }
+                    }
+                    send("timer.addCommand", args);
+                    awaitingApply = true;
+                })
+                .bounds(width - GUTTER - 48, y, 48, 18)
+                .build());
+    }
+
+    private void buildEditorFooter(AdminModel.TimerRow timer, int y) {
+        boolean running = timer != null && timer.runCount() > 0;
+        int buttonWidth = Math.min(96, (width - 2 * GUTTER - 16) / 3);
+        int startX = GUTTER;
+        String[] ops = {running ? "stop" : "start", "clone", "delete"};
         for (int i = 0; i < ops.length; i++) {
             String op = ops[i];
             host.addWidget(Button.builder(Component.translatable("ontime.gui.timers.action." + op),
                             b -> openDialog(op))
-                    .bounds(startX + i * (buttonWidth + 6), actionsY, buttonWidth, 20)
+                    .bounds(startX + i * (buttonWidth + 8), y, buttonWidth, 20)
                     .tooltip(Tooltip.create(Component.translatable("ontime.gui.timers.action." + op + ".tip")))
                     .build());
         }
-
-        int top = detailBodyTop + LINE + 4;
-        int room = actionsY - 6 - top;
-        timerFormRows = Math.max(1, room / SETTING_HEIGHT);
-        List<SettingsForm.Row> rows = SettingsForm.displayRows();
-        detailScroll = Math.max(0, Math.min(Math.max(0, rows.size() - timerFormRows), detailScroll));
-
-        int controlWidth = Math.min(120, detailWidth / 2);
-        int controlX = detailX + detailWidth - controlWidth;
-
-        for (int i = 0; i < timerFormRows && detailScroll + i < rows.size(); i++) {
-            SettingsForm.Row row = rows.get(detailScroll + i);
-            if (row.isHeader()) continue;
-            int y = top + i * SETTING_HEIGHT;
-            String tooltipKey = "ontime.config." + snake(row.key()) + ".tooltip";
-            Tooltip tip = Tooltip.create(Component.translatable(tooltipKey));
-
-            if (row.kind() == SettingsForm.Kind.PRESET) {
-                String value = timerForm.displayed(timer, row);
-                host.addWidget(Button.builder(Component.literal(value), b -> {
-                            timerForm.put(row.displayKey(), timerForm.cycled(row, value));
-                            init();
-                        })
-                        .bounds(controlX, y, controlWidth, 18)
-                        .tooltip(tip)
-                        .build());
-            } else {
-                EditBox box = new EditBox(host.font(), controlX, y, controlWidth, 18,
-                        Component.translatable("ontime.config." + snake(row.key())));
-                box.setMaxLength(64);
-                box.setValue(timerForm.displayed(timer, row));
-                box.setResponder(text -> timerForm.put(row.displayKey(), text));
-                host.addWidget(box);
-                registerDisplayField(box, row, tip);
-            }
-        }
     }
+
+    /** Same rules as the defaults form; only the source of the value differs. */
 
     /** Same rules as the defaults form; only the source of the value differs. */
     private void registerDisplayField(EditBox box, SettingsForm.Row row, Tooltip tip) {
@@ -582,13 +735,12 @@ public final class AdminPanel {
 
     /** The dialogs that ask for something rather than just confirming. */
     private boolean isTimerDialog() {
-        return "new".equals(confirmOp) || "clone".equals(confirmOp)
-                || "start".equals(confirmOp) || "delete".equals(confirmOp);
+        return "clone".equals(confirmOp) || "start".equals(confirmOp)
+                || "stop".equals(confirmOp) || "delete".equals(confirmOp);
     }
 
     private int dialogHeight() {
         return switch (confirmOp == null ? "" : confirmOp) {
-            case "new" -> 132;
             case "start" -> 116;
             case "clone" -> 104;
             default -> DIALOG_HEIGHT;
@@ -602,24 +754,6 @@ public final class AdminPanel {
         String name = model.selectedTimer();
 
         switch (confirmOp) {
-            case "new" -> {
-                dialogFields.add(host.addWidget(field(x, y, fieldWidth, "ontime.gui.timers.field.name", "")));
-                y += 24;
-                // Hours, minutes and seconds side by side: a duration is one
-                // thing, and three boxes on three lines would not read as one.
-                int third = (fieldWidth - 12) / 3;
-                dialogFields.add(host.addWidget(field(x, y, third, "ontime.gui.timers.field.hours", "0")));
-                dialogFields.add(host.addWidget(field(x + third + 6, y, third,
-                        "ontime.gui.timers.field.minutes", "0")));
-                dialogFields.add(host.addWidget(field(x + 2 * (third + 6), y, third,
-                        "ontime.gui.timers.field.seconds", "30")));
-                y += 24;
-                host.addWidget(Button.builder(Component.translatable(dialogCountUp
-                                        ? "ontime.mode.countup" : "ontime.mode.countdown"),
-                                b -> { dialogCountUp = !dialogCountUp; init(); })
-                        .bounds(x, y, fieldWidth, 20)
-                        .build());
-            }
             case "clone" -> {
                 dialogFields.add(host.addWidget(field(x, y, fieldWidth,
                         "ontime.gui.timers.field.name", name == null ? "" : name + "2")));
@@ -681,19 +815,22 @@ public final class AdminPanel {
     /** Reads whatever the open dialog collected and sends the one operation it means. */
     private void submitTimerDialog() {
         String kind = confirmOp;
-        String name = model.selectedTimer();
+        String name = editor.timerName();
         JsonObject args = new JsonObject();
 
         switch (kind == null ? "" : kind) {
-            case "new" -> {
-                args.addProperty("name", value(0));
-                args.addProperty("hours", numberIn(1));
-                args.addProperty("minutes", numberIn(2));
-                args.addProperty("seconds", numberIn(3));
-                args.addProperty("countUp", dialogCountUp);
+            case "stop" -> {
                 confirmOp = null;
                 init();
-                send("timer.create", args);
+                // Every execution of this timer, which is the only thing the
+                // button can mean when it sits on a definition.
+                for (AdminModel.RunRow run : model.runs()) {
+                    if (!run.timerName().equals(name)) continue;
+                    JsonObject one = new JsonObject();
+                    one.addProperty("runId", run.runId());
+                    send("run.stop", one);
+                }
+                awaitingApply = true;
             }
             case "clone" -> {
                 args.addProperty("name", name);
@@ -705,6 +842,7 @@ public final class AdminPanel {
             case "delete" -> {
                 args.addProperty("name", name);
                 confirmOp = null;
+                editor.close();
                 model.selectTimer(null);
                 init();
                 send("timer.delete", args);
@@ -752,15 +890,26 @@ public final class AdminPanel {
         }
     }
 
-    private void applyTimerForm() {
-        AdminModel.TimerRow timer = model.timer(model.selectedTimer());
-        SettingsForm.Result result = timerForm.build(timer);
-        for (JsonObject args : result.requests()) send("timer.setDisplay", args);
-        if (!result.rejected().isEmpty()) {
-            model.setMessage(String.join(", ", result.rejected()), true);
+    /**
+     * Sends everything the editor changed, then stays where it is.
+     *
+     * <p>Creating is the one that moves: the timer did not exist a moment ago,
+     * so the editor reopens on the real one, where the other five groups mean
+     * something.</p>
+     */
+    private void saveEditor() {
+        AdminModel.TimerRow timer = model.timer(editor.timerName());
+        List<TimerEditor.Op> ops = editor.build(timer);
+        for (TimerEditor.Op op : ops) send(op.name(), op.args());
+
+        if (editor.isCreating() && !ops.isEmpty()) {
+            String name = ops.get(0).args().get("name").getAsString();
+            editor.open(name);
+            model.selectTimer(name);
+        } else {
+            editor.discard();
         }
-        timerForm.discard();
-        awaitingApply = !result.requests().isEmpty();
+        awaitingApply = !ops.isEmpty();
         init();
     }
 
@@ -791,7 +940,7 @@ public final class AdminPanel {
                                     .withStyle(ChatFormatting.RED),
                             b -> {
                                 settings.discard();
-                                timerForm.discard();
+                                editor.discard();
                                 confirmOp = null;
                                 host.closePanel();
                             })
@@ -799,7 +948,7 @@ public final class AdminPanel {
                     .build());
 
             host.addWidget(Button.builder(Component.translatable("ontime.gui.confirm.exit.save"), b -> {
-                        if (timerForm.isDirty(model.timer(model.selectedTimer()))) applyTimerForm();
+                        if (editor.isDirty(model.timer(editor.timerName()))) saveEditor();
                         applySettings();
                         confirmOp = null;
                         host.closePanel();
@@ -839,7 +988,7 @@ public final class AdminPanel {
                     // Closing on top of unapplied edits throws them away in
                     // silence. Asking costs one click and is the only way the
                     // answer is the operator's rather than the panel's.
-                    if (settings.isDirty(model) || timerForm.isDirty(model.timer(model.selectedTimer()))) {
+                    if (settings.isDirty(model) || editor.isDirty(model.timer(editor.timerName()))) {
                         confirmOp = CONFIRM_EXIT;
                         init();
                     } else {
@@ -849,36 +998,40 @@ public final class AdminPanel {
                 .bounds(doneX, 5, doneWidth, 20)
                 .build());
 
-        if (model.tab() == AdminModel.Tab.TIMERS) {
-            int newWidth = 50;
-            int applyWidth = 62;
-            int discardWidth = 62;
-            AdminModel.TimerRow selected = model.timer(model.selectedTimer());
-            boolean dirty = timerForm.isDirty(selected);
+        if (model.tab() == AdminModel.Tab.TIMERS && editor.isOpen()) {
+            int saveWidth = editor.isCreating() ? 62 : 54;
+            int backWidth = 50;
+            AdminModel.TimerRow timer = model.timer(editor.timerName());
 
-            Button apply = Button.builder(Component.translatable("ontime.gui.settings.apply"),
-                            b -> applyTimerForm())
-                    .bounds(doneX - 6 - applyWidth, 5, applyWidth, 20)
-                    .tooltip(Tooltip.create(Component.translatable("ontime.gui.timers.apply.tip")))
+            Button save = Button.builder(Component.translatable(editor.isCreating()
+                                    ? "ontime.gui.timers.accept.new" : "ontime.gui.editor.save"),
+                            b -> saveEditor())
+                    .bounds(doneX - 6 - saveWidth, 5, saveWidth, 20)
+                    .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.save.tip")))
                     .build();
-            apply.active = dirty;
-            applyButton = apply;
-            host.addWidget(apply);
+            save.active = editor.isDirty(timer);
+            applyButton = save;
+            host.addWidget(save);
 
-            Button discard = Button.builder(Component.translatable("ontime.gui.settings.discard"), b -> {
-                        timerForm.discard();
-                        model.clearMessage();
+            Button back = Button.builder(Component.translatable("ontime.gui.editor.back"), b -> {
+                        if (editor.isDirty(model.timer(editor.timerName()))) {
+                            confirmOp = CONFIRM_EXIT;
+                        } else {
+                            editor.close();
+                        }
                         init();
                     })
-                    .bounds(doneX - 12 - applyWidth - discardWidth, 5, discardWidth, 20)
+                    .bounds(doneX - 12 - saveWidth - backWidth, 5, backWidth, 20)
                     .build();
-            discard.active = dirty;
-            discardButton = discard;
-            host.addWidget(discard);
-
-            host.addWidget(Button.builder(Component.translatable("ontime.gui.timers.action.new"),
-                            b -> openDialog("new"))
-                    .bounds(doneX - 18 - applyWidth - discardWidth - newWidth, 5, newWidth, 20)
+            discardButton = back;
+            host.addWidget(back);
+        } else if (model.tab() == AdminModel.Tab.TIMERS) {
+            int newWidth = 50;
+            host.addWidget(Button.builder(Component.translatable("ontime.gui.timers.action.new"), b -> {
+                        editor.openNew();
+                        init();
+                    })
+                    .bounds(doneX - 6 - newWidth, 5, newWidth, 20)
                     .tooltip(Tooltip.create(Component.translatable("ontime.gui.timers.action.new.tip")))
                     .build());
         }
@@ -927,6 +1080,10 @@ public final class AdminPanel {
     }
 
     private void buildTabs() {
+        // The editor owns the whole panel: leaving the tabs up would offer a
+        // way out that silently drops what has been typed.
+        if (model.tab() == AdminModel.Tab.TIMERS && editor.isOpen()) return;
+
         AdminModel.Tab[] tabs = AdminModel.Tab.values();
         // Kept inside the list column so the divider between the columns can
         // run past them instead of through them.
@@ -1077,7 +1234,9 @@ public final class AdminPanel {
 
         switch (model.tab()) {
             case RUNS -> drawRuns(painter);
-            case TIMERS -> drawTimers(painter);
+            case TIMERS -> {
+                if (editor.isOpen()) drawEditor(painter); else drawTimerList(painter);
+            }
             case SETTINGS -> drawSettings(painter);
         }
 
@@ -1095,7 +1254,10 @@ public final class AdminPanel {
      * because a default is a starting value and every one of them belongs to
      * the timer once it exists.</p>
      */
-    private void drawTimers(Painter painter) {
+    /**
+     * The list: what exists, whether it is running, and how long it runs for.
+     */
+    private void drawTimerList(Painter painter) {
         List<AdminModel.TimerRow> rows = model.filteredTimers();
 
         painter.text(Component.translatable("ontime.gui.timers.col.name"), colName, headerRowY, COLOR_TEXT);
@@ -1109,9 +1271,7 @@ public final class AdminPanel {
             centered(painter, Component.translatable(model.filter().isEmpty()
                             ? "ontime.gui.timers.empty" : "ontime.gui.timers.no_match"),
                     listX + listWidth / 2,
-                    (listTop + SEARCH_HEIGHT + listBottom) / 2 - painter.lineHeight() / 2, COLOR_TEXT);
-            drawDivider(painter);
-            drawTimerDetail(painter);
+                    (contentTop + SEARCH_HEIGHT + contentBottom) / 2 - painter.lineHeight() / 2, COLOR_TEXT);
             return;
         }
 
@@ -1122,68 +1282,91 @@ public final class AdminPanel {
             AdminModel.TimerRow row = timerData.get(i);
             int y = timerMarks.get(i)[1] + (ROW_HEIGHT - 8) / 2;
             painter.text(Component.literal(row.name()), colName, y, COLOR_TEXT);
-            if (row.runCount() > 0) {
-                painter.text(Component.literal(String.valueOf(row.runCount())),
-                        colAudience, y, COLOR_RUNNING);
-            }
+
+            // "Yes (2)" rather than a bare 2: the question is whether it is
+            // running, and how many is the detail after the answer.
+            boolean running = row.runCount() > 0;
+            painter.text(running
+                            ? Component.translatable("ontime.gui.timers.running.yes", row.runCount())
+                            : Component.translatable("ontime.gui.timers.running.no"),
+                    colAudience, y, running ? COLOR_RUNNING : COLOR_TEXT);
+
             Component length = Component.literal(arrow(row.countUp()) + " "
                     + com.mateof24.render.ClientTimerState.formatTicks(row.targetTicks()));
             painter.text(length, colTimeRight - painter.textWidth(length), y, COLOR_TEXT);
         }
 
-        int listRight = twoColumn ? detailX - GUTTER / 2 : width;
-        drawScrollbar(painter, (listX + listWidth + listRight) / 2 - 1,
-                listTop + SEARCH_HEIGHT, listBottom, rows.size(), timerRowsShown);
-
-        drawDivider(painter);
-        drawTimerDetail(painter);
+        drawScrollbar(painter, listX + listWidth + GUTTER / 2 - 1,
+                contentTop + SEARCH_HEIGHT, contentBottom, rows.size(), timerRowsShown);
     }
 
-    private void drawTimerDetail(Painter painter) {
-        int centerX = detailX + detailWidth / 2;
-        centered(painter, Component.translatable("ontime.gui.timers.detail.title"),
-                centerX, detailTitleY, COLOR_TEXT);
-        painter.rect(detailX, detailRuleY, detailWidth, 1, COLOR_RULE);
+    /** The rail, the open group's labels, and what the group is called. */
+    private void drawEditor(Painter painter) {
+        AdminModel.TimerRow timer = model.timer(editor.timerName());
 
-        AdminModel.TimerRow timer = model.timer(model.selectedTimer());
-        if (timer == null) {
-            centered(painter, Component.translatable("ontime.gui.timers.pick_hint"), centerX,
-                    (detailBodyTop + contentBottom) / 2 - painter.lineHeight() / 2, COLOR_TEXT);
+        Component title = Component.literal(editor.isCreating()
+                ? Component.translatable("ontime.gui.timers.dialog.new").getString()
+                : editor.timerName());
+        painter.text(title, GUTTER, headerRowY, COLOR_TEXT);
+        if (!editor.isCreating() && timer != null) {
+            Component length = Component.literal(arrow(timer.countUp()) + " "
+                    + com.mateof24.render.ClientTimerState.formatTicks(timer.targetTicks()));
+            painter.text(length, width - GUTTER - painter.textWidth(length), headerRowY, COLOR_TEXT);
+        }
+        painter.rect(GUTTER, headerRowY + LINE - 1, width - 2 * GUTTER, 1, COLOR_RULE);
+
+        // The rail's own edge, so the two halves read as two halves.
+        painter.rect(GUTTER + RAIL_WIDTH + GUTTER / 2, contentTop - 2, 1,
+                contentBottom - contentTop + 2, COLOR_RULE);
+
+        if (editor.section() == TimerEditor.Section.COMMANDS && !editor.isCreating()) {
+            drawCommandRows(painter, timer);
             return;
         }
 
-        // Enabled state follows the form, not the last layout.
-        boolean dirty = timerForm.isDirty(timer);
-        if (applyButton != null) applyButton.active = dirty;
-        if (discardButton != null) discardButton.active = dirty;
-
-        painter.text(Component.literal(timer.name()), detailX, detailBodyTop, COLOR_TEXT);
-        Component length = Component.literal(arrow(timer.countUp()) + " "
-                + com.mateof24.render.ClientTimerState.formatTicks(timer.targetTicks()));
-        painter.text(length, detailX + detailWidth - painter.textWidth(length), detailBodyTop, COLOR_TEXT);
-
-        int top = detailBodyTop + LINE + 4;
-        List<SettingsForm.Row> rows = SettingsForm.displayRows();
-        for (int i = 0; i < timerFormRows && detailScroll + i < rows.size(); i++) {
-            SettingsForm.Row row = rows.get(detailScroll + i);
-            int y = top + i * SETTING_HEIGHT;
-
-            if (row.isHeader()) {
-                painter.text(Component.translatable("ontime.gui.settings.group." + row.header()),
-                        detailX, y + 6, COLOR_TEXT);
-                painter.rect(detailX, y + 6 + LINE - 1, detailWidth, 1, COLOR_RULE);
-                continue;
+        List<TimerEditor.Field> fields = TimerEditor.fieldsOf(editor.section());
+        for (int i = 0; i < editorRowsShown && detailScroll + i < fields.size(); i++) {
+            TimerEditor.Field field = fields.get(detailScroll + i);
+            int y = editorFieldTop + i * SETTING_HEIGHT;
+            // The edited mark sits inside the field column with room to spare,
+            // rather than against the rail's edge where it read as a fault.
+            if (editor.isEdited(timer, field.key())) {
+                painter.rect(editorFieldX - 8, y + 2, MARK_WIDTH, 14, COLOR_PAUSED);
             }
-
-            if (timerForm.isEdited(timer, row.displayKey())) {
-                painter.rect(detailX - 6, y + 2, MARK_WIDTH, 14, COLOR_PAUSED);
-            }
-            painter.text(Component.translatable("ontime.config." + snake(row.key())),
-                    detailX, y + 5, COLOR_TEXT);
+            painter.text(Component.translatable("ontime.gui.editor.field." + field.label()),
+                    editorFieldX, y + 5, COLOR_TEXT);
         }
 
-        drawScrollbar(painter, detailX + detailWidth + 4, top, contentBottom - 26,
-                rows.size(), timerFormRows);
+        drawScrollbar(painter, editorControlX + editorControlWidth + GUTTER / 2 - 1,
+                editorFieldTop, contentBottom - 30, fields.size(), editorRowsShown);
+    }
+
+    private void drawCommandRows(Painter painter, AdminModel.TimerRow timer) {
+        List<AdminModel.Scheduled> entries = timer == null ? List.of() : timer.commandList();
+        if (entries.isEmpty()) {
+            painter.text(Component.translatable("ontime.gui.editor.command.none"),
+                    editorFieldX, editorFieldTop + 4, COLOR_TEXT);
+            return;
+        }
+
+        int timeWidth = painter.textWidth(Component.translatable("ontime.gui.detail.on_finish"));
+        for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
+            AdminModel.Scheduled entry = entries.get(detailScroll + i);
+            int y = editorFieldTop + i * 20 + 5;
+            // The reading in the accent colour, the command in plain white:
+            // one glance finds the times, the next reads the command.
+            Component when = entry.atSeconds() < 0
+                    ? Component.translatable("ontime.gui.detail.on_finish")
+                    : Component.literal(com.mateof24.render.ClientTimerState
+                            .formatTicks(entry.atSeconds() * 20L));
+            painter.text(when, editorFieldX, y, COLOR_COOLDOWN);
+            painter.text(trimmed(painter, Component.literal(entry.commands().get(0)),
+                            width - GUTTER - 26 - (editorFieldX + timeWidth + 8)),
+                    editorFieldX + timeWidth + 8, y, COLOR_TEXT);
+        }
+
+        drawScrollbar(painter, width - GUTTER - 24, editorFieldTop, contentBottom - 30,
+                entries.size(), editorRowsShown);
     }
 
     private static String arrow(boolean countUp) {
@@ -1231,7 +1414,7 @@ public final class AdminPanel {
 
         if (isTimerDialog()) {
             centered(painter, Component.translatable("ontime.gui.timers.dialog." + confirmOp,
-                            Component.literal(model.selectedTimer() == null ? "" : model.selectedTimer())),
+                            Component.literal(editor.timerName() == null ? "" : editor.timerName())),
                     x + DIALOG_WIDTH / 2, y + 14, COLOR_TEXT);
             if ("delete".equals(confirmOp)) {
                 centered(painter, Component.translatable("ontime.gui.timers.dialog.delete.body"),
@@ -1246,7 +1429,7 @@ public final class AdminPanel {
                 x + DIALOG_WIDTH / 2, y + 16, COLOR_TEXT);
         centered(painter, exiting
                         ? Component.translatable("ontime.gui.confirm.exit.body",
-                                settings.pendingCount() + timerForm.pendingCount())
+                                settings.pendingCount() + editor.pendingCount())
                         : Component.translatable("ontime.gui.confirm.stop_all.body", model.runs().size()),
                 x + DIALOG_WIDTH / 2, y + 34, COLOR_TEXT);
     }
@@ -1606,13 +1789,12 @@ public final class AdminPanel {
             total = SettingsForm.rows().size();
             shown = settingsRows;
         } else if (model.tab() == AdminModel.Tab.TIMERS) {
-            // Two lists side by side, so the wheel goes to whichever the
-            // pointer is over. Anything else guesses, and guesses wrong.
-            if (twoColumn && pointerX >= detailX - GUTTER / 2 && model.selectedTimer() != null) {
-                int rows = SettingsForm.displayRows().size();
-                if (rows <= timerFormRows) return false;
+            if (editor.isOpen()) {
+                int rows = editor.section() == TimerEditor.Section.COMMANDS && !editor.isCreating()
+                        ? commandCount() : TimerEditor.fieldsOf(editor.section()).size();
+                if (rows <= editorRowsShown) return false;
                 int before = detailScroll;
-                detailScroll = Math.max(0, Math.min(rows - timerFormRows,
+                detailScroll = Math.max(0, Math.min(rows - editorRowsShown,
                         detailScroll - (int) Math.signum(amount)));
                 if (detailScroll == before) return false;
                 init();
@@ -1643,6 +1825,11 @@ public final class AdminPanel {
      * its first row. That is what made the sound settings unreachable rather
      * than merely off screen. Each tab's builder clamps its own list.</p>
      */
+    private int commandCount() {
+        AdminModel.TimerRow timer = model.timer(editor.timerName());
+        return timer == null ? 0 : timer.commandList().size();
+    }
+
     private void clampScroll() {
         if (model.tab() != AdminModel.Tab.RUNS) return;
         scroll = Math.max(0, Math.min(Math.max(0, model.runs().size() - visibleRows), scroll));
