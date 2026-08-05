@@ -2,6 +2,7 @@ package com.mateof24.gui;
 
 import com.google.gson.JsonObject;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
@@ -108,6 +109,27 @@ public final class AdminPanel {
     private static final int SETTING_HEIGHT = 22;
     private int settingsRows = 1;
 
+    /**
+     * Apply and Discard, kept so their enabled state can follow the form.
+     *
+     * <p>Dirtiness changes on a keystroke, and a keystroke does not rebuild the
+     * layout — deliberately, or the caret would jump out of the field. So these
+     * two are refreshed while drawing instead. Without that they stayed however
+     * they were at the last layout, which is the bug where Apply never lit up
+     * again after reopening the panel.</p>
+     */
+    private Button applyButton, discardButton;
+
+    /** How many suggestions the sound field offers at once. */
+    private static final int MAX_SUGGESTIONS = 7;
+
+    private EditBox soundBox;
+    private final List<Button> suggestionButtons = new ArrayList<>();
+    /** The settings controls, so the suggestion popup can get out of their way. */
+    private final List<AbstractWidget> settingControls = new ArrayList<>();
+    private List<String> suggestions = List.of();
+    private List<String> soundIds = null;
+
     /** {@code {x, y, colour}} per visible row, for the state mark in the gutter. */
     private final List<int[]> rowMarks = new ArrayList<>();
     /** The rows currently on screen, parallel to {@link #rowMarks}. */
@@ -201,6 +223,12 @@ public final class AdminPanel {
         host.clearWidgets();
         rowMarks.clear();
         rowData.clear();
+        suggestionButtons.clear();
+        settingControls.clear();
+        suggestions = List.of();
+        applyButton = null;
+        discardButton = null;
+        soundBox = null;
 
         // A confirmation owns the screen while it is up: with nothing else
         // built there is nothing behind it to click by accident.
@@ -221,13 +249,16 @@ public final class AdminPanel {
 
     // ---- the settings form ----
 
+    /** Below the note that says what this whole tab is. */
     private int settingsTop() {
-        return headerRowY;
+        return headerRowY + LINE + 4;
     }
 
     private void buildSettings() {
         int top = settingsTop();
-        settingsRows = Math.max(1, (contentBottom - top) / SETTING_HEIGHT);
+        // A line at the foot for the range indicator, so it stops landing on
+        // top of the last row's control.
+        settingsRows = Math.max(1, (contentBottom - top - LINE) / SETTING_HEIGHT);
         List<SettingsForm.Row> rows = SettingsForm.rows();
         scroll = Math.max(0, Math.min(Math.max(0, rows.size() - settingsRows), scroll));
 
@@ -245,23 +276,115 @@ public final class AdminPanel {
                 // what CycleButton looks like, without CycleButton's drift:
                 // 26.2 changed its builder and dropped withInitialValue.
                 String value = settings.displayed(model, row);
-                host.addWidget(Button.builder(cycleLabel(row, value), b -> {
+                Button cycle = Button.builder(cycleLabel(row, value), b -> {
                             settings.put(row.key(), settings.cycled(row, value));
                             init();
                         })
                         .bounds(controlX, y, controlWidth, 18)
                         .tooltip(Tooltip.create(Component.translatable(tooltipKey)))
-                        .build());
+                        .build();
+                settingControls.add(host.addWidget(cycle));
             } else {
                 EditBox box = new EditBox(host.font(), controlX, y, controlWidth, 18,
                         Component.translatable("ontime.config." + snake(row.key())));
                 box.setMaxLength(64);
                 box.setValue(settings.displayed(model, row));
-                box.setResponder(text -> settings.put(row.key(), text));
+                if (row.kind() == SettingsForm.Kind.COLOR) {
+                    // The field reads in the colour it names, so a wrong digit
+                    // is visible before it is applied. Unparseable goes red.
+                    tintColor(box, box.getValue());
+                    box.setResponder(text -> {
+                        settings.put(row.key(), text);
+                        tintColor(box, text);
+                    });
+                } else {
+                    box.setResponder(text -> settings.put(row.key(), text));
+                }
                 box.setTooltip(Tooltip.create(Component.translatable(tooltipKey)));
-                host.addWidget(box);
+                settingControls.add(host.addWidget(box));
+                if ("timerSoundId".equals(row.key())) soundBox = box;
             }
         }
+
+        if (soundBox != null) buildSuggestions(controlX, controlWidth);
+    }
+
+    /**
+     * A fixed pool of suggestion buttons under the sound field.
+     *
+     * <p>Built once and then only shown, hidden and relabelled while drawing.
+     * Rebuilding them per keystroke would mean rebuilding the field being typed
+     * into, and the panel cannot listen for keys directly: {@code keyPressed}
+     * changed shape in 1.21.10 and the {@code v1.21.6} family compiles Fabric
+     * against 1.21.10 and NeoForge against 1.21.6, so no shared file can
+     * override it. Clicking a suggestion is what accepts it.</p>
+     */
+    private void buildSuggestions(int controlX, int controlWidth) {
+        int y = soundBox.getY() + 19;
+        for (int i = 0; i < MAX_SUGGESTIONS; i++) {
+            final int index = i;
+            int buttonY = y + i * 14;
+            if (buttonY + 14 > height) break;
+            Button button = Button.builder(Component.empty(), b -> {
+                        if (index < suggestions.size()) {
+                            String picked = suggestions.get(index);
+                            soundBox.setValue(picked);
+                            settings.put("timerSoundId", picked);
+                            suggestions = List.of();
+                        }
+                    })
+                    .bounds(controlX, buttonY, controlWidth, 14)
+                    .build();
+            button.visible = false;
+            suggestionButtons.add(host.addWidget(button));
+        }
+    }
+
+    /** Every registered sound id, read once. */
+    private List<String> soundIds() {
+        if (soundIds == null) {
+            List<String> ids = new ArrayList<>();
+            try {
+                // Typed as Object on purpose: the id class is called
+                // ResourceLocation before 1.21.11 and Identifier after, and all
+                // that is wanted here is its text.
+                for (Object id : net.minecraft.core.registries.BuiltInRegistries.SOUND_EVENT.keySet()) {
+                    ids.add(id.toString());
+                }
+            } catch (Throwable ignored) {
+                // No registry on this side; the field still takes typing.
+            }
+            java.util.Collections.sort(ids);
+            soundIds = ids;
+        }
+        return soundIds;
+    }
+
+    /**
+     * Matches for what is in the sound field.
+     *
+     * <p>Anything containing the text, with the ones that start with it first —
+     * typing {@code bell} should find {@code block.note_block.bell} without
+     * having to remember it lives under {@code block}.</p>
+     */
+    private List<String> matchingSounds(String typed) {
+        String needle = typed.trim().toLowerCase(Locale.ROOT);
+        if (needle.isEmpty()) return List.of();
+        List<String> starts = new ArrayList<>();
+        List<String> contains = new ArrayList<>();
+        for (String id : soundIds()) {
+            if (id.equals(needle)) return List.of();
+            if (id.startsWith(needle)) starts.add(id);
+            else if (id.contains(needle)) contains.add(id);
+            if (starts.size() >= MAX_SUGGESTIONS) break;
+        }
+        starts.addAll(contains);
+        return starts.size() > MAX_SUGGESTIONS ? starts.subList(0, MAX_SUGGESTIONS) : starts;
+    }
+
+    private static void tintColor(EditBox box, String text) {
+        Integer color = SettingsForm.colorOf(text);
+        box.setTextColor(color != null ? 0xFF000000 | color : COLOR_ERROR);
     }
 
     private Component cycleLabel(SettingsForm.Row row, String value) {
@@ -326,23 +449,21 @@ public final class AdminPanel {
         if (model.tab() == AdminModel.Tab.SETTINGS) {
             int applyWidth = 62;
             int discardWidth = 62;
-            Button apply = Button.builder(Component.translatable("ontime.gui.settings.apply"),
+            applyButton = Button.builder(Component.translatable("ontime.gui.settings.apply"),
                             b -> applySettings())
                     .bounds(doneX - 6 - applyWidth, 5, applyWidth, 20)
                     .tooltip(Tooltip.create(Component.translatable("ontime.gui.settings.apply.tip")))
                     .build();
-            apply.active = settings.isDirty();
-            host.addWidget(apply);
+            host.addWidget(applyButton);
 
-            Button discard = Button.builder(Component.translatable("ontime.gui.settings.discard"), b -> {
+            discardButton = Button.builder(Component.translatable("ontime.gui.settings.discard"), b -> {
                         settings.discard();
                         model.clearMessage();
                         init();
                     })
                     .bounds(doneX - 12 - applyWidth - discardWidth, 5, discardWidth, 20)
                     .build();
-            discard.active = settings.isDirty();
-            host.addWidget(discard);
+            host.addWidget(discardButton);
         }
 
         if (model.tab() == AdminModel.Tab.RUNS && !model.runs().isEmpty()) {
@@ -516,6 +637,13 @@ public final class AdminPanel {
         int top = settingsTop();
         List<SettingsForm.Row> rows = SettingsForm.rows();
 
+        // Enabled state follows the form, not the last layout.
+        boolean dirty = settings.isDirty(model);
+        if (applyButton != null) applyButton.active = dirty;
+        if (discardButton != null) discardButton.active = dirty;
+
+        updateSuggestions();
+
         for (int i = 0; i < settingsRows && scroll + i < rows.size(); i++) {
             SettingsForm.Row row = rows.get(scroll + i);
             int y = top + i * SETTING_HEIGHT;
@@ -529,18 +657,56 @@ public final class AdminPanel {
 
             // An edited row is marked in the gutter the same way a running
             // execution is: colour, in the margin, no glyph.
-            if (settings.isEdited(row.key())) {
+            if (settings.isEdited(model, row.key())) {
                 painter.rect(GUTTER - 6, y + 2, MARK_WIDTH, 14, COLOR_PAUSED);
             }
             painter.text(Component.translatable("ontime.config." + snake(row.key())),
                     GUTTER, y + 5, COLOR_TEXT);
         }
 
+        painter.text(Component.translatable("ontime.gui.settings.note"), GUTTER, headerRowY, COLOR_TEXT);
+
         if (rows.size() > settingsRows) {
             Component range = Component.translatable("ontime.gui.runs.scroll",
                     scroll + 1, Math.min(scroll + settingsRows, rows.size()), rows.size());
             painter.text(range, width - GUTTER - painter.textWidth(range),
-                    contentBottom - LINE, COLOR_TEXT);
+                    contentBottom - LINE + 2, COLOR_TEXT);
+        }
+    }
+
+    /**
+     * Refreshes what the sound field offers, and tints the colour fields.
+     *
+     * <p>Both depend on text that changes without a layout, so both happen
+     * while drawing.</p>
+     */
+    private void updateSuggestions() {
+        if (soundBox == null || suggestionButtons.isEmpty()) return;
+
+        suggestions = soundBox.isFocused() ? matchingSounds(soundBox.getValue()) : List.of();
+        int lowest = 0;
+        for (int i = 0; i < suggestionButtons.size(); i++) {
+            Button button = suggestionButtons.get(i);
+            boolean show = i < suggestions.size();
+            button.visible = show;
+            button.active = show;
+            if (show) {
+                button.setMessage(Component.literal(suggestions.get(i)));
+                lowest = button.getY() + button.getHeight();
+            }
+        }
+
+        // Anything the popup covers is hidden while it is up. Not cosmetic:
+        // clicks go to the first child that takes them, in the order they were
+        // added, so a field underneath would swallow the click meant for a
+        // suggestion sitting on top of it.
+        for (AbstractWidget control : settingControls) {
+            boolean covered = lowest > 0
+                    && control != soundBox
+                    && control.getY() < lowest
+                    && control.getY() + control.getHeight() > soundBox.getY() + soundBox.getHeight();
+            control.visible = !covered;
+            control.active = !covered;
         }
     }
 
@@ -776,7 +942,7 @@ public final class AdminPanel {
      * between the snapshot it drew and the button that was pressed.</p>
      */
     private void applySettings() {
-        SettingsForm.Result result = settings.build();
+        SettingsForm.Result result = settings.build(model);
         for (JsonObject args : result.requests()) {
             JsonObject request = new JsonObject();
             request.addProperty("op", "config.set");

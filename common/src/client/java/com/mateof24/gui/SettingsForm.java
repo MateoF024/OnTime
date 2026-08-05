@@ -91,7 +91,21 @@ public final class SettingsForm {
     /** Edits not yet applied, by key. */
     private final Map<String, String> pending = new LinkedHashMap<>();
 
-    public boolean isDirty() { return !pending.isEmpty(); }
+    /**
+     * Whether anything typed actually differs from what the server holds.
+     *
+     * <p>Not simply "has something been typed": typing over a value and typing
+     * it back is not a change, and Apply lighting up for it would be lying
+     * about there being something to send.</p>
+     */
+    public boolean isDirty(AdminModel model) {
+        for (Map.Entry<String, String> entry : pending.entrySet()) {
+            Row row = find(entry.getKey());
+            if (row == null) continue;
+            if (!entry.getValue().equals(fromServer(model, row))) return true;
+        }
+        return false;
+    }
 
     public int pendingCount() { return pending.size(); }
 
@@ -106,7 +120,13 @@ public final class SettingsForm {
         return fromServer(model, row);
     }
 
-    public boolean isEdited(String key) { return pending.containsKey(key); }
+    /** Whether this row's value differs from the server's, for the gutter mark. */
+    public boolean isEdited(AdminModel model, String key) {
+        String edited = pending.get(key);
+        if (edited == null) return false;
+        Row row = find(key);
+        return row != null && !edited.equals(fromServer(model, row));
+    }
 
     private String fromServer(AdminModel model, Row row) {
         return switch (row.kind()) {
@@ -142,13 +162,16 @@ public final class SettingsForm {
      *
      * @return one request per accepted edit, and the keys that would not parse
      */
-    public Result build() {
+    public Result build(AdminModel model) {
         List<JsonObject> requests = new ArrayList<>();
         List<String> rejected = new ArrayList<>();
 
         for (Map.Entry<String, String> entry : pending.entrySet()) {
             Row row = find(entry.getKey());
             if (row == null) continue;
+            // Unchanged values are not sent: the server would write the same
+            // number back and push a snapshot for nothing.
+            if (entry.getValue().equals(fromServer(model, row))) continue;
             JsonObject args = new JsonObject();
             args.addProperty("key", row.key());
             try {
@@ -169,6 +192,15 @@ public final class SettingsForm {
     }
 
     public record Result(List<JsonObject> requests, List<String> rejected) {}
+
+    /** The colour a hex field currently means, or null when it means nothing yet. */
+    public static Integer colorOf(String text) {
+        try {
+            return parseColor(text);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     private static int parseColor(String text) {
         String hex = text.trim();
