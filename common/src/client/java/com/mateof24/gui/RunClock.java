@@ -30,6 +30,9 @@ final class RunClock {
     /** runId to {ticks at the last change, nanoTime then, last raw value seen}. */
     private final Map<String, long[]> anchors = new HashMap<>();
 
+    /** The same, for the cooldown a run is sitting in. */
+    private final Map<String, long[]> cooldowns = new HashMap<>();
+
     /**
      * Re-anchors the runs whose number actually moved.
      *
@@ -44,8 +47,29 @@ final class RunClock {
             if (anchor == null || anchor[2] != row.currentTicks()) {
                 anchors.put(row.runId(), new long[]{row.currentTicks(), System.nanoTime(), row.currentTicks()});
             }
+            long[] cooldown = cooldowns.get(row.runId());
+            if (cooldown == null || cooldown[2] != row.cooldownRemaining()) {
+                cooldowns.put(row.runId(),
+                        new long[]{row.cooldownRemaining(), System.nanoTime(), row.cooldownRemaining()});
+            }
         }
         anchors.keySet().retainAll(seen);
+        cooldowns.keySet().retainAll(seen);
+    }
+
+    /**
+     * How much of this run's cooldown is left, right now.
+     *
+     * <p>Predicted here rather than read from the snapshot: a cooldown is a
+     * countdown like any other, and one that only moved once a second would
+     * look stuck. There is no HUD view to defer to — a cooldown draws nothing
+     * on screen — so this is the only clock for it.</p>
+     */
+    long cooldownTicks(AdminModel.RunRow row) {
+        long[] anchor = cooldowns.get(row.runId());
+        if (anchor == null) return row.cooldownRemaining();
+        long elapsed = Math.max(0L, (System.nanoTime() - anchor[1]) / NANOS_PER_TICK);
+        return Math.max(0L, anchor[0] - elapsed);
     }
 
     /** What this run's clock reads right now. */

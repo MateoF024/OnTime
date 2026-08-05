@@ -236,6 +236,17 @@ public final class AdminOps {
         json.add("audience", members);
         TimerManager.getInstance().getTimer(run.timerName())
                 .ifPresent(timer -> json.add("display", timer.display().toJson()));
+
+        // What a run in a cooldown is waiting for. The panel counts it down
+        // itself between snapshots, the same way it does the clock.
+        for (com.mateof24.timer.TimerRun live : TimerManager.getInstance().runsView()) {
+            if (!live.runId().equals(run.runId())) continue;
+            json.addProperty("cooldownRemaining", live.cooldownRemaining());
+            if (live.pendingSequenceTimer() != null) {
+                json.addProperty("pendingTimer", live.pendingSequenceTimer());
+            }
+            break;
+        }
         return json;
     }
 

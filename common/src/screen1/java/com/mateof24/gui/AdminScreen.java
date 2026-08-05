@@ -2,7 +2,7 @@ package com.mateof24.gui;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -10,22 +10,19 @@ import net.minecraft.network.chat.Component;
 /**
  * The administration panel's screen.
  *
- * <p>26.x: {@code GuiGraphics} became {@code GuiGraphicsExtractor} and
- * {@code render} became {@code extractRenderState}.</p>
+ * <p>MC 1.21.1 to 1.21.9: GuiGraphics, and input as loose primitives.</p>
  *
- * <p><b>Why this file overrides so little.</b> Input signatures drift: 1.21.10
- * turned {@code mouseClicked} and {@code keyPressed} into event objects,
- * while 1.21.6 still takes loose primitives — and the {@code v1.21.6} family
- * compiles Fabric against 1.21.10 and NeoForge against 1.21.6, so a single file
- * shared by both cannot override either one. The panel therefore takes its
- * clicks through {@code Button}, whose builder is identical on every version,
- * and this file overrides only what is genuinely stable: {@code init},
- * the render hook, {@code mouseScrolled} and {@code onClose}.</p>
+ * <p><b>What lives here and nothing else.</b> Vanilla's input signatures
+ * changed shape at 1.21.10 — {@code keyPressed} and {@code mouseClicked} took
+ * event objects — and the drawing type changed again at 26.1. Those two facts
+ * are the entire reason this file exists three times. Everything else about
+ * the panel is written once in {@code common/src/client}: this hands
+ * {@link AdminPanel} a {@link Painter} and a {@link PanelHost} and forwards
+ * the lifecycle.</p>
  *
- * <p>Everything else it does is adapt: it hands {@link AdminPanel} a
- * {@link Painter} and a {@link PanelHost} and forwards the lifecycle. The
- * panel — layout, drawing, actions — is written once in
- * {@code common/src/client}.</p>
+ * <p>Input goes to the panel before {@code super}, because the completion list
+ * is drawn rather than built out of widgets: vanilla does not know it is there
+ * and would hand the click to whatever is underneath it.</p>
  */
 public class AdminScreen extends Screen implements PanelHost {
 
@@ -35,12 +32,9 @@ public class AdminScreen extends Screen implements PanelHost {
         super(Component.translatable("ontime.gui.title"));
     }
 
-    /** Lets {@link AdminClientState} open this screen without naming the class.
-     *
-     * <p>26.2 dropped {@code setScreen} for {@code setScreenAndShow}, which
-     * 26.1 also has — so both 26.x versions use the newer name.</p> */
+    /** Lets {@link AdminClientState} open this screen without naming the class. */
     public static void register() {
-        AdminClientState.setOpener(() -> Minecraft.getInstance().setScreenAndShow(new AdminScreen()));
+        AdminClientState.setOpener(() -> Minecraft.getInstance().setScreen(new AdminScreen()));
     }
 
     @Override
@@ -57,22 +51,36 @@ public class AdminScreen extends Screen implements PanelHost {
      *
      * <p>The order is the whole trick. Anything filled that is drawn after
      * {@code super} lands on top of every button and greys the lot — which is
-     * exactly what happened the first time this was written.</p>
+     * exactly what happened the first time this was written. It is also what
+     * lets the completion list be drawn without lifting it in z, which is the
+     * one thing that could not have been written once.</p>
      */
     @Override
-    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         Painter painter = new GfxPainter(graphics);
-        panel.drawBands(painter);
-        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        panel.drawBands(painter, mouseX, mouseY);
+        super.render(graphics, mouseX, mouseY, partialTick);
         panel.drawContent(painter);
     }
 
-    /** The one input override that is identical on every version in range. */
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (panel.keyPressed(keyCode)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (panel.mouseClicked(mouseX, mouseY)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
         if (panel.mouseScrolled(deltaY)) return true;
         return super.mouseScrolled(mouseX, mouseY, deltaX, deltaY);
     }
+
 
     @Override
     public void onClose() {
@@ -124,20 +132,24 @@ public class AdminScreen extends Screen implements PanelHost {
         AdminClientState.send(json);
     }
 
-    /** GuiGraphicsExtractor is the only drawing type that changed across the range. */
+    /** GuiGraphics is the only drawing type that changed across the range. */
     private final class GfxPainter implements Painter {
 
-        private final GuiGraphicsExtractor graphics;
+        private final GuiGraphics graphics;
 
-        GfxPainter(GuiGraphicsExtractor graphics) {
+        GfxPainter(GuiGraphics graphics) {
             this.graphics = graphics;
         }
 
         @Override
         public void text(Component text, int x, int y, int argb) {
-            graphics.text(font(), text, x, y, argb, true);
+            graphics.drawString(font(), text, x, y, argb, true);
         }
 
+        @Override
+        public void flatText(String text, int x, int y, int argb) {
+            graphics.drawString(font(), text, x, y, argb, false);
+        }
 
         @Override
         public void rect(int x, int y, int width, int height, int argb) {

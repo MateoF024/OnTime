@@ -44,13 +44,14 @@ import java.util.Locale;
  * colour marks — nothing large or opaque. Get that backwards and the panel
  * paints over its own buttons, which is what it did the first time.</p>
  *
- * <h2>Why the rows are buttons</h2>
+ * <h2>Input</h2>
  *
- * <p>{@code mouseClicked} cannot be overridden here: its signature changed in
- * 1.21.10, and the {@code v1.21.6} family compiles Fabric against 1.21.10 and
- * NeoForge against 1.21.6, so one shared file cannot satisfy both.
- * {@code Button.builder} is identical on every version in range, so clicks
- * arrive through it and the drift never reaches this file.</p>
+ * <p>The rows are buttons, which is what brings them their frame, their hover
+ * highlight and their tooltip for free. The completion list is not — it is
+ * drawn, and takes its clicks and keys through the three methods at the foot of
+ * this file, which the screen calls before vanilla dispatches anything. The
+ * screen is the only file that has to know that those signatures changed shape
+ * at 1.21.10; this one is handed plain numbers.</p>
  */
 public final class AdminPanel {
 
@@ -123,15 +124,11 @@ public final class AdminPanel {
      */
     private Button applyButton, discardButton;
 
-    /** How many suggestions the sound field offers at once. */
-    private static final int MAX_SUGGESTIONS = 7;
+    /** Field validation and the completion list, for every text field on the panel. */
+    private final FieldAssist assist = new FieldAssist();
 
-    private EditBox soundBox;
-    private final List<Button> suggestionButtons = new ArrayList<>();
-    /** The settings controls, so the suggestion popup can get out of their way. */
-    private final List<AbstractWidget> settingControls = new ArrayList<>();
-    private List<String> suggestions = List.of();
-    private List<String> soundIds = null;
+    /** Where the pointer was at the last frame, which is what the list highlights. */
+    private int pointerX, pointerY;
 
     /** {@code {x, y, colour}} per visible row, for the state mark in the gutter. */
     private final List<int[]> rowMarks = new ArrayList<>();
@@ -226,12 +223,10 @@ public final class AdminPanel {
         host.clearWidgets();
         rowMarks.clear();
         rowData.clear();
-        suggestionButtons.clear();
-        settingControls.clear();
-        suggestions = List.of();
+        assist.clear();
+        assist.setHost(host);
         applyButton = null;
         discardButton = null;
-        soundBox = null;
 
         // A confirmation owns the screen while it is up: with nothing else
         // built there is nothing behind it to click by accident.
@@ -276,115 +271,72 @@ public final class AdminPanel {
                 // what CycleButton looks like, without CycleButton's drift:
                 // 26.2 changed its builder and dropped withInitialValue.
                 String value = settings.displayed(model, row);
-                Button cycle = Button.builder(cycleLabel(row, value), b -> {
+                host.addWidget(Button.builder(cycleLabel(row, value), b -> {
                             settings.put(row.key(), settings.cycled(row, value));
                             init();
                         })
                         .bounds(controlX, y, controlWidth, 18)
                         .tooltip(Tooltip.create(Component.translatable(tooltipKey)))
-                        .build();
-                settingControls.add(host.addWidget(cycle));
+                        .build());
             } else {
                 EditBox box = new EditBox(host.font(), controlX, y, controlWidth, 18,
                         Component.translatable("ontime.config." + snake(row.key())));
                 box.setMaxLength(64);
                 box.setValue(settings.displayed(model, row));
-                if (row.kind() == SettingsForm.Kind.COLOR) {
-                    // The field reads in the colour it names, so a wrong digit
-                    // is visible before it is applied. Unparseable goes red.
-                    tintColor(box, box.getValue());
-                    box.setResponder(text -> {
-                        settings.put(row.key(), text);
-                        tintColor(box, text);
-                    });
-                } else {
-                    box.setResponder(text -> settings.put(row.key(), text));
-                }
+                box.setResponder(text -> settings.put(row.key(), text));
                 box.setTooltip(Tooltip.create(Component.translatable(tooltipKey)));
-                settingControls.add(host.addWidget(box));
-                if ("timerSoundId".equals(row.key())) soundBox = box;
+                host.addWidget(box);
+                register(box, row);
             }
         }
-
-        if (soundBox != null) buildSuggestions(controlX, controlWidth);
     }
 
     /**
-     * A fixed pool of suggestion buttons under the sound field.
+     * Tells the assist what this field accepts, which is also what it can offer.
      *
-     * <p>Built once and then only shown, hidden and relabelled while drawing.
-     * Rebuilding them per keystroke would mean rebuilding the field being typed
-     * into, and the panel cannot listen for keys directly: {@code keyPressed}
-     * changed shape in 1.21.10 and the {@code v1.21.6} family compiles Fabric
-     * against 1.21.10 and NeoForge against 1.21.6, so no shared file can
-     * override it. Clicking a suggestion is what accepts it.</p>
+     * <p>One statement per kind, so a field cannot end up validating against
+     * one rule and completing from another.</p>
      */
-    private void buildSuggestions(int controlX, int controlWidth) {
-        int y = soundBox.getY() + 19;
-        for (int i = 0; i < MAX_SUGGESTIONS; i++) {
-            final int index = i;
-            int buttonY = y + i * 14;
-            if (buttonY + 14 > height) break;
-            Button button = Button.builder(Component.empty(), b -> {
-                        if (index < suggestions.size()) {
-                            String picked = suggestions.get(index);
-                            soundBox.setValue(picked);
-                            settings.put("timerSoundId", picked);
-                            suggestions = List.of();
-                        }
-                    })
-                    .bounds(controlX, buttonY, controlWidth, 14)
-                    .build();
-            button.visible = false;
-            suggestionButtons.add(host.addWidget(button));
-        }
-    }
-
-    /** Every registered sound id, read once. */
-    private List<String> soundIds() {
-        if (soundIds == null) {
-            List<String> ids = new ArrayList<>();
-            try {
-                // Typed as Object on purpose: the id class is called
-                // ResourceLocation before 1.21.11 and Identifier after, and all
-                // that is wanted here is its text.
-                for (Object id : net.minecraft.core.registries.BuiltInRegistries.SOUND_EVENT.keySet()) {
-                    ids.add(id.toString());
+    private void register(EditBox box, SettingsForm.Row row) {
+        switch (row.kind()) {
+            case COLOR ->
+                // Valid text reads in the colour it names, so a wrong digit is
+                // visible before it is applied.
+                    assist.addTinted(box, FieldAssist.hexColor(),
+                            () -> 0xFF000000 | SettingsForm.colorOf(box.getValue()));
+            case STRING -> {
+                if ("timerSoundId".equals(row.key())) {
+                    assist.add(box, FieldAssist.id(), FieldAssist.Source.SOUNDS);
+                } else {
+                    assist.add(box, text -> true);
                 }
-            } catch (Throwable ignored) {
-                // No registry on this side; the field still takes typing.
             }
-            java.util.Collections.sort(ids);
-            soundIds = ids;
+            case INT -> assist.add(box, FieldAssist.intBetween(intFloor(row.key()), Integer.MAX_VALUE));
+            case FLOAT -> assist.add(box, FieldAssist.decimalBetween(floatFloor(row.key()), floatCeil(row.key())));
+            default -> { }
         }
-        return soundIds;
     }
 
-    /**
-     * Matches for what is in the sound field.
-     *
-     * <p>Anything containing the text, with the ones that start with it first —
-     * typing {@code bell} should find {@code block.note_block.bell} without
-     * having to remember it lives under {@code block}.</p>
-     */
-    private List<String> matchingSounds(String typed) {
-        String needle = typed.trim().toLowerCase(Locale.ROOT);
-        if (needle.isEmpty()) return List.of();
-        List<String> starts = new ArrayList<>();
-        List<String> contains = new ArrayList<>();
-        for (String id : soundIds()) {
-            if (id.equals(needle)) return List.of();
-            if (id.startsWith(needle)) starts.add(id);
-            else if (id.contains(needle)) contains.add(id);
-            if (starts.size() >= MAX_SUGGESTIONS) break;
-        }
-        starts.addAll(contains);
-        return starts.size() > MAX_SUGGESTIONS ? starts.subList(0, MAX_SUGGESTIONS) : starts;
+    /** Only the two ports have a floor that is not zero; the rest may be negative. */
+    private static long intFloor(String key) {
+        return switch (key) {
+            case "webSocketPort", "webPanelPort" -> 1;
+            case "timerX", "timerY" -> Integer.MIN_VALUE;
+            case "confirmRunThreshold" -> -1;
+            default -> 0;
+        };
     }
 
-    private static void tintColor(EditBox box, String text) {
-        Integer color = SettingsForm.colorOf(text);
-        box.setTextColor(color != null ? 0xFF000000 | color : COLOR_ERROR);
+    private static float floatFloor(String key) {
+        return "timerScale".equals(key) ? 0.1f : 0f;
+    }
+
+    private static float floatCeil(String key) {
+        return switch (key) {
+            case "timerScale" -> 5f;
+            case "timerSoundPitch" -> 2f;
+            default -> 1f;
+        };
     }
 
     private Component cycleLabel(SettingsForm.Row row, String value) {
@@ -591,7 +543,14 @@ public final class AdminPanel {
      * The header band. Drawn before the screen renders, so vanilla's dimming
      * and every widget land on top of it.
      */
-    public void drawBands(Painter painter) {
+    public void drawBands(Painter painter, int mouseX, int mouseY) {
+        pointerX = mouseX;
+        pointerY = mouseY;
+        // Before the widgets draw: the field reads its own colour and ghost
+        // text as it paints itself, so deciding them afterwards would show the
+        // previous frame's answer.
+        assist.update(mouseX, mouseY);
+
         painter.rect(0, 0, width, HEADER_HEIGHT, COLOR_BAND);
 
         // The dialog's fills go here for the same reason as the band: they are
@@ -631,6 +590,9 @@ public final class AdminPanel {
                     GUTTER, contentTop, COLOR_TEXT);
             case SETTINGS -> drawSettings(painter);
         }
+
+        // Last, so it is over everything including the fields it overlaps.
+        assist.render(painter);
     }
 
     private void drawSettings(Painter painter) {
@@ -641,8 +603,6 @@ public final class AdminPanel {
         boolean dirty = settings.isDirty(model);
         if (applyButton != null) applyButton.active = dirty;
         if (discardButton != null) discardButton.active = dirty;
-
-        updateSuggestions();
 
         for (int i = 0; i < settingsRows && scroll + i < rows.size(); i++) {
             SettingsForm.Row row = rows.get(scroll + i);
@@ -664,44 +624,9 @@ public final class AdminPanel {
                     GUTTER, y + 5, COLOR_TEXT);
         }
 
-        drawScrollbar(painter, width - GUTTER + 2, top, contentBottom,
+        // Centred between the controls and the edge of the screen.
+        drawScrollbar(painter, width - GUTTER + (GUTTER - 2) / 2, top, contentBottom,
                 rows.size(), settingsRows);
-    }
-
-    /**
-     * Refreshes what the sound field offers, and tints the colour fields.
-     *
-     * <p>Both depend on text that changes without a layout, so both happen
-     * while drawing.</p>
-     */
-    private void updateSuggestions() {
-        if (soundBox == null || suggestionButtons.isEmpty()) return;
-
-        suggestions = soundBox.isFocused() ? matchingSounds(soundBox.getValue()) : List.of();
-        int lowest = 0;
-        for (int i = 0; i < suggestionButtons.size(); i++) {
-            Button button = suggestionButtons.get(i);
-            boolean show = i < suggestions.size();
-            button.visible = show;
-            button.active = show;
-            if (show) {
-                button.setMessage(Component.literal(suggestions.get(i)));
-                lowest = button.getY() + button.getHeight();
-            }
-        }
-
-        // Anything the popup covers is hidden while it is up. Not cosmetic:
-        // clicks go to the first child that takes them, in the order they were
-        // added, so a field underneath would swallow the click meant for a
-        // suggestion sitting on top of it.
-        for (AbstractWidget control : settingControls) {
-            boolean covered = lowest > 0
-                    && control != soundBox
-                    && control.getY() < lowest
-                    && control.getY() + control.getHeight() > soundBox.getY() + soundBox.getHeight();
-            control.visible = !covered;
-            control.active = !covered;
-        }
     }
 
     /** The question and the frame; the box itself was filled before the widgets. */
@@ -722,23 +647,27 @@ public final class AdminPanel {
     private void drawRuns(Painter painter) {
         List<AdminModel.RunRow> rows = model.runs();
 
-        if (rows.isEmpty()) {
-            painter.text(Component.translatable("ontime.gui.runs.empty"), GUTTER, headerRowY, COLOR_TEXT);
-            painter.text(Component.translatable("ontime.gui.runs.none_hint"),
-                    GUTTER, headerRowY + LINE + 2, COLOR_TEXT);
-            if (twoColumn) {
-                painter.rect(detailX - GUTTER / 2, dividerTop, 1, contentBottom - dividerTop, COLOR_RULE);
-            }
-            return;
-        }
-
         // The column header: says what each field is, once, instead of
-        // repeating a label on every row.
+        // repeating a label on every row. Drawn even with nothing in the list,
+        // together with the divider and the detail column's own heading —
+        // an empty panel that keeps its frame reads as "nothing yet" rather
+        // than as a screen that failed to load.
         painter.text(Component.translatable("ontime.gui.runs.col.timer"), colName, headerRowY, COLOR_TEXT);
         painter.text(Component.translatable("ontime.gui.runs.col.audience"), colAudience, headerRowY, COLOR_TEXT);
         Component timeHeader = Component.translatable("ontime.gui.runs.col.time");
         painter.text(timeHeader, colTimeRight - painter.textWidth(timeHeader), headerRowY, COLOR_TEXT);
         painter.rect(listX, headerRowY + LINE - 1, listWidth, 1, COLOR_RULE);
+
+        if (rows.isEmpty()) {
+            // Dead centre of the list column, the same treatment the detail
+            // column gets when nothing is selected.
+            centered(painter, Component.translatable("ontime.gui.runs.empty"),
+                    listX + listWidth / 2,
+                    (listTop + listBottom) / 2 - painter.lineHeight() / 2, COLOR_TEXT);
+            drawDivider(painter);
+            drawDetail(painter);
+            return;
+        }
 
         // State marks in the gutter, then the row contents over their buttons.
         for (int[] mark : rowMarks) {
@@ -758,16 +687,22 @@ public final class AdminPanel {
                     0xFF000000 | clock.color(row));
         }
 
-        drawScrollbar(painter, listX + listWidth + 3, listTop, listBottom,
+        // Centred in the space between the list and whatever bounds it on the
+        // right — the divider in two columns, the screen edge in one.
+        int listRight = twoColumn ? detailX - GUTTER / 2 : width;
+        drawScrollbar(painter, (listX + listWidth + listRight) / 2 - 1, listTop, listBottom,
                 rows.size(), visibleRows);
 
+        drawDivider(painter);
+        drawDetail(painter);
+    }
+
+    private void drawDivider(Painter painter) {
         if (twoColumn) {
             painter.rect(detailX - GUTTER / 2, dividerTop, 1, contentBottom - dividerTop, COLOR_RULE);
         } else {
             painter.rect(GUTTER, detailTop - 8, width - 2 * GUTTER, 1, COLOR_RULE);
         }
-
-        drawDetail(painter);
     }
 
     private void drawDetail(Painter painter) {
@@ -785,11 +720,10 @@ public final class AdminPanel {
             return;
         }
 
+        AdminModel.TimerRow timer = model.timerOf(row);
         int y = detailBodyTop;
         painter.text(Component.literal(row.timerName()), detailX, y, COLOR_TEXT);
-
-        Component state = Component.translatable(stateKey(row));
-        painter.text(state, detailX + detailWidth - painter.textWidth(state), y, stateColor(row));
+        drawState(painter, row, y);
 
         painter.text(Component.translatable("ontime.gui.runs.detail.audience",
                         audienceOf(row),
@@ -804,10 +738,55 @@ public final class AdminPanel {
                                 ? "ontime.mode.countup" : "ontime.mode.countdown")),
                 detailX, y + 14 + LINE, COLOR_TEXT);
 
+        painter.text(repeatLine(row, timer), detailX, y + 14 + 2 * LINE, COLOR_TEXT);
         painter.text(Component.translatable("ontime.gui.runs.detail.id", row.runId().substring(0, 8)),
-                detailX, y + 14 + 2 * LINE, COLOR_TEXT);
+                detailX, y + 14 + 3 * LINE, COLOR_TEXT);
 
-        drawAudienceList(painter, row);
+        int next = drawAudienceList(painter, row);
+        drawCommands(painter, timer, next);
+    }
+
+    /**
+     * The state, and — while a cooldown is running — how much of it is left.
+     *
+     * <p>The countdown ticks here and only here. The line below says what the
+     * cooldown is set to, which is a property of the timer and does not move;
+     * putting a moving number there too would be two clocks saying almost the
+     * same thing.</p>
+     */
+    private void drawState(Painter painter, AdminModel.RunRow row, int y) {
+        Component state = Component.translatable(stateKey(row));
+        int right = detailX + detailWidth;
+        int color = stateColor(row);
+
+        if (row.inCooldown() && row.cooldownRemaining() > 0) {
+            Component left = Component.literal(
+                    com.mateof24.render.ClientTimerState.formatTicks(clock.cooldownTicks(row)));
+            painter.text(left, right - painter.textWidth(left), y, COLOR_COOLDOWN);
+            right -= painter.textWidth(left) + 5;
+        }
+        painter.text(state, right - painter.textWidth(state), y, color);
+    }
+
+    /** What happens when this run ends: repeat, hand over, or nothing. */
+    private Component repeatLine(AdminModel.RunRow row, AdminModel.TimerRow timer) {
+        if (timer == null) return Component.translatable("ontime.gui.runs.detail.repeat.off");
+
+        if (timer.nextTimer() != null && !timer.nextTimer().isEmpty()) {
+            return Component.translatable("ontime.gui.runs.detail.next",
+                    timer.nextTimer(), seconds(timer.sequenceCooldownTicks()));
+        }
+        if (!timer.repeat()) return Component.translatable("ontime.gui.runs.detail.repeat.off");
+        if (timer.repeatsForever()) {
+            return Component.translatable("ontime.gui.runs.detail.repeat.forever",
+                    seconds(timer.repeatCooldownTicks()));
+        }
+        return Component.translatable("ontime.gui.runs.detail.repeat.count",
+                timer.repeatCount(), seconds(timer.repeatCooldownTicks()));
+    }
+
+    private static String seconds(long ticks) {
+        return com.mateof24.render.ClientTimerState.formatTicks(ticks);
     }
 
     /**
@@ -818,11 +797,10 @@ public final class AdminPanel {
      * stops being true the moment somebody joins. The column header on the
      * left keeps saying "Seen by" either way.</p>
      */
-    private void drawAudienceList(Painter painter, AdminModel.RunRow row) {
-        if (row.audienceGlobal() || row.audienceNames().isEmpty()) return;
-
+    private int drawAudienceList(Painter painter, AdminModel.RunRow row) {
         int top = actionsTop() + 2 * 22 + 8;
-        if (top + 2 * LINE > contentBottom) return;
+        if (row.audienceGlobal() || row.audienceNames().isEmpty()) return top;
+        if (top + 2 * LINE > contentBottom) return top;
 
         painter.text(Component.translatable("ontime.gui.detail.audience_heading"), detailX, top, COLOR_TEXT);
         painter.rect(detailX, top + LINE - 1, detailWidth, 1, COLOR_RULE);
@@ -838,7 +816,62 @@ public final class AdminPanel {
         if (shown < names.size()) {
             painter.text(Component.translatable("ontime.gui.detail.more", names.size() - shown),
                     detailX + 4, firstY + shown * LINE, COLOR_TEXT);
+            return firstY + (shown + 1) * LINE + 6;
         }
+        return firstY + shown * LINE + 6;
+    }
+
+    /**
+     * What this timer will run, and when.
+     *
+     * <p>Scheduled commands read as the clock reading they fire at, because
+     * that is how they were entered and how you would look for them. The finish
+     * commands come last under a mark of their own rather than a made-up time,
+     * since "at zero" is not true for a count-up.</p>
+     */
+    private void drawCommands(Painter painter, AdminModel.TimerRow timer, int top) {
+        if (timer == null || !timer.hasCommands()) return;
+        if (top + 2 * LINE > contentBottom) return;
+
+        painter.text(Component.translatable("ontime.gui.detail.commands_heading"), detailX, top, COLOR_TEXT);
+        painter.rect(detailX, top + LINE - 1, detailWidth, 1, COLOR_RULE);
+
+        // Flattened the same way /timer commands list flattens it: timed
+        // entries in clock order, then the finish ones.
+        List<Component> lines = new ArrayList<>();
+        for (AdminModel.Scheduled entry : timer.scheduled()) {
+            String at = com.mateof24.render.ClientTimerState.formatTicks(entry.atSeconds() * 20L);
+            for (String command : entry.commands()) {
+                lines.add(Component.translatable("ontime.gui.detail.command_at", at, command));
+            }
+        }
+        for (String command : timer.finishCommands()) {
+            lines.add(Component.translatable("ontime.gui.detail.command_end", command));
+        }
+
+        int firstY = top + LINE + 3;
+        int room = Math.max(1, (contentBottom - firstY) / LINE);
+        int shown = lines.size() <= room ? lines.size() : Math.max(1, room - 1);
+        for (int i = 0; i < shown; i++) {
+            painter.text(trimmed(painter, lines.get(i), detailWidth - 4),
+                    detailX + 4, firstY + i * LINE, COLOR_TEXT);
+        }
+        if (shown < lines.size()) {
+            painter.text(Component.translatable("ontime.gui.detail.more", lines.size() - shown),
+                    detailX + 4, firstY + shown * LINE, COLOR_TEXT);
+        }
+    }
+
+    /** A command is arbitrarily long; the column is not. */
+    private Component trimmed(Painter painter, Component text, int limit) {
+        String plain = text.getString();
+        if (painter.textWidth(Component.literal(plain)) <= limit) return text;
+        StringBuilder out = new StringBuilder();
+        for (char c : plain.toCharArray()) {
+            if (painter.textWidth(Component.literal(out.toString() + c + "...")) > limit) break;
+            out.append(c);
+        }
+        return Component.literal(out + "...");
     }
 
     /**
@@ -901,10 +934,29 @@ public final class AdminPanel {
     // ==================================================================
 
     /**
-     * Mouse wheel — the one input signature identical on every version in
-     * range, which is why it is the only one the screen overrides.
+     * A key, before vanilla sees it.
+     *
+     * @return true when the completion list took it, so the screen stops there
      */
+    public boolean keyPressed(int keyCode) {
+        return assist.keyPressed(keyCode);
+    }
+
+    /**
+     * A click, before vanilla sees it.
+     *
+     * <p>The completion list is drawn rather than built, so it is not in the
+     * widget list and would otherwise never be asked. Asking it first is also
+     * what makes it safe for it to overlap a field: the row on top wins.</p>
+     */
+    public boolean mouseClicked(double mouseX, double mouseY) {
+        return assist.mouseClicked(mouseX, mouseY);
+    }
+
+    /** Mouse wheel: the list first while it is up, then the tab's own list. */
     public boolean mouseScrolled(double amount) {
+        if (assist.mouseScrolled(amount)) return true;
+
         int total;
         int shown;
         if (model.tab() == AdminModel.Tab.RUNS) {

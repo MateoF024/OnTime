@@ -10,21 +10,19 @@ import net.minecraft.network.chat.Component;
 /**
  * The administration panel's screen.
  *
- * <p>MC 1.21.1 to 1.21.11: {@code GuiGraphics} and {@code render}.</p>
+ * <p>MC 1.21.10 and 1.21.11: still GuiGraphics, but input arrives as KeyEvent and MouseButtonEvent.</p>
  *
- * <p><b>Why this file overrides so little.</b> Input signatures drift: 1.21.10
- * turned {@code mouseClicked} and {@code keyPressed} into event objects,
- * while 1.21.6 still takes loose primitives — and the {@code v1.21.6} family
- * compiles Fabric against 1.21.10 and NeoForge against 1.21.6, so a single file
- * shared by both cannot override either one. The panel therefore takes its
- * clicks through {@code Button}, whose builder is identical on every version,
- * and this file overrides only what is genuinely stable: {@code init},
- * the render hook, {@code mouseScrolled} and {@code onClose}.</p>
+ * <p><b>What lives here and nothing else.</b> Vanilla's input signatures
+ * changed shape at 1.21.10 — {@code keyPressed} and {@code mouseClicked} took
+ * event objects — and the drawing type changed again at 26.1. Those two facts
+ * are the entire reason this file exists three times. Everything else about
+ * the panel is written once in {@code common/src/client}: this hands
+ * {@link AdminPanel} a {@link Painter} and a {@link PanelHost} and forwards
+ * the lifecycle.</p>
  *
- * <p>Everything else it does is adapt: it hands {@link AdminPanel} a
- * {@link Painter} and a {@link PanelHost} and forwards the lifecycle. The
- * panel — layout, drawing, actions — is written once in
- * {@code common/src/client}.</p>
+ * <p>Input goes to the panel before {@code super}, because the completion list
+ * is drawn rather than built out of widgets: vanilla does not know it is there
+ * and would hand the click to whatever is underneath it.</p>
  */
 public class AdminScreen extends Screen implements PanelHost {
 
@@ -53,22 +51,36 @@ public class AdminScreen extends Screen implements PanelHost {
      *
      * <p>The order is the whole trick. Anything filled that is drawn after
      * {@code super} lands on top of every button and greys the lot — which is
-     * exactly what happened the first time this was written.</p>
+     * exactly what happened the first time this was written. It is also what
+     * lets the completion list be drawn without lifting it in z, which is the
+     * one thing that could not have been written once.</p>
      */
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         Painter painter = new GfxPainter(graphics);
-        panel.drawBands(painter);
+        panel.drawBands(painter, mouseX, mouseY);
         super.render(graphics, mouseX, mouseY, partialTick);
         panel.drawContent(painter);
     }
 
-    /** The one input override that is identical on every version in range. */
+    @Override
+    public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+        if (panel.keyPressed(event.key())) return true;
+        return super.keyPressed(event);
+    }
+
+    @Override
+    public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubled) {
+        if (panel.mouseClicked(event.x(), event.y())) return true;
+        return super.mouseClicked(event, doubled);
+    }
+
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
         if (panel.mouseScrolled(deltaY)) return true;
         return super.mouseScrolled(mouseX, mouseY, deltaX, deltaY);
     }
+
 
     @Override
     public void onClose() {
@@ -134,6 +146,10 @@ public class AdminScreen extends Screen implements PanelHost {
             graphics.drawString(font(), text, x, y, argb, true);
         }
 
+        @Override
+        public void flatText(String text, int x, int y, int argb) {
+            graphics.drawString(font(), text, x, y, argb, false);
+        }
 
         @Override
         public void rect(int x, int y, int width, int height, int argb) {

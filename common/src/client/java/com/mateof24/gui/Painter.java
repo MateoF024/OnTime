@@ -18,15 +18,26 @@ import net.minecraft.network.chat.Component;
 public interface Painter {
 
     /**
-     * Text, always with a drop shadow.
+     * Text with a drop shadow, which is what the panel's own text always uses.
      *
-     * <p>There is deliberately no unshadowed variant. The panel floats over the
-     * world, and grey text without a shadow disappears entirely against a
-     * bright sky — which is exactly what happened to the first version of this
-     * screen. Hierarchy comes from position and spacing; colour is reserved for
-     * saying what state something is in.</p>
+     * <p>The panel floats over the world, and grey text without a shadow
+     * disappears entirely against a bright sky — which is exactly what happened
+     * to the first version of this screen. Hierarchy comes from position and
+     * spacing; colour is reserved for saying what state something is in.</p>
      */
     void text(Component text, int x, int y, int argb);
+
+    /**
+     * Text with no shadow, on its own opaque panel.
+     *
+     * <p>The single exception to the rule above, and only for the completion
+     * list: that control is a copy of the one chat draws for commands, down to
+     * the panel colour and the line height, and vanilla draws its rows flat. A
+     * shadow there would be the one detail that gave it away as a lookalike.
+     * The dark panel underneath is what makes it legible, so the reason the
+     * rule exists does not apply.</p>
+     */
+    void flatText(String text, int x, int y, int argb);
 
     /** Filled rectangle, x/y being the top-left corner. */
     void rect(int x, int y, int width, int height, int argb);

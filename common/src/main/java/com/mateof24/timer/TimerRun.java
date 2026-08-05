@@ -209,6 +209,9 @@ public final class TimerRun {
 
     public boolean isInCooldown() { return phase != RunPhase.ACTIVE; }
 
+    /** Ticks left of the current cooldown, or zero when there is none. */
+    public long cooldownRemaining() { return cooldownRemaining; }
+
     public void beginRepeatCooldown(long ticks) {
         phase = RunPhase.REPEAT_COOLDOWN;
         cooldownRemaining = ticks;

@@ -38,7 +38,9 @@ public final class AdminModel {
             int colorMid,
             int colorLow,
             int thresholdMid,
-            int thresholdLow
+            int thresholdLow,
+            long cooldownRemaining,
+            String pendingTimer
     ) {
         public boolean inCooldown() { return !"ACTIVE".equals(phase); }
 
@@ -57,10 +59,23 @@ public final class AdminModel {
             Float scale,
             int runCount,
             boolean repeat,
+            int repeatCount,
+            long repeatCooldownTicks,
             String nextTimer,
+            long sequenceCooldownTicks,
             boolean hasTitles,
-            boolean hasCommands
-    ) {}
+            List<Scheduled> scheduled,
+            List<String> finishCommands
+    ) {
+
+        public boolean hasCommands() { return !scheduled.isEmpty() || !finishCommands.isEmpty(); }
+
+        /** Repeats for ever when no count was given. */
+        public boolean repeatsForever() { return repeat && repeatCount < 0; }
+    }
+
+    /** Commands due at a point on the clock, as the panel lists them. */
+    public record Scheduled(long atSeconds, List<String> commands) {}
 
     public record PlayerRow(String uuid, String name, String team) {}
 
@@ -145,6 +160,13 @@ public final class AdminModel {
 
     public List<TimerRow> timers() { return timers; }
 
+    /** The definition a run belongs to, or null when it has gone. */
+    public TimerRow timerOf(RunRow run) {
+        if (run == null) return null;
+        for (TimerRow row : timers) if (row.name().equals(run.timerName())) return row;
+        return null;
+    }
+
     /** Definitions matching the search box, or all of them when it is empty. */
     public List<TimerRow> filteredTimers() {
         if (filter.isEmpty()) return timers;
@@ -209,7 +231,9 @@ public final class AdminModel {
                     (int) numOf(display, "colorMid", 0xFFFF00),
                     (int) numOf(display, "colorLow", 0xFF0000),
                     (int) numOf(display, "thresholdMid", 30),
-                    (int) numOf(display, "thresholdLow", 10)));
+                    (int) numOf(display, "thresholdLow", 10),
+                    num(json, "cooldownRemaining"),
+                    str(json, "pendingTimer", null)));
         }
         return out;
     }
@@ -220,9 +244,19 @@ public final class AdminModel {
         for (JsonElement element : array) {
             JsonObject json = element.getAsJsonObject();
             boolean hasTitles = json.has("titles") && json.getAsJsonObject("titles").size() > 0;
-            boolean hasCommands = (json.has("finishCommand") && !json.get("finishCommand").isJsonNull())
-                    || (json.has("finishCommands") && json.getAsJsonArray("finishCommands").size() > 0)
-                    || (json.has("scheduled") && json.getAsJsonArray("scheduled").size() > 0);
+
+            List<Scheduled> scheduled = new ArrayList<>();
+            if (json.has("scheduled") && json.get("scheduled").isJsonArray()) {
+                for (JsonElement entry : json.getAsJsonArray("scheduled")) {
+                    JsonObject at = entry.getAsJsonObject();
+                    scheduled.add(new Scheduled(num(at, "at"), strings(at, "commands")));
+                }
+            }
+            // The 4.0.0 single finish command and the 5.0.0 list are the same
+            // thing to a reader, so they are shown as one list.
+            List<String> finish = new ArrayList<>(strings(json, "finishCommands"));
+            String legacy = str(json, "finishCommand", null);
+            if (legacy != null && !legacy.isEmpty() && !finish.contains(legacy)) finish.add(0, legacy);
             out.add(new TimerRow(
                     str(json, "name", ""),
                     num(json, "targetTicks"),
@@ -232,9 +266,13 @@ public final class AdminModel {
                     json.has("scale") && !json.get("scale").isJsonNull() ? json.get("scale").getAsFloat() : null,
                     (int) num(json, "runCount"),
                     bool(json, "repeat"),
+                    (int) numOr(json, "repeatCount", -1),
+                    num(json, "repeatCooldownTicks"),
                     str(json, "nextTimer", null),
+                    num(json, "sequenceCooldownTicks"),
                     hasTitles,
-                    hasCommands));
+                    List.copyOf(scheduled),
+                    List.copyOf(finish)));
         }
         return out;
     }
@@ -256,6 +294,18 @@ public final class AdminModel {
     private static long numOf(JsonObject json, String key, long fallback) {
         if (json == null || !json.has(key) || json.get(key).isJsonNull()) return fallback;
         return json.get(key).getAsLong();
+    }
+
+    private static List<String> strings(JsonObject json, String key) {
+        List<String> out = new ArrayList<>();
+        if (json.has(key) && json.get(key).isJsonArray()) {
+            for (JsonElement element : json.getAsJsonArray(key)) out.add(element.getAsString());
+        }
+        return out;
+    }
+
+    private static long numOr(JsonObject json, String key, long fallback) {
+        return json.has(key) && !json.get(key).isJsonNull() ? json.get(key).getAsLong() : fallback;
     }
 
     private static long num(JsonObject json, String key) {

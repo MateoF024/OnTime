@@ -51,13 +51,14 @@ sourceSets {
                     "../common/src/${helpSystemVer}/java",
                     "../common/src/${rootProject.ext.compatVer}/java",
                     "../common/src/${rootProject.ext.compatVer}/client/java",
-                    // NeoForge moved the client-to-server send from
-                    // PacketDistributor to ClientPacketDistributor in 1.21.11,
-                    // which is exactly where compatVer already splits.
-                    "src/${rootProject.ext.compatVer}/java",
+                    // Its own axis: NeoForge moved the client-to-server send at
+                    // 21.10, one version before the vanilla rework compatVer
+                    // tracks. See neoNetVer in the root build.
+                    "src/${rootProject.ext.neoNetVer}/java",
                     'src/client/java',
                     '../common/src/client/java',
                     "../common/src/${rootProject.ext.clientVer}/java",
+                    "../common/src/${rootProject.ext.screenVer}/java",
                     "src/${versionType}/main/java",
                     "src/${versionType}/client/java"
             ] + (rootProject.ext.unobfuscatedMc

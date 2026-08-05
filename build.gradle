@@ -22,9 +22,15 @@ if (mcVer.startsWith("26.2")) {
     vt = "v1.21.11"
 } else if (mcVer.startsWith("1.21.5")) {
     vt = "v1.21.5"
+} else if (mcVer.startsWith("1.21.10")) {
+    // Split out of v1.21.6 in 5.0.0. Screen.keyPressed and mouseClicked took
+    // event objects at 1.21.10, so one jar cannot serve 1.21.6 and 1.21.10 the
+    // moment it touches either. It was already untrue before that: the family's
+    // Fabric jar compiled against 1.21.10 and its NeoForge jar against 1.21.6
+    // while both declared the whole range.
+    vt = "v1.21.10"
 } else if (mcVer.startsWith("1.21.6") || mcVer.startsWith("1.21.7") ||
-        mcVer.startsWith("1.21.8") || mcVer.startsWith("1.21.9") ||
-        mcVer.startsWith("1.21.10")) {
+        mcVer.startsWith("1.21.8") || mcVer.startsWith("1.21.9")) {
     vt = "v1.21.6"
 } else if (mcVer.startsWith("1.21.1") || mcVer.startsWith("1.21.2") ||
         mcVer.startsWith("1.21.3") || mcVer.startsWith("1.21.4")) {
@@ -54,15 +60,21 @@ ext.helpSystemVer = (vt == "v1.21.1") ? "v1" : "v2"
 // 26.x used to have its own compat3; it was byte-identical to compat2 apart
 // from one javadoc line, because the permission and identifier reworks both
 // landed in 1.21.11 and 26.x changed neither.
-ext.compatVer = (vt == "v1.21.1" || vt == "v1.21.5" || vt == "v1.21.6") ? "compat1" : "compat2"
+ext.compatVer = (vt == "v1.21.1" || vt == "v1.21.5" || vt == "v1.21.6"
+        || vt == "v1.21.10") ? "compat1" : "compat2"
 // Fabric-side platform tier (fabric/src/<fabricVer>/java): NetworkHandler,
 // FabricTriggerHandler and PlaceholderAPIIntegration. This does NOT line up
 // with compatVer — the vanilla API is stable from 1.21.11 onwards, but Fabric
 // API and PlaceholderAPI both broke again at 26.1.
-//   fapi1 = 1.21.1-1.21.10  ResourceLocation, ServerEntityWorldChangeEvents, PAPI 2.x
-//   fapi2 = 1.21.11         Identifier, PAPI 2.8
-//   fapi3 = 26.x            clientboundPlay, ServerEntityLevelChangeEvents, PAPI 3.x
-ext.fabricVer = (vt == "v1.21.1" || vt == "v1.21.5" || vt == "v1.21.6") ? "fapi1"
+//   fapi1 = 1.21.1-1.21.10  ResourceLocation, ServerEntityWorldChangeEvents
+//   fapi2 = 1.21.11         Identifier
+//   fapi3 = 26.x            clientboundPlay, ServerEntityLevelChangeEvents
+// PlaceholderAPI is NOT what splits these: fapi1 and fapi2 hold a
+// byte-identical PlaceholderAPIIntegration, and the 1.21.10 family compiles
+// against PAPI 2.8 on fapi1 sources without a change. The rename is the whole
+// reason there are three.
+ext.fabricVer = (vt == "v1.21.1" || vt == "v1.21.5" || vt == "v1.21.6"
+        || vt == "v1.21.10") ? "fapi1"
         : (vt == "v1.21.11") ? "fapi2" : "fapi3"
 // Client render flavour (common/src/<clientVer>/java): holds TimerRenderer and
 // TitleOverlay, the only client files that differ by Minecraft version. Shared
@@ -75,8 +87,26 @@ ext.fabricVer = (vt == "v1.21.1" || vt == "v1.21.5" || vt == "v1.21.6") ? "fapi1
 // 26.1 and 26.2 really are separate: javap confirms 26.1 has Options.hideGui and
 // no Hud.isHidden, and 26.2 the other way round.
 ext.clientVer = (vt == "v1.21.1" || vt == "v1.21.5") ? "client1"
-        : (vt == "v1.21.6" || vt == "v1.21.11") ? "client2"
+        : (vt == "v1.21.6" || vt == "v1.21.10" || vt == "v1.21.11") ? "client2"
         : (vt == "v26.1") ? "client3" : "client4"
+// Admin screen flavour (common/src/<screenVer>/java): the one file that
+// overrides vanilla input, which changed shape twice.
+//   screen1 = 1.21.1-1.21.9  keyPressed(int,int,int), mouseClicked(double,double,int)
+//   screen2 = 1.21.10-1.21.11 keyPressed(KeyEvent), mouseClicked(MouseButtonEvent,boolean)
+//   screen3 = 26.x           same events, drawn through GuiGraphicsExtractor
+// Measured with javap against all seven client jars: there is no overload,
+// the old form is simply gone from 1.21.10 onwards.
+ext.screenVer = (vt == "v1.21.1" || vt == "v1.21.5" || vt == "v1.21.6") ? "screen1"
+        : (vt == "v1.21.10" || vt == "v1.21.11") ? "screen2" : "screen3"
+// NeoForge network tier (forge/src/<neoNetVer>/java): where the client-to-server
+// send lives. This used to ride compatVer, and it was wrong to: NeoForge moved
+// sendToServer into net.neoforged.neoforge.client.network.ClientPacketDistributor
+// at 21.10, one version before the vanilla permission and Identifier rework that
+// compatVer tracks. Splitting the 1.21.6 family made the two disagree out loud;
+// measured with javap against 21.6.20, 21.10.64 and 21.11.45.
+//   neonet1 = NeoForge 21.1-21.6   PacketDistributor.sendToServer
+//   neonet2 = NeoForge 21.10+      ClientPacketDistributor.sendToServer
+ext.neoNetVer = (vt == "v1.21.1" || vt == "v1.21.5" || vt == "v1.21.6") ? "neonet1" : "neonet2"
 // 26.x requires Java 25; 1.21.x requires Java 21.
 ext.javaRelease = vt.startsWith("v26") ? 25 : 21
 // 26.1+ ships unobfuscated: Loom's non-remapping plugin must be used.
@@ -139,11 +169,12 @@ subprojects {
 //
 //    gradlew buildMc26_2    -> only that family (both loaders)
 //    gradlew buildAll       -> wipes build/libs, then the whole
-//                              matrix (5 families x 2 loaders)
+//                              matrix (7 families x 2 loaders)
 // ============================================================
 def buildMatrix = [
         buildMc1_21_1 : '1.21.1',
         buildMc1_21_5 : '1.21.5',
+        buildMc1_21_6 : '1.21.6',
         buildMc1_21_10: '1.21.10',
         buildMc1_21_11: '1.21.11',
         buildMc26_1   : '26.1.2',
