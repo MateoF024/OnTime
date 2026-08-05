@@ -83,8 +83,8 @@ public final class AdminPanel {
     private final AdminModel model = new AdminModel();
 
     private int width, height;
-    private int tabY, messageY, headerRowY, contentTop, contentBottom;
-    private int dividerTop;
+    private int tabY, headerRowY, contentTop, contentBottom;
+    private int dividerTop, detailBodyTop;
     private int listX, listWidth, listTop, listBottom;
     private int detailX, detailWidth, detailTop;
     private int colName, colAudience, colTimeRight;
@@ -125,10 +125,11 @@ public final class AdminPanel {
         height = host.panelHeight();
 
         tabY = HEADER_HEIGHT + 6;
-        // Reserved whether or not there is a message, so nothing shifts under
-        // the cursor when one appears.
-        messageY = tabY + TAB_HEIGHT + 6;
-        headerRowY = messageY + LINE + 4;
+        // The column headers sit straight under the tabs. The action result
+        // lives in the header band instead of on a line of its own here: a
+        // reserved line is a permanent gap, and an unreserved one would shove
+        // the list down under the cursor the moment a message appeared.
+        headerRowY = tabY + TAB_HEIGHT + 6;
         contentTop = headerRowY + LINE + 2;
         contentBottom = height - GUTTER;
         // Just clear of the header band and a shade above the tab row, so the
@@ -143,7 +144,9 @@ public final class AdminPanel {
             detailX = listX + listWidth + GUTTER;
             detailWidth = width - GUTTER - detailX;
             listTop = contentTop;
-            listBottom = contentBottom;
+            // One line at the foot for the "x-y of n" indicator, so turning
+            // the list from unscrollable to scrollable never moves a row.
+            listBottom = contentBottom - LINE;
             detailTop = contentTop;
         } else {
             listX = GUTTER + MARK_WIDTH + 3;
@@ -152,9 +155,12 @@ public final class AdminPanel {
             detailWidth = width - 2 * GUTTER;
             int split = contentTop + (contentBottom - contentTop) * 55 / 100;
             listTop = contentTop;
-            listBottom = split - 6;
+            listBottom = split - 6 - LINE;
             detailTop = split + 4;
         }
+
+        // Under the detail column's own heading and rule.
+        detailBodyTop = detailTop + LINE + 6;
 
         colName = listX + 6;
         colAudience = listX + Math.max(70, (int) (listWidth * 0.42f));
@@ -303,6 +309,9 @@ public final class AdminPanel {
         if (selected == null) return;
 
         int buttonWidth = Math.min(96, (detailWidth - 6) / 2);
+        int gap = 6;
+        // Centred in the column rather than shoved against its left margin.
+        int startX = detailX + (detailWidth - (2 * buttonWidth + gap)) / 2;
         int y = actionsTop();
         String[][] grid = {{"pause", "resume"}, {"reset", "stop"}};
         for (int rowIndex = 0; rowIndex < grid.length; rowIndex++) {
@@ -318,7 +327,7 @@ public final class AdminPanel {
                 Button button = Button.builder(
                                 Component.translatable("ontime.gui.action." + op),
                                 b -> runAction("run." + op))
-                        .bounds(detailX + column * (buttonWidth + 6),
+                        .bounds(startX + column * (buttonWidth + gap),
                                 y + rowIndex * 22, buttonWidth, 20)
                         .tooltip(Tooltip.create(Component.translatable("ontime.gui.action." + op + ".tip")))
                         .build();
@@ -329,7 +338,7 @@ public final class AdminPanel {
     }
 
     private int actionsTop() {
-        return Math.min(detailTop + 58, contentBottom - 44);
+        return Math.min(detailBodyTop + 52, contentBottom - 44);
     }
 
     private static String key(AdminModel.Tab tab) {
@@ -371,8 +380,10 @@ public final class AdminPanel {
             return;
         }
 
+        // In the band, between the title and the global buttons: visible
+        // without costing the content a line it would keep empty.
         if (model.message() != null) {
-            painter.text(Component.literal(model.message()), GUTTER, messageY,
+            centered(painter, Component.literal(model.message()), width / 2, 11,
                     model.messageIsError() ? COLOR_ERROR : COLOR_OK);
         }
 
@@ -430,15 +441,17 @@ public final class AdminPanel {
             int y = rowMarks.get(i)[1] + (ROW_HEIGHT - 8) / 2;
             painter.text(Component.literal(row.timerName()), colName, y, COLOR_TEXT);
             painter.text(audienceOf(row), colAudience, y, COLOR_TEXT);
-            Component clock = Component.literal(
-                    com.mateof24.render.ClientTimerState.formatTicks(row.currentTicks()));
+            // The arrow is the same one /timer list uses, and it says which
+            // way the clock is going without spending a column on the word.
+            Component clock = Component.literal((row.countUp() ? "↑ " : "↓ ")
+                    + com.mateof24.render.ClientTimerState.formatTicks(row.currentTicks()));
             painter.text(clock, colTimeRight - painter.textWidth(clock), y, COLOR_TEXT);
         }
 
         if (rows.size() > visibleRows) {
             Component range = Component.translatable("ontime.gui.runs.scroll",
                     scroll + 1, Math.min(scroll + visibleRows, rows.size()), rows.size());
-            painter.text(range, listX + listWidth - painter.textWidth(range), messageY, COLOR_TEXT);
+            painter.text(range, listX + listWidth - painter.textWidth(range), listBottom + 2, COLOR_TEXT);
         }
 
         if (twoColumn) {
@@ -451,14 +464,21 @@ public final class AdminPanel {
     }
 
     private void drawDetail(Painter painter) {
+        int centerX = detailX + detailWidth / 2;
+        centered(painter, Component.translatable("ontime.gui.detail.title"), centerX, detailTop, COLOR_TEXT);
+        painter.rect(detailX, detailTop + LINE - 1, detailWidth, 1, COLOR_RULE);
+
         AdminModel.RunRow row = model.selectedRun();
         if (row == null) {
-            painter.text(Component.translatable("ontime.gui.runs.pick_hint"),
-                    detailX, detailTop, COLOR_TEXT);
+            // Dead centre of the pane, not tucked into a corner: with nothing
+            // selected it is the only thing the column has to say.
+            Component hint = Component.translatable("ontime.gui.runs.pick_hint");
+            centered(painter, hint, centerX,
+                    (detailBodyTop + contentBottom) / 2 - painter.lineHeight() / 2, COLOR_TEXT);
             return;
         }
 
-        int y = detailTop;
+        int y = detailBodyTop;
         painter.text(Component.literal(row.timerName()), detailX, y, COLOR_TEXT);
 
         Component state = Component.translatable(stateKey(row));
@@ -478,6 +498,39 @@ public final class AdminPanel {
 
         painter.text(Component.translatable("ontime.gui.runs.detail.id", row.runId().substring(0, 8)),
                 detailX, y + 14 + 2 * LINE, COLOR_TEXT);
+
+        drawAudienceList(painter, row);
+    }
+
+    /**
+     * Who exactly is watching, one per line, under the actions.
+     *
+     * <p>Only for an audience there is something to list: a global execution
+     * reaches whoever is connected, and naming them would be a snapshot that
+     * stops being true the moment somebody joins. The column header on the
+     * left keeps saying "Seen by" either way.</p>
+     */
+    private void drawAudienceList(Painter painter, AdminModel.RunRow row) {
+        if (row.audienceGlobal() || row.audienceNames().isEmpty()) return;
+
+        int top = actionsTop() + 2 * 22 + 8;
+        if (top + 2 * LINE > contentBottom) return;
+
+        painter.text(Component.translatable("ontime.gui.detail.audience_heading"), detailX, top, COLOR_TEXT);
+        painter.rect(detailX, top + LINE - 1, detailWidth, 1, COLOR_RULE);
+
+        List<String> names = row.audienceNames();
+        int firstY = top + LINE + 3;
+        int room = Math.max(1, (contentBottom - firstY) / LINE);
+        int shown = names.size() <= room ? names.size() : Math.max(1, room - 1);
+
+        for (int i = 0; i < shown; i++) {
+            painter.text(Component.literal(names.get(i)), detailX + 4, firstY + i * LINE, COLOR_TEXT);
+        }
+        if (shown < names.size()) {
+            painter.text(Component.translatable("ontime.gui.detail.more", names.size() - shown),
+                    detailX + 4, firstY + shown * LINE, COLOR_TEXT);
+        }
     }
 
     private static Component audienceOf(AdminModel.RunRow row) {

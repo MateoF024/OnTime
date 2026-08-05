@@ -286,5 +286,8 @@
   "ontime.gui.state.sequence_cooldown": "SEQUENCE COOLDOWN",
   "ontime.gui.confirm.stop_all.title": "Stop every execution?",
   "ontime.gui.confirm.stop_all.body": "This ends %s of them. It cannot be undone.",
-  "ontime.gui.confirm.accept": "Confirm"
+  "ontime.gui.confirm.accept": "Confirm",
+  "ontime.gui.detail.title": "Execution",
+  "ontime.gui.detail.audience_heading": "Audience",
+  "ontime.gui.detail.more": "+%s more"
 }

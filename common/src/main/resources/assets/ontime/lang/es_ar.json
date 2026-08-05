@@ -286,5 +286,8 @@
   "ontime.gui.state.sequence_cooldown": "ESPERA DE SECUENCIA",
   "ontime.gui.confirm.stop_all.title": "¿Detener todas las ejecuciones?",
   "ontime.gui.confirm.stop_all.body": "Esto termina %s. No se puede deshacer.",
-  "ontime.gui.confirm.accept": "Confirmar"
+  "ontime.gui.confirm.accept": "Confirmar",
+  "ontime.gui.detail.title": "Ejecución",
+  "ontime.gui.detail.audience_heading": "Audiencia",
+  "ontime.gui.detail.more": "+%s más"
 }
