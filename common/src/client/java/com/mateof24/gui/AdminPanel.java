@@ -84,7 +84,7 @@ public final class AdminPanel {
 
     private int width, height;
     private int tabY, headerRowY, contentTop, contentBottom;
-    private int dividerTop, detailBodyTop;
+    private int dividerTop, detailTitleY, detailRuleY, detailBodyTop;
     private int listX, listWidth, listTop, listBottom;
     private int detailX, detailWidth, detailTop;
     private int colName, colAudience, colTimeRight;
@@ -148,6 +148,11 @@ public final class AdminPanel {
             // the list from unscrollable to scrollable never moves a row.
             listBottom = contentBottom - LINE;
             detailTop = contentTop;
+            // Level with the tab row, and its rule on the tabs' bottom edge:
+            // the two columns then start their content at the same height
+            // instead of the right one hanging a row lower than the left.
+            detailTitleY = tabY + (TAB_HEIGHT - 9) / 2;
+            detailRuleY = tabY + TAB_HEIGHT - 1;
         } else {
             listX = GUTTER + MARK_WIDTH + 3;
             listWidth = width - listX - GUTTER;
@@ -157,10 +162,13 @@ public final class AdminPanel {
             listTop = contentTop;
             listBottom = split - 6 - LINE;
             detailTop = split + 4;
+            // Stacked, the detail has no tab row to line up with.
+            detailTitleY = detailTop;
+            detailRuleY = detailTop + LINE - 1;
         }
 
         // Under the detail column's own heading and rule.
-        detailBodyTop = detailTop + LINE + 6;
+        detailBodyTop = detailRuleY + 7;
 
         colName = listX + 6;
         colAudience = listX + Math.max(70, (int) (listWidth * 0.42f));
@@ -337,8 +345,9 @@ public final class AdminPanel {
         }
     }
 
+    /** Clear of the four text lines above them, with room to breathe. */
     private int actionsTop() {
-        return Math.min(detailBodyTop + 52, contentBottom - 44);
+        return Math.min(detailBodyTop + 62, contentBottom - 44);
     }
 
     private static String key(AdminModel.Tab tab) {
@@ -443,8 +452,7 @@ public final class AdminPanel {
             painter.text(audienceOf(row), colAudience, y, COLOR_TEXT);
             // The arrow is the same one /timer list uses, and it says which
             // way the clock is going without spending a column on the word.
-            Component clock = Component.literal((row.countUp() ? "↑ " : "↓ ")
-                    + com.mateof24.render.ClientTimerState.formatTicks(row.currentTicks()));
+            Component clock = clockWithArrow(row);
             painter.text(clock, colTimeRight - painter.textWidth(clock), y, COLOR_TEXT);
         }
 
@@ -465,8 +473,8 @@ public final class AdminPanel {
 
     private void drawDetail(Painter painter) {
         int centerX = detailX + detailWidth / 2;
-        centered(painter, Component.translatable("ontime.gui.detail.title"), centerX, detailTop, COLOR_TEXT);
-        painter.rect(detailX, detailTop + LINE - 1, detailWidth, 1, COLOR_RULE);
+        centered(painter, Component.translatable("ontime.gui.detail.title"), centerX, detailTitleY, COLOR_TEXT);
+        painter.rect(detailX, detailRuleY, detailWidth, 1, COLOR_RULE);
 
         AdminModel.RunRow row = model.selectedRun();
         if (row == null) {
@@ -490,7 +498,7 @@ public final class AdminPanel {
                 detailX, y + 14, COLOR_TEXT);
 
         painter.text(Component.translatable("ontime.gui.runs.detail.clock",
-                        com.mateof24.render.ClientTimerState.formatTicks(row.currentTicks()),
+                        clockWithArrow(row),
                         com.mateof24.render.ClientTimerState.formatTicks(row.targetTicks()),
                         Component.translatable(row.countUp()
                                 ? "ontime.mode.countup" : "ontime.mode.countdown")),
@@ -531,6 +539,15 @@ public final class AdminPanel {
             painter.text(Component.translatable("ontime.gui.detail.more", names.size() - shown),
                     detailX + 4, firstY + shown * LINE, COLOR_TEXT);
         }
+    }
+
+    /**
+     * The clock with the direction arrow {@code /timer list} uses, so the way
+     * a countdown is going reads without spending a word on it.
+     */
+    private static Component clockWithArrow(AdminModel.RunRow row) {
+        return Component.literal((row.countUp() ? "↑ " : "↓ ")
+                + com.mateof24.render.ClientTimerState.formatTicks(row.currentTicks()));
     }
 
     private static Component audienceOf(AdminModel.RunRow row) {
