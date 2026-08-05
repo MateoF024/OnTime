@@ -55,8 +55,13 @@ public final class FieldAssist {
     private static final int TEXT_COLOR = 0xFFAAAAAA;
     private static final int SELECTED_COLOR = 0xFFFFFF00;
 
-    private static final int INVALID_TEXT = 0xFF5555;
-    private static final int VALID_TEXT = 0xE0E0E0;
+    // Full alpha, deliberately. Vanilla's own EditBox default was 0xE0E0E0
+    // until 1.21.5 and 0xFFE0E0E0 from 1.21.6 on — measured with javap across
+    // the range — because the colour stopped being padded to opaque on the way
+    // to the font. Passing the older constant on a newer version is alpha zero,
+    // which draws a field that looks empty however much you type into it.
+    private static final int INVALID_TEXT = 0xFFFF5555;
+    private static final int VALID_TEXT = 0xFFE0E0E0;
 
     /** Keys handled here, named so the three screen files agree on them. */
     public static final int KEY_UP = 265;

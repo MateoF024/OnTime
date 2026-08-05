@@ -78,6 +78,8 @@ public final class AdminPanel {
     private static final int ROW_GAP = 2;
     private static final int MARK_WIDTH = 3;
     private static final int LINE = 11;
+    /** Air between two headed sections of the detail column. */
+    private static final int SECTION_GAP = 14;
 
     /** Below this the two columns stack instead of sitting side by side. */
     private static final int TWO_COLUMN_MIN_WIDTH = 460;
@@ -103,6 +105,14 @@ public final class AdminPanel {
      * boolean because the next destructive action will want the same door.</p>
      */
     private String confirmOp = null;
+
+    /**
+     * The one confirmation that is not a server operation.
+     *
+     * <p>{@link #confirmOp} otherwise holds the op to send once confirmed;
+     * this value means "ask before closing" and is handled entirely here.</p>
+     */
+    private static final String CONFIRM_EXIT = "$exit";
 
     private final SettingsForm settings = new SettingsForm();
 
@@ -366,9 +376,44 @@ public final class AdminPanel {
     private int dialogY() { return (height - DIALOG_HEIGHT) / 2; }
 
     private void buildConfirm() {
-        int buttonWidth = 96;
         int y = dialogY() + DIALOG_HEIGHT - 28;
         int gap = 8;
+
+        if (CONFIRM_EXIT.equals(confirmOp)) {
+            // Three ways out, and Cancel first: the leftmost button is where a
+            // hand goes when it is trying to undo a mis-click.
+            int buttonWidth = (DIALOG_WIDTH - 2 * 12 - 2 * gap) / 3;
+            int startX = dialogX() + 12;
+
+            host.addWidget(Button.builder(Component.translatable("gui.cancel"), b -> {
+                        confirmOp = null;
+                        init();
+                    })
+                    .bounds(startX, y, buttonWidth, 20)
+                    .build());
+
+            host.addWidget(Button.builder(
+                            Component.translatable("ontime.gui.confirm.exit.discard")
+                                    .withStyle(ChatFormatting.RED),
+                            b -> {
+                                settings.discard();
+                                confirmOp = null;
+                                host.closePanel();
+                            })
+                    .bounds(startX + buttonWidth + gap, y, buttonWidth, 20)
+                    .build());
+
+            host.addWidget(Button.builder(Component.translatable("ontime.gui.confirm.exit.save"), b -> {
+                        applySettings();
+                        confirmOp = null;
+                        host.closePanel();
+                    })
+                    .bounds(startX + 2 * (buttonWidth + gap), y, buttonWidth, 20)
+                    .build());
+            return;
+        }
+
+        int buttonWidth = 96;
         int startX = dialogX() + (DIALOG_WIDTH - 2 * buttonWidth - gap) / 2;
 
         host.addWidget(Button.builder(Component.translatable("gui.cancel"), b -> {
@@ -394,7 +439,17 @@ public final class AdminPanel {
     private void buildHeader() {
         int doneWidth = 54;
         int doneX = width - GUTTER - doneWidth;
-        host.addWidget(Button.builder(Component.translatable("gui.done"), b -> host.closePanel())
+        host.addWidget(Button.builder(Component.translatable("gui.done"), b -> {
+                    // Closing on top of unapplied edits throws them away in
+                    // silence. Asking costs one click and is the only way the
+                    // answer is the operator's rather than the panel's.
+                    if (settings.isDirty(model)) {
+                        confirmOp = CONFIRM_EXIT;
+                        init();
+                    } else {
+                        host.closePanel();
+                    }
+                })
                 .bounds(doneX, 5, doneWidth, 20)
                 .build());
 
@@ -406,6 +461,11 @@ public final class AdminPanel {
                     .bounds(doneX - 6 - applyWidth, 5, applyWidth, 20)
                     .tooltip(Tooltip.create(Component.translatable("ontime.gui.settings.apply.tip")))
                     .build();
+            // Set here as well as while drawing. A button is drawn before the
+            // content pass that refreshes it, so one built enabled by default
+            // is enabled for exactly one frame — which is invisible in normal
+            // use and a flicker while the wheel lays the panel out repeatedly.
+            applyButton.active = settings.isDirty(model);
             host.addWidget(applyButton);
 
             discardButton = Button.builder(Component.translatable("ontime.gui.settings.discard"), b -> {
@@ -415,6 +475,7 @@ public final class AdminPanel {
                     })
                     .bounds(doneX - 12 - applyWidth - discardWidth, 5, discardWidth, 20)
                     .build();
+            discardButton.active = settings.isDirty(model);
             host.addWidget(discardButton);
         }
 
@@ -634,9 +695,13 @@ public final class AdminPanel {
         int x = dialogX(), y = dialogY();
         painter.outline(x, y, DIALOG_WIDTH, DIALOG_HEIGHT, COLOR_RULE);
 
-        centered(painter, Component.translatable("ontime.gui.confirm.stop_all.title"),
+        boolean exiting = CONFIRM_EXIT.equals(confirmOp);
+        centered(painter, Component.translatable(exiting
+                        ? "ontime.gui.confirm.exit.title" : "ontime.gui.confirm.stop_all.title"),
                 x + DIALOG_WIDTH / 2, y + 16, COLOR_TEXT);
-        centered(painter, Component.translatable("ontime.gui.confirm.stop_all.body", model.runs().size()),
+        centered(painter, exiting
+                        ? Component.translatable("ontime.gui.confirm.exit.body", settings.pendingCount())
+                        : Component.translatable("ontime.gui.confirm.stop_all.body", model.runs().size()),
                 x + DIALOG_WIDTH / 2, y + 34, COLOR_TEXT);
     }
 
@@ -800,6 +865,7 @@ public final class AdminPanel {
     private int drawAudienceList(Painter painter, AdminModel.RunRow row) {
         int top = actionsTop() + 2 * 22 + 8;
         if (row.audienceGlobal() || row.audienceNames().isEmpty()) return top;
+
         if (top + 2 * LINE > contentBottom) return top;
 
         painter.text(Component.translatable("ontime.gui.detail.audience_heading"), detailX, top, COLOR_TEXT);
@@ -816,18 +882,20 @@ public final class AdminPanel {
         if (shown < names.size()) {
             painter.text(Component.translatable("ontime.gui.detail.more", names.size() - shown),
                     detailX + 4, firstY + shown * LINE, COLOR_TEXT);
-            return firstY + (shown + 1) * LINE + 6;
+            return firstY + (shown + 1) * LINE + SECTION_GAP;
         }
-        return firstY + shown * LINE + 6;
+        return firstY + shown * LINE + SECTION_GAP;
     }
 
     /**
      * What this timer will run, and when.
      *
-     * <p>Scheduled commands read as the clock reading they fire at, because
-     * that is how they were entered and how you would look for them. The finish
-     * commands come last under a mark of their own rather than a made-up time,
-     * since "at zero" is not true for a count-up.</p>
+     * <p>Two groups, because they are two different things and reading them as
+     * one list is what made the first version awkward. A scheduled command has
+     * a clock reading, and the readings line up in a column of their own so the
+     * eye can run down them. A finish command has no reading — "at zero" is not
+     * even true for a count-up — so rather than invent one and repeat it on
+     * every row, they sit under a line that says once when they happen.</p>
      */
     private void drawCommands(Painter painter, AdminModel.TimerRow timer, int top) {
         if (timer == null || !timer.hasCommands()) return;
@@ -836,30 +904,56 @@ public final class AdminPanel {
         painter.text(Component.translatable("ontime.gui.detail.commands_heading"), detailX, top, COLOR_TEXT);
         painter.rect(detailX, top + LINE - 1, detailWidth, 1, COLOR_RULE);
 
-        // Flattened the same way /timer commands list flattens it: timed
-        // entries in clock order, then the finish ones.
-        List<Component> lines = new ArrayList<>();
+        int y = top + LINE + 4;
+        int indent = detailX + 4;
+
+        // The time column is as wide as the widest reading, so short and long
+        // ones share an edge instead of each starting wherever they happen to.
+        int timeWidth = 0;
         for (AdminModel.Scheduled entry : timer.scheduled()) {
-            String at = com.mateof24.render.ClientTimerState.formatTicks(entry.atSeconds() * 20L);
+            timeWidth = Math.max(timeWidth, painter.textWidth(atLabel(entry)));
+        }
+        int commandX = indent + timeWidth + 8;
+
+        for (AdminModel.Scheduled entry : timer.scheduled()) {
+            Component at = atLabel(entry);
             for (String command : entry.commands()) {
-                lines.add(Component.translatable("ontime.gui.detail.command_at", at, command));
+                if (y + LINE > contentBottom) {
+                    painter.text(Component.translatable("ontime.gui.detail.more", 1), indent, y, COLOR_TEXT);
+                    return;
+                }
+                // The reading in the accent colour, the command in plain white:
+                // one glance finds the times, the next reads the command.
+                painter.text(at, indent, y, COLOR_COOLDOWN);
+                painter.text(trimmed(painter, Component.literal(command), detailX + detailWidth - commandX),
+                        commandX, y, COLOR_TEXT);
+                y += LINE;
             }
         }
-        for (String command : timer.finishCommands()) {
-            lines.add(Component.translatable("ontime.gui.detail.command_end", command));
-        }
 
-        int firstY = top + LINE + 3;
-        int room = Math.max(1, (contentBottom - firstY) / LINE);
-        int shown = lines.size() <= room ? lines.size() : Math.max(1, room - 1);
-        for (int i = 0; i < shown; i++) {
-            painter.text(trimmed(painter, lines.get(i), detailWidth - 4),
-                    detailX + 4, firstY + i * LINE, COLOR_TEXT);
+        if (timer.finishCommands().isEmpty()) return;
+        if (y + 2 * LINE > contentBottom) return;
+
+        // A gap only when there is something above to be separated from.
+        if (!timer.scheduled().isEmpty()) y += 4;
+        painter.text(Component.translatable("ontime.gui.detail.on_finish"), indent, y, COLOR_COOLDOWN);
+        y += LINE;
+
+        for (String command : timer.finishCommands()) {
+            if (y + LINE > contentBottom) {
+                painter.text(Component.translatable("ontime.gui.detail.more", 1), indent + 8, y, COLOR_TEXT);
+                return;
+            }
+            painter.text(trimmed(painter, Component.literal(command),
+                            detailX + detailWidth - indent - 8),
+                    indent + 8, y, COLOR_TEXT);
+            y += LINE;
         }
-        if (shown < lines.size()) {
-            painter.text(Component.translatable("ontime.gui.detail.more", lines.size() - shown),
-                    detailX + 4, firstY + shown * LINE, COLOR_TEXT);
-        }
+    }
+
+    private static Component atLabel(AdminModel.Scheduled entry) {
+        return Component.literal(
+                com.mateof24.render.ClientTimerState.formatTicks(entry.atSeconds() * 20L));
     }
 
     /** A command is arbitrarily long; the column is not. */
