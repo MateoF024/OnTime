@@ -18,6 +18,9 @@ public interface IPlatformHelper {
     default void sendDisplayConfigPacket(ServerPlayer player) {}
     default void sendDisplayConfigPacketToAll(MinecraftServer server) {}
     void registerPackets();
+
+    /** Pushes the admin panel snapshot to one subscribed player. */
+    void sendAdminState(ServerPlayer player, String json);
     boolean checkScoreboardCondition(MinecraftServer server, String objective, int score, String target);
     void updateScoreboardTimer(MinecraftServer server, String timerName, long currentSeconds, long targetSeconds);
     void clearScoreboardTimer(MinecraftServer server);

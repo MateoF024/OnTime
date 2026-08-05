@@ -26,6 +26,8 @@ public class OnTimeClient implements ClientModInitializer {
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
             ClientTimerState.clear();
+            // Server state does not outlive the connection.
+            com.mateof24.gui.AdminClientState.clear();
             com.mateof24.integration.JadeOverlayManager.resetOnDisconnect();
         });
     }

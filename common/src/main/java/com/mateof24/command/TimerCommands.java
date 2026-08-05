@@ -312,6 +312,12 @@ public class TimerCommands {
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_LIST, 4))
                         .executes(InfoCommands::listTimers)
                 )
+                // Called 'gui' rather than 'panel' so it cannot be confused
+                // with /timer webpanel, which is the other surface entirely.
+                .then(Commands.literal("gui")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_GUI, 4))
+                        .executes(InfoCommands::openPanel)
+                )
                 .then(Commands.literal("status")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_STATUS, 4))
                         .then(Commands.argument("name", StringArgumentType.word())

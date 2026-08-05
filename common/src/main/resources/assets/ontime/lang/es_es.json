@@ -94,6 +94,7 @@
   "ontime.help.hide.desc": "Alternar visibilidad del contador",
   "ontime.help.silent.desc": "Alternar sonido del contador para ti o jugadores especificados",
   "ontime.help.list.desc": "Listar contadores, agrupados por si están en curso",
+  "ontime.help.gui.desc": "Abrir el panel de administración",
   "ontime.help.help.desc": "Mostrar este menú de ayuda",
   "ontime.help.position.desc": "Definir dónde se muestra un contador, o el valor global",
   "ontime.help.sound.desc": "Configurar sonido de tick del contador globalmente",

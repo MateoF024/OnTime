@@ -14,8 +14,6 @@ def vKey = rootProject.ext.vKey
 def requireFamilyProperty = rootProject.ext.requireFamilyProperty
 
 def fabricApiVer      = requireFamilyProperty("fabric_api_${vKey}")
-def clothVer          = requireFamilyProperty("cloth_${vKey}")
-def modmenuVer        = requireFamilyProperty("modmenu_${vKey}")
 def placeholderApiVer = project.findProperty("placeholder_api_${vKey}")
 def minecraftRange    = requireFamilyProperty("mc_range_fabric_${vKey}")
 
@@ -102,10 +100,6 @@ dependencies {
 
         modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
         modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVer}"
-        modApi("me.shedaniel.cloth:cloth-config-fabric:${clothVer}") {
-            exclude(group: "net.fabricmc.fabric-api")
-        }
-        modImplementation("com.terraformersmc:modmenu:${modmenuVer}")
         if (placeholderApiVer) {
             modCompileOnly "eu.pb4:placeholder-api:${placeholderApiVer}"
         }
@@ -115,10 +109,6 @@ dependencies {
         // FabricMC/fabric-example-mod, branch 26.1).
         implementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
         implementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVer}"
-        api("me.shedaniel.cloth:cloth-config-fabric:${clothVer}") {
-            exclude(group: "net.fabricmc.fabric-api")
-        }
-        implementation("com.terraformersmc:modmenu:${modmenuVer}")
         if (placeholderApiVer) {
             compileOnly "eu.pb4:placeholder-api:${placeholderApiVer}"
         }

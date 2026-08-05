@@ -26,5 +26,14 @@ public class ClientNetworkHandler {
                         payload.soundId(), payload.soundVolume(), payload.soundPitch()
                 ))
         );
+
+        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.AdminStatePayload.TYPE, (payload, context) ->
+                context.client().execute(() -> com.mateof24.gui.AdminClientState.accept(payload.json()))
+        );
+    }
+
+    /** Sends one panel action. The server decides whether it is allowed. */
+    public static void sendAdminAction(String json) {
+        ClientPlayNetworking.send(new NetworkHandler.AdminActionPayload(json));
     }
 }

@@ -51,6 +51,11 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
     }
 
     @Override
+    public void sendAdminState(ServerPlayer player, String json) {
+        NetworkHandler.sendAdminState(player, json);
+    }
+
+    @Override
     public void registerPackets() {}
 
     @Override

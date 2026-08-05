@@ -22,6 +22,10 @@ public class NetworkHandler {
         PayloadTypeRegistry.playS2C().register(TimerVisibilityPayload.TYPE, TimerVisibilityPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(TimerSilentPayload.TYPE, TimerSilentPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(TimerDisplayConfigPayload.TYPE, TimerDisplayConfigPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(AdminStatePayload.TYPE, AdminStatePayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(AdminActionPayload.TYPE, AdminActionPayload.CODEC);
+        ServerPlayNetworking.registerGlobalReceiver(AdminActionPayload.TYPE,
+                (payload, context) -> onAdminAction(payload, context.player(), context.server()));
     }
 
 
@@ -168,5 +172,70 @@ public class NetworkHandler {
                 }
         );
         @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    /**
+     * The admin panel's two channels.
+     *
+     * <p>{@code admin_action} is the mod's <b>first C2S channel</b>. Everything
+     * before this was the server telling clients what to draw; this is a client
+     * asking the server to do something, so it is the first packet an attacker
+     * can forge. The receiver hands straight to {@link com.mateof24.admin.AdminOps},
+     * which re-checks the permission and every argument — having the screen
+     * open proves nothing.</p>
+     */
+    public static final ResourceLocation ADMIN_STATE_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "admin_state");
+    public static final ResourceLocation ADMIN_ACTION_ID = ResourceLocation.fromNamespaceAndPath(OnTime.MOD_ID, "admin_action");
+
+    public record AdminStatePayload(String json) implements CustomPacketPayload {
+        public static final Type<AdminStatePayload> TYPE = new Type<>(ADMIN_STATE_ID);
+        public static final StreamCodec<FriendlyByteBuf, AdminStatePayload> CODEC = StreamCodec.of(
+                (buf, p) -> buf.writeUtf(p.json(), MAX_ADMIN_JSON),
+                buf -> new AdminStatePayload(buf.readUtf(MAX_ADMIN_JSON))
+        );
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    /** {@code {"op": "...", "args": {...}}}, validated server-side. */
+    public record AdminActionPayload(String json) implements CustomPacketPayload {
+        public static final Type<AdminActionPayload> TYPE = new Type<>(ADMIN_ACTION_ID);
+        public static final StreamCodec<FriendlyByteBuf, AdminActionPayload> CODEC = StreamCodec.of(
+                (buf, p) -> buf.writeUtf(p.json(), MAX_ADMIN_ACTION),
+                buf -> new AdminActionPayload(buf.readUtf(MAX_ADMIN_ACTION))
+        );
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    /**
+     * Caps on the two JSON strings. The state one is generous because it
+     * carries every timer; the action one is deliberately small — an action is
+     * a handful of fields, and a client should not be able to make the server
+     * allocate a megabyte by saying it will.
+     */
+    private static final int MAX_ADMIN_JSON = 1 << 20;
+    private static final int MAX_ADMIN_ACTION = 8192;
+
+    public static void sendAdminState(ServerPlayer player, String json) {
+        ServerPlayNetworking.send(player, new AdminStatePayload(json));
+    }
+
+    /**
+     * Handles one action from an open panel.
+     *
+     * <p>Hops to the server thread before touching anything — the payload
+     * arrives on a netty thread — and hands the whole decision to AdminOps,
+     * which authorises the caller and validates the arguments. Nothing is
+     * trusted here beyond "this is the player the connection belongs to".</p>
+     */
+    private static void onAdminAction(AdminActionPayload payload, ServerPlayer player, MinecraftServer server) {
+        server.execute(() -> {
+            com.google.gson.JsonObject request;
+            try {
+                request = com.google.gson.JsonParser.parseString(payload.json()).getAsJsonObject();
+            } catch (Exception e) {
+                return;
+            }
+            com.mateof24.admin.AdminHandler.handle(server, player, request);
+        });
     }
 }

@@ -96,6 +96,7 @@
   "ontime.help.hide.desc": "Toggle timer visibility",
   "ontime.help.silent.desc": "Toggle timer sound for yourself or specified players",
   "ontime.help.list.desc": "List timers, grouped by whether they are running",
+  "ontime.help.gui.desc": "Open the administration panel",
   "ontime.help.help.desc": "Show this help menu",
   "ontime.help.position.desc": "Set where a timer shows, or the global default",
   "ontime.help.sound.desc": "Configure timer tick sound globally",

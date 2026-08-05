@@ -11,7 +11,6 @@ def helpSystemVer = rootProject.ext.helpSystemVer
 def requireFamilyProperty = rootProject.ext.requireFamilyProperty
 
 def neoforgeVer    = requireFamilyProperty("neoforge_${vKey}")
-def clothVer       = requireFamilyProperty("cloth_${vKey}")
 def minecraftRange = requireFamilyProperty("mc_range_neoforge_${vKey}")
 
 base {
@@ -52,6 +51,10 @@ sourceSets {
                     "../common/src/${helpSystemVer}/java",
                     "../common/src/${rootProject.ext.compatVer}/java",
                     "../common/src/${rootProject.ext.compatVer}/client/java",
+                    // NeoForge moved the client-to-server send from
+                    // PacketDistributor to ClientPacketDistributor in 1.21.11,
+                    // which is exactly where compatVer already splits.
+                    "src/${rootProject.ext.compatVer}/java",
                     'src/client/java',
                     '../common/src/client/java',
                     "../common/src/${rootProject.ext.clientVer}/java",
@@ -100,7 +103,6 @@ processResources {
 
 dependencies {
     compileOnly 'org.slf4j:slf4j-api:2.0.9'
-    implementation("me.shedaniel.cloth:cloth-config-neoforge:${clothVer}")
 }
 
 java {

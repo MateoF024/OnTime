@@ -26,9 +26,3 @@ versionRange="${minecraft_range}"
 ordering="NONE"
 side="BOTH"
 
-[[dependencies.ontime]]
-modId="cloth_config"
-type="required"
-versionRange="[15.0.140,)"
-ordering="NONE"
-side="BOTH"

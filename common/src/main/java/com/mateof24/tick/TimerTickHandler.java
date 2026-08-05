@@ -68,6 +68,9 @@ public class TimerTickHandler {
             com.mateof24.command.PendingConfirmations.sweep();
         }
 
+        // Costs nothing while no panel is open, which is the normal case.
+        com.mateof24.admin.AdminSubscriptions.tick(server);
+
         TimerManager manager = TimerManager.getInstance();
         if (manager.runCount() == 0) {
             com.mateof24.network.TimerState.flush(server);

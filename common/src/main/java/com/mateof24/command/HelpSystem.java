@@ -165,6 +165,13 @@ public class HelpSystem {
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
+                "gui",
+                "ontime.help.gui.desc",
+                "/timer gui",
+                "/timer gui"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
                 "status",
                 "ontime.help.status.desc",
                 "/timer status <name>",

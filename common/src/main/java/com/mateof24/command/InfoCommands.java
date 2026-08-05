@@ -29,6 +29,24 @@ final class InfoCommands {
     private static final String[] TITLE_SLOTS = {"above", "below", "left", "right"};
 
     /**
+     * {@code /timer gui} — opens the administration panel.
+     *
+     * <p>The server checks the permission, registers the player as a
+     * subscriber and pushes the first snapshot; the client opens the screen
+     * when it arrives. There is deliberately no way in from the main menu:
+     * the panel has no state without a server, so it cannot exist without
+     * one.</p>
+     */
+    static int openPanel(CommandContext<CommandSourceStack> ctx) {
+        if (!(ctx.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.players_only"));
+            return 0;
+        }
+        com.mateof24.admin.AdminHandler.open(ctx.getSource().getServer(), player);
+        return 1;
+    }
+
+    /**
      * {@code /timer status <name>} — everything about one timer in one place.
      *
      * <p>This information was spread across eight query subcommands, each

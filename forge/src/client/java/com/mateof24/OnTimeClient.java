@@ -1,29 +1,23 @@
 package com.mateof24;
 
 
-import com.mateof24.config.ConfigScreen;
 import com.mateof24.render.ClientTimerState;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
-import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
-import net.neoforged.fml.ModLoadingContext;
 
 @EventBusSubscriber(modid = OnTimeConstants.MOD_ID, value = Dist.CLIENT)
 public class OnTimeClient {
 
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
-
-        ModLoadingContext.get().registerExtensionPoint(
-                IConfigScreenFactory.class,
-                () -> (mc, parent) -> ConfigScreen.createConfigScreen(parent)
-        );
-
+        // No config screen extension point any more: the mod's settings live on
+        // the server and are edited from /timer gui, which cannot be opened
+        // from the mod list because there is no state without a server.
         NeoForge.EVENT_BUS.addListener(OnTimeClient::onRenderGui);
         NeoForge.EVENT_BUS.addListener(OnTimeClient::onClientTick);
     }
