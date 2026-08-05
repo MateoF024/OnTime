@@ -257,9 +257,6 @@
   "ontime.gui.tab.runs": "En curso",
   "ontime.gui.tab.timers": "Contadores",
   "ontime.gui.tab.settings": "Ajustes",
-  "ontime.gui.tab.runs.desc": "Qué se está ejecutando ahora, y para quién",
-  "ontime.gui.tab.timers.desc": "Los contadores configurados en este servidor",
-  "ontime.gui.tab.settings.desc": "Valores que heredan todos los contadores",
   "ontime.gui.runs.empty": "No hay nada en curso.",
   "ontime.gui.runs.none_hint": "Arranca uno desde la pestaña Contadores, o con /timer start.",
   "ontime.gui.runs.pick_hint": "Elige una ejecución para actuar sobre ella",
@@ -274,9 +271,9 @@
   "ontime.gui.timers.pending": "Llega en el siguiente paso",
   "ontime.gui.settings.pending": "Llega en el siguiente paso",
   "ontime.gui.runs.detail.id": "Ejecución %s",
-  "ontime.gui.runs.col.timer": "CONTADOR",
-  "ontime.gui.runs.col.audience": "LO VEN",
-  "ontime.gui.runs.col.time": "TIEMPO",
+  "ontime.gui.runs.col.timer": "Contador:",
+  "ontime.gui.runs.col.audience": "Lo ven:",
+  "ontime.gui.runs.col.time": "Tiempo:",
   "ontime.gui.runs.row.tip": "Ver y controlar esta ejecución de %s",
   "ontime.gui.runs.stop_all.tip": "Terminar todas las ejecuciones del servidor",
   "ontime.gui.action.pause.tip": "Congelar el reloj de esta ejecución",
@@ -286,5 +283,8 @@
   "ontime.gui.state.running": "EN MARCHA",
   "ontime.gui.state.paused": "PAUSADA",
   "ontime.gui.state.repeat_cooldown": "ESPERA DE REPETICIÓN",
-  "ontime.gui.state.sequence_cooldown": "ESPERA DE SECUENCIA"
+  "ontime.gui.state.sequence_cooldown": "ESPERA DE SECUENCIA",
+  "ontime.gui.confirm.stop_all.title": "¿Detener todas las ejecuciones?",
+  "ontime.gui.confirm.stop_all.body": "Esto termina %s. No se puede deshacer.",
+  "ontime.gui.confirm.accept": "Confirmar"
 }

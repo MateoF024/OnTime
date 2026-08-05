@@ -1,6 +1,7 @@
 package com.mateof24.gui;
 
 import com.google.gson.JsonObject;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
@@ -53,7 +54,10 @@ public final class AdminPanel {
 
     /** Sits under vanilla's dimming, so it only needs to be a hint. */
     private static final int COLOR_BAND = 0x50000000;
-    private static final int COLOR_RULE_SOFT = 0x18FFFFFF;
+    /** Drawn over the world after the widgets, so it has to carry on its own. */
+    private static final int COLOR_RULE = 0x70FFFFFF;
+    private static final int COLOR_SCRIM = 0xC0000000;
+    private static final int COLOR_DIALOG = 0xF0141418;
 
     private static final int COLOR_TEXT = 0xFFFFFFFF;
 
@@ -79,7 +83,8 @@ public final class AdminPanel {
     private final AdminModel model = new AdminModel();
 
     private int width, height;
-    private int tabY, subtitleY, messageY, headerRowY, contentTop, contentBottom;
+    private int tabY, messageY, headerRowY, contentTop, contentBottom;
+    private int dividerTop;
     private int listX, listWidth, listTop, listBottom;
     private int detailX, detailWidth, detailTop;
     private int colName, colAudience, colTimeRight;
@@ -87,6 +92,14 @@ public final class AdminPanel {
 
     private int scroll = 0;
     private int visibleRows = 1;
+
+    /**
+     * The operation waiting to be confirmed, or null.
+     *
+     * <p>Only one thing needs it so far, but it is a field rather than a
+     * boolean because the next destructive action will want the same door.</p>
+     */
+    private String confirmOp = null;
 
     /** {@code {x, y, colour}} per visible row, for the state mark in the gutter. */
     private final List<int[]> rowMarks = new ArrayList<>();
@@ -112,13 +125,16 @@ public final class AdminPanel {
         height = host.panelHeight();
 
         tabY = HEADER_HEIGHT + 6;
-        subtitleY = tabY + TAB_HEIGHT + 8;
         // Reserved whether or not there is a message, so nothing shifts under
         // the cursor when one appears.
-        messageY = subtitleY + LINE;
+        messageY = tabY + TAB_HEIGHT + 6;
         headerRowY = messageY + LINE + 4;
         contentTop = headerRowY + LINE + 2;
         contentBottom = height - GUTTER;
+        // Just clear of the header band and a shade above the tab row, so the
+        // two columns read as columns for the full height rather than only
+        // where the content happens to be.
+        dividerTop = tabY - 2;
 
         twoColumn = width >= TWO_COLUMN_MIN_WIDTH;
         if (twoColumn) {
@@ -150,12 +166,54 @@ public final class AdminPanel {
         host.clearWidgets();
         rowMarks.clear();
         rowData.clear();
+
+        // A confirmation owns the screen while it is up: with nothing else
+        // built there is nothing behind it to click by accident.
+        if (confirmOp != null) {
+            buildConfirm();
+            return;
+        }
+
         buildHeader();
         buildTabs();
         if (model.tab() == AdminModel.Tab.RUNS) {
             buildRunRows();
             buildRunActions();
         }
+    }
+
+    // ---- the confirmation ----
+
+    private static final int DIALOG_WIDTH = 280;
+    private static final int DIALOG_HEIGHT = 88;
+
+    private int dialogX() { return (width - DIALOG_WIDTH) / 2; }
+
+    private int dialogY() { return (height - DIALOG_HEIGHT) / 2; }
+
+    private void buildConfirm() {
+        int buttonWidth = 96;
+        int y = dialogY() + DIALOG_HEIGHT - 28;
+        int gap = 8;
+        int startX = dialogX() + (DIALOG_WIDTH - 2 * buttonWidth - gap) / 2;
+
+        host.addWidget(Button.builder(Component.translatable("gui.cancel"), b -> {
+                    confirmOp = null;
+                    init();
+                })
+                .bounds(startX, y, buttonWidth, 20)
+                .build());
+
+        host.addWidget(Button.builder(
+                        Component.translatable("ontime.gui.confirm.accept").withStyle(ChatFormatting.RED),
+                        b -> {
+                            String op = confirmOp;
+                            confirmOp = null;
+                            init();
+                            if (op != null) send(op, new JsonObject());
+                        })
+                .bounds(startX + buttonWidth + gap, y, buttonWidth, 20)
+                .build());
     }
 
     /** Title on the left; everything that acts on the whole panel on the right. */
@@ -168,8 +226,15 @@ public final class AdminPanel {
 
         if (model.tab() == AdminModel.Tab.RUNS && !model.runs().isEmpty()) {
             int stopAllWidth = 76;
-            host.addWidget(Button.builder(Component.translatable("ontime.gui.runs.stop_all"),
-                            b -> send("run.stopAll", new JsonObject()))
+            // Red, and it asks first: it sits next to Done, it ends every
+            // execution on the server, and a slip of the mouse between the two
+            // should not be able to do that.
+            host.addWidget(Button.builder(
+                            Component.translatable("ontime.gui.runs.stop_all").withStyle(ChatFormatting.RED),
+                            b -> {
+                                confirmOp = "run.stopAll";
+                                init();
+                            })
                     .bounds(doneX - 6 - stopAllWidth, 5, stopAllWidth, 20)
                     .tooltip(Tooltip.create(Component.translatable("ontime.gui.runs.stop_all.tip")))
                     .build());
@@ -178,7 +243,10 @@ public final class AdminPanel {
 
     private void buildTabs() {
         AdminModel.Tab[] tabs = AdminModel.Tab.values();
-        int tabWidth = Math.min(110, (width - 2 * GUTTER - 2 * (tabs.length - 1)) / tabs.length);
+        // Kept inside the list column so the divider between the columns can
+        // run past them instead of through them.
+        int available = listX + listWidth - GUTTER;
+        int tabWidth = Math.min(110, (available - 2 * (tabs.length - 1)) / tabs.length);
         for (int i = 0; i < tabs.length; i++) {
             AdminModel.Tab tab = tabs[i];
             Button button = Button.builder(
@@ -278,6 +346,13 @@ public final class AdminPanel {
      */
     public void drawBands(Painter painter) {
         painter.rect(0, 0, width, HEADER_HEIGHT, COLOR_BAND);
+
+        // The dialog's fills go here for the same reason as the band: they are
+        // large and opaque, and after the widgets they would bury its buttons.
+        if (confirmOp != null) {
+            painter.rect(0, 0, width, height, COLOR_SCRIM);
+            painter.rect(dialogX(), dialogY(), DIALOG_WIDTH, DIALOG_HEIGHT, COLOR_DIALOG);
+        }
     }
 
     // ==================================================================
@@ -290,8 +365,11 @@ public final class AdminPanel {
      */
     public void drawContent(Painter painter) {
         painter.text(Component.translatable("ontime.gui.title"), GUTTER, 11, COLOR_TEXT);
-        painter.text(Component.translatable("ontime.gui.tab." + key(model.tab()) + ".desc"),
-                GUTTER, subtitleY, COLOR_TEXT);
+
+        if (confirmOp != null) {
+            drawConfirm(painter);
+            return;
+        }
 
         if (model.message() != null) {
             painter.text(Component.literal(model.message()), GUTTER, messageY,
@@ -307,6 +385,21 @@ public final class AdminPanel {
         }
     }
 
+    /** The question and the frame; the box itself was filled before the widgets. */
+    private void drawConfirm(Painter painter) {
+        int x = dialogX(), y = dialogY();
+        painter.outline(x, y, DIALOG_WIDTH, DIALOG_HEIGHT, COLOR_RULE);
+
+        centered(painter, Component.translatable("ontime.gui.confirm.stop_all.title"),
+                x + DIALOG_WIDTH / 2, y + 16, COLOR_TEXT);
+        centered(painter, Component.translatable("ontime.gui.confirm.stop_all.body", model.runs().size()),
+                x + DIALOG_WIDTH / 2, y + 34, COLOR_TEXT);
+    }
+
+    private void centered(Painter painter, Component text, int centerX, int y, int argb) {
+        painter.text(text, centerX - painter.textWidth(text) / 2, y, argb);
+    }
+
     private void drawRuns(Painter painter) {
         List<AdminModel.RunRow> rows = model.runs();
 
@@ -314,6 +407,9 @@ public final class AdminPanel {
             painter.text(Component.translatable("ontime.gui.runs.empty"), GUTTER, headerRowY, COLOR_TEXT);
             painter.text(Component.translatable("ontime.gui.runs.none_hint"),
                     GUTTER, headerRowY + LINE + 2, COLOR_TEXT);
+            if (twoColumn) {
+                painter.rect(detailX - GUTTER / 2, dividerTop, 1, contentBottom - dividerTop, COLOR_RULE);
+            }
             return;
         }
 
@@ -323,7 +419,7 @@ public final class AdminPanel {
         painter.text(Component.translatable("ontime.gui.runs.col.audience"), colAudience, headerRowY, COLOR_TEXT);
         Component timeHeader = Component.translatable("ontime.gui.runs.col.time");
         painter.text(timeHeader, colTimeRight - painter.textWidth(timeHeader), headerRowY, COLOR_TEXT);
-        painter.rect(listX, headerRowY + LINE - 1, listWidth, 1, COLOR_RULE_SOFT);
+        painter.rect(listX, headerRowY + LINE - 1, listWidth, 1, COLOR_RULE);
 
         // State marks in the gutter, then the row contents over their buttons.
         for (int[] mark : rowMarks) {
@@ -342,13 +438,13 @@ public final class AdminPanel {
         if (rows.size() > visibleRows) {
             Component range = Component.translatable("ontime.gui.runs.scroll",
                     scroll + 1, Math.min(scroll + visibleRows, rows.size()), rows.size());
-            painter.text(range, listX + listWidth - painter.textWidth(range), subtitleY, COLOR_TEXT);
+            painter.text(range, listX + listWidth - painter.textWidth(range), messageY, COLOR_TEXT);
         }
 
         if (twoColumn) {
-            painter.rect(detailX - GUTTER / 2, contentTop, 1, contentBottom - contentTop, COLOR_RULE_SOFT);
+            painter.rect(detailX - GUTTER / 2, dividerTop, 1, contentBottom - dividerTop, COLOR_RULE);
         } else {
-            painter.rect(GUTTER, detailTop - 8, width - 2 * GUTTER, 1, COLOR_RULE_SOFT);
+            painter.rect(GUTTER, detailTop - 8, width - 2 * GUTTER, 1, COLOR_RULE);
         }
 
         drawDetail(painter);
