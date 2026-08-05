@@ -176,7 +176,7 @@ public class TimerTickHandler {
 
         if (syncNow) {
             com.mateof24.network.TimerState.markDirty();
-            com.mateof24.event.TimerEventBus.fireOnTick(toInfo(timer));
+            com.mateof24.event.TimerEventBus.fireTick(run);
         }
 
         long currentSecond = run.getCurrentTicks() / 20L;
@@ -197,7 +197,7 @@ public class TimerTickHandler {
 
     private static void onRunFinished(MinecraftServer server, TimerRun run, Timer timer) {
         TimerLogger.logFinish(timer);
-        com.mateof24.event.TimerEventBus.fireOnFinish(toInfo(timer));
+        com.mateof24.event.TimerEventBus.fireFinish(run);
         executeTimerCommand(server, run);
 
         if (run.shouldRepeatAgain()) {
@@ -417,9 +417,4 @@ public class TimerTickHandler {
         }
     }
 
-    private static com.mateof24.api.TimerInfo toInfo(Timer t) {
-        return new com.mateof24.api.TimerInfo(t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
-                t.isCountUp(), t.isRunning(), t.isSilent(), t.getCommand(),
-                t.isRepeat(), t.getRepeatCount(), t.getRepeatsDone());
-    }
 }

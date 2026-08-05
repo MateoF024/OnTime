@@ -61,6 +61,19 @@ public final class ClientRunView {
     public boolean isSilent() { return silent; }
 
     /**
+     * This execution as the API sees it, for a custom renderer.
+     *
+     * <p>Audience, mode, phase and owner are null: the server sends a client
+     * the executions it may see, not who else sees them, and inventing a
+     * plausible value would be worse than saying "not known here".</p>
+     */
+    public com.mateof24.api.TimerRunInfo toApiInfo() {
+        return new com.mateof24.api.TimerRunInfo(
+                runId, timerName, getInterpolatedTicks(), targetTicks, countUp, running,
+                null, null, null, null, 0);
+    }
+
+    /**
      * Ticks left before this execution ends, counting either way round.
      *
      * <p>It only ever decreases while a run ticks, which is what lets the

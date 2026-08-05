@@ -44,7 +44,7 @@ public class TimerRenderer {
 
         if (com.mateof24.render.TimerRendererRegistry.hasCustomRenderer()) {
             com.mateof24.render.TimerRendererRegistry.getCustomRenderer()
-                    .render(graphics, 0f, timeText, percentage, x, y, scale);
+                    .render(graphics, 0f, view.toApiInfo(), x, y, scale);
             continue;
         }
 

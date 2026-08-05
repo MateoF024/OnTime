@@ -504,6 +504,15 @@ final class BehaviorCommands {
         com.mateof24.trigger.FTBQuestsPoller.resetFor(name);
         ctx.getSource().sendSuccess(() ->
                 Component.translatable("ontime.command.trigger.set", name, type, action), true);
+
+        // The trigger is stored either way — the pack may install FTB Quests
+        // later — but a trigger that silently never fires is the kind of thing
+        // people spend an evening on before checking their mod list.
+        if (type.startsWith("ftb_quest:")
+                && !com.mateof24.platform.Services.PLATFORM.isModLoaded("ftbquests")) {
+            ctx.getSource().sendSuccess(() ->
+                    Component.translatable("ontime.command.trigger.ftb_missing"), false);
+        }
         return 1;
     }
 

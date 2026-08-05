@@ -250,5 +250,6 @@
   "ontime.command.list.group.stopped": "§6Detenidos §7(%s)",
   "ontime.command.list.entry.running": "§7 · §f%s %s §a%s §7para §f%s §7· %s",
   "ontime.command.list.entry.stopped": "§7 · §f%s %s §7%s%s",
-  "ontime.help.status.desc": "Todo sobre un contador, ejecuciones incluidas"
+  "ontime.help.status.desc": "Todo sobre un contador, ejecuciones incluidas",
+  "ontime.command.trigger.ftb_missing": "§eAviso: FTB Quests no está instalado, así que este disparador no se activará hasta que lo esté"
 }

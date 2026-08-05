@@ -2,7 +2,7 @@ package com.mateof24.manager;
 
 import com.mateof24.config.ModConfig;
 import com.mateof24.config.TimerPositionPreset;
-import com.mateof24.timer.Audience;
+import com.mateof24.api.Audience;
 import com.mateof24.timer.Timer;
 import com.mateof24.timer.TimerRun;
 

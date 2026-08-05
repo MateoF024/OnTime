@@ -546,7 +546,6 @@ public class TimerWebPanel {
                     }
                 }
                 case "pause" -> TimerManager.getInstance().getActiveRun().ifPresent(run -> {
-                    com.mateof24.timer.Timer t = run.timer();
                     boolean nowRunning = !run.isRunning();
                     run.setRunning(nowRunning);
                     run.mirrorToTimer();
@@ -554,9 +553,8 @@ public class TimerWebPanel {
                     // Pausing from the panel used to be invisible to the API,
                     // the entrypoints and the WebSocket feed, while pausing by
                     // command did fire. Same event either way now.
-                    TimerInfo info = toInfo(t);
-                    if (nowRunning) TimerEventBus.fireOnResume(info);
-                    else TimerEventBus.fireOnPause(info);
+                    if (nowRunning) TimerEventBus.fireResume(run);
+                    else TimerEventBus.firePause(run);
                     com.mateof24.network.TimerState.markDirty();
                     broadcastState();
                 });

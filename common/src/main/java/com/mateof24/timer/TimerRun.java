@@ -1,5 +1,9 @@
 package com.mateof24.timer;
 
+import com.mateof24.api.Audience;
+import com.mateof24.api.RunMode;
+import com.mateof24.api.RunPhase;
+
 import java.util.UUID;
 
 /**
@@ -19,29 +23,11 @@ import java.util.UUID;
  */
 public final class TimerRun {
 
-    /** How a selector expands into runs. */
-    public enum Mode {
-        /** One run, one clock, several viewers. */
-        SHARED,
-        /** One run per matched player, each with its own clock. */
-        EACH
-    }
-
-    /** What a run is doing between ticks. */
-    public enum Phase {
-        /** Ticking, or paused — the timer is the current one either way. */
-        ACTIVE,
-        /** Finished a lap, waiting out the repeat cooldown before the next one. */
-        REPEAT_COOLDOWN,
-        /** Finished, waiting out the sequence cooldown before the next timer starts. */
-        SEQUENCE_COOLDOWN
-    }
-
     private final UUID runId;
     private final String timerName;
     private final Timer timer;
-    private final Mode mode;
-    /** Player this run belongs to for {@link Mode#EACH}; null otherwise. */
+    private final RunMode mode;
+    /** Player this run belongs to for {@link RunMode#EACH}; null otherwise. */
     private final UUID owner;
     private Audience audience;
 
@@ -60,7 +46,7 @@ public final class TimerRun {
     private boolean running;
     private int repeatsDone;
 
-    private Phase phase = Phase.ACTIVE;
+    private RunPhase phase = RunPhase.ACTIVE;
     private long cooldownRemaining = 0L;
     /** Timer to start once a sequence cooldown elapses; null when not sequencing. */
     private String pendingSequenceTimer = null;
@@ -83,7 +69,7 @@ public final class TimerRun {
     private final java.util.ArrayDeque<String> pendingCommands = new java.util.ArrayDeque<>();
     private long commandDelayRemaining = 0L;
 
-    private TimerRun(UUID runId, Timer timer, Audience audience, Mode mode, UUID owner) {
+    private TimerRun(UUID runId, Timer timer, Audience audience, RunMode mode, UUID owner) {
         this.runId = runId;
         this.timer = timer;
         this.timerName = timer.getName();
@@ -97,17 +83,17 @@ public final class TimerRun {
 
     /** A run shared by everyone on the server, the shape every 4.0.0 timer had. */
     public static TimerRun global(Timer timer) {
-        return new TimerRun(UUID.randomUUID(), timer, Audience.global(), Mode.SHARED, null);
+        return new TimerRun(UUID.randomUUID(), timer, Audience.global(), RunMode.SHARED, null);
     }
 
     /** A run watched by a fixed set of players, sharing one clock. */
     public static TimerRun shared(Timer timer, Audience audience) {
-        return new TimerRun(UUID.randomUUID(), timer, audience, Mode.SHARED, null);
+        return new TimerRun(UUID.randomUUID(), timer, audience, RunMode.SHARED, null);
     }
 
     /** A run belonging to one player, with a clock of its own. */
     public static TimerRun forPlayer(Timer timer, UUID player) {
-        return new TimerRun(UUID.randomUUID(), timer, Audience.ofPlayer(player), Mode.EACH, player);
+        return new TimerRun(UUID.randomUUID(), timer, Audience.ofPlayer(player), RunMode.EACH, player);
     }
 
     public UUID runId() { return runId; }
@@ -119,9 +105,9 @@ public final class TimerRun {
 
     public Timer timer() { return timer; }
 
-    public Mode mode() { return mode; }
+    public RunMode mode() { return mode; }
 
-    /** Null unless {@link #mode()} is {@link Mode#EACH}. */
+    /** Null unless {@link #mode()} is {@link RunMode#EACH}. */
     public UUID owner() { return owner; }
 
     public Audience audience() { return audience; }
@@ -212,24 +198,24 @@ public final class TimerRun {
 
     // ---- phase and cooldowns ----
 
-    public Phase phase() { return phase; }
+    public RunPhase phase() { return phase; }
 
     /**
      * True while waiting for the next timer of a sequence. Such a run holds no
      * timer the player would call "the current one" — the display is cleared
      * and nothing is ticking — so it is deliberately not reported as active.
      */
-    public boolean isAwaitingSequence() { return phase == Phase.SEQUENCE_COOLDOWN; }
+    public boolean isAwaitingSequence() { return phase == RunPhase.SEQUENCE_COOLDOWN; }
 
-    public boolean isInCooldown() { return phase != Phase.ACTIVE; }
+    public boolean isInCooldown() { return phase != RunPhase.ACTIVE; }
 
     public void beginRepeatCooldown(long ticks) {
-        phase = Phase.REPEAT_COOLDOWN;
+        phase = RunPhase.REPEAT_COOLDOWN;
         cooldownRemaining = ticks;
     }
 
     public void beginSequenceCooldown(String nextTimer, long ticks) {
-        phase = Phase.SEQUENCE_COOLDOWN;
+        phase = RunPhase.SEQUENCE_COOLDOWN;
         pendingSequenceTimer = nextTimer;
         cooldownRemaining = ticks;
     }
@@ -246,7 +232,7 @@ public final class TimerRun {
     public String pendingSequenceTimer() { return pendingSequenceTimer; }
 
     public void endCooldown() {
-        phase = Phase.ACTIVE;
+        phase = RunPhase.ACTIVE;
         cooldownRemaining = 0L;
         pendingSequenceTimer = null;
     }
@@ -339,9 +325,9 @@ public final class TimerRun {
             UUID runId = json.has("runId")
                     ? UUID.fromString(json.get("runId").getAsString())
                     : UUID.randomUUID();
-            Mode mode = json.has("mode")
-                    ? Mode.valueOf(json.get("mode").getAsString())
-                    : Mode.SHARED;
+            RunMode mode = json.has("mode")
+                    ? RunMode.valueOf(json.get("mode").getAsString())
+                    : RunMode.SHARED;
             UUID owner = json.has("owner") ? UUID.fromString(json.get("owner").getAsString()) : null;
 
             Audience audience = Audience.global();

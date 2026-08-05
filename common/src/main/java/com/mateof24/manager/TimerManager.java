@@ -3,7 +3,7 @@ package com.mateof24.manager;
 import com.mateof24.OnTimeConstants;
 import com.mateof24.config.ModConfig;
 import com.mateof24.storage.TimerStorage;
-import com.mateof24.timer.Audience;
+import com.mateof24.api.Audience;
 import com.mateof24.timer.Timer;
 import com.mateof24.timer.TimerRun;
 import java.util.Collection;
@@ -96,12 +96,15 @@ public class TimerManager {
         if (timer == null) return null;
         if (findOverlapping(name, audience) != null) return null;
 
-        timer.setRunning(true);
+        // Explicit rather than relying on the run seeding itself from the
+        // definition: that only works while setRunning happens to come first.
         TimerRun run = newRun(TimerRun.shared(timer, audience));
+        run.setRunning(true);
+        timer.setRunning(true);
         TimerStorage.saveTimer(timer);
         saveRuns();
 
-        com.mateof24.event.TimerEventBus.fireOnStart(toInfo(timer));
+        com.mateof24.event.TimerEventBus.fireStart(run);
         return run;
     }
 
@@ -121,14 +124,21 @@ public class TimerManager {
         java.util.List<TimerRun> created = new java.util.ArrayList<>();
         for (UUID player : players) {
             if (findOverlapping(name, Audience.ofPlayer(player)) != null) continue;
-            created.add(newRun(TimerRun.forPlayer(timer, player)));
+            TimerRun run = newRun(TimerRun.forPlayer(timer, player));
+            // Each run seeds its clock from the definition, including whether
+            // it is running — and the definition is not running yet at this
+            // point, so without this every 'each' run started frozen.
+            run.setRunning(true);
+            created.add(run);
         }
         if (created.isEmpty()) return created;
 
         timer.setRunning(true);
         TimerStorage.saveTimer(timer);
         saveRuns();
-        com.mateof24.event.TimerEventBus.fireOnStart(toInfo(timer));
+        // One event per execution: 'each' created several, and a listener that
+        // only heard about the timer could not tell them apart.
+        for (TimerRun run : created) com.mateof24.event.TimerEventBus.fireStart(run);
         return created;
     }
 
@@ -467,9 +477,4 @@ public class TimerManager {
         return true;
     }
 
-    private com.mateof24.api.TimerInfo toInfo(Timer t) {
-        return new com.mateof24.api.TimerInfo(t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
-                t.isCountUp(), t.isRunning(), t.isSilent(), t.getCommand(),
-                t.isRepeat(), t.getRepeatCount(), t.getRepeatsDone());
-    }
 }

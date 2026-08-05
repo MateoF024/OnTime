@@ -1,5 +1,7 @@
 package com.mateof24.command;
 
+import com.mateof24.api.RunMode;
+
 import com.mateof24.compat.VanillaCompat;
 import com.mateof24.config.ModConfig;
 import com.mateof24.config.TimerPositionPreset;
@@ -211,19 +213,19 @@ public class TimerCommands {
                                 .suggests(TIMER_SUGGESTIONS)
                                 // No selector: a global run, seen by whoever
                                 // connects later. Exactly the 4.0.0 shape.
-                                .executes(ctx -> RunCommands.start(ctx, null, com.mateof24.timer.TimerRun.Mode.SHARED))
+                                .executes(ctx -> RunCommands.start(ctx, null, com.mateof24.api.RunMode.SHARED))
                                 .then(Commands.argument("targets", EntityArgument.players())
                                         .executes(ctx -> RunCommands.start(ctx,
                                                 EntityArgument.getPlayers(ctx, "targets"),
-                                                com.mateof24.timer.TimerRun.Mode.SHARED))
+                                                com.mateof24.api.RunMode.SHARED))
                                         .then(Commands.literal("shared")
                                                 .executes(ctx -> RunCommands.start(ctx,
                                                         EntityArgument.getPlayers(ctx, "targets"),
-                                                        com.mateof24.timer.TimerRun.Mode.SHARED)))
+                                                        com.mateof24.api.RunMode.SHARED)))
                                         .then(Commands.literal("each")
                                                 .executes(ctx -> RunCommands.start(ctx,
                                                         EntityArgument.getPlayers(ctx, "targets"),
-                                                        com.mateof24.timer.TimerRun.Mode.EACH)))
+                                                        com.mateof24.api.RunMode.EACH)))
                                 )
                         )
                 )

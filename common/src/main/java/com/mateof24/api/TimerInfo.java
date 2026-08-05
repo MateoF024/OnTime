@@ -1,5 +1,14 @@
 package com.mateof24.api;
 
+/**
+ * The 4.x snapshot, which conflated the template with its single execution.
+ *
+ * @deprecated split into {@link TimerDefinition} (what was configured) and
+ *             {@link TimerRunInfo} (one execution of it, with its own clock and
+ *             audience). Still delivered to the deprecated listeners and to the
+ *             legacy renderer hook, built from one execution.
+ */
+@Deprecated
 public record TimerInfo(
         String name,
         long currentTicks,

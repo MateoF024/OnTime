@@ -1,4 +1,4 @@
-package com.mateof24.timer;
+package com.mateof24.api;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -9,8 +9,8 @@ import java.util.UUID;
 /**
  * Who sees a {@link TimerRun}.
  *
- * <p>This is a type, not a player list, because "global" and "@a" are not the
- * same thing. A global run belongs to the server: whoever joins later sees it,
+ * <p>Part of the public API vocabulary, and a type rather than a player list,
+ * because "global" and "@a" are not the same thing. A global run belongs to the server: whoever joins later sees it,
  * which is how the single timer of 4.0.0 behaved and what the JOIN handler
  * relies on. A player audience is a fixed set resolved when the run starts, so
  * a later joiner is not part of it.</p>

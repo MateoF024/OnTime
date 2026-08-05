@@ -1,7 +1,9 @@
 package com.mateof24.command;
 
+import com.mateof24.api.RunMode;
+
 import com.mateof24.manager.TimerManager;
-import com.mateof24.timer.Audience;
+import com.mateof24.api.Audience;
 import com.mateof24.timer.Timer;
 import com.mateof24.timer.TimerRun;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -44,7 +46,7 @@ final class RunCommands {
      *                so a late joiner is deliberately not part of it.
      */
     static int start(CommandContext<CommandSourceStack> ctx, Collection<ServerPlayer> targets,
-                     TimerRun.Mode mode) {
+                     RunMode mode) {
         String name = StringArgumentType.getString(ctx, "name");
         CommandSourceStack source = ctx.getSource();
         TimerManager manager = TimerManager.getInstance();
@@ -55,7 +57,7 @@ final class RunCommands {
         }
 
         Set<UUID> players = targets == null ? null : uuidsOf(targets);
-        boolean each = players != null && mode == TimerRun.Mode.EACH;
+        boolean each = players != null && mode == RunMode.EACH;
 
         // What the operation is about to cost, in executions. Everything but
         // 'each' is a single one however many players it reaches.
@@ -92,7 +94,7 @@ final class RunCommands {
      * @param players null for a global run
      */
     private static int doStart(CommandSourceStack source, String name, Set<UUID> players,
-                               TimerRun.Mode mode) {
+                               RunMode mode) {
         TimerManager manager = TimerManager.getInstance();
 
         // A slot holds one execution per viewer. Checked here as well as when a
@@ -119,7 +121,7 @@ final class RunCommands {
             return 1;
         }
 
-        if (mode == TimerRun.Mode.EACH) {
+        if (mode == RunMode.EACH) {
             List<TimerRun> created = manager.startEach(name, players);
             if (created.isEmpty()) {
                 source.sendFailure(Component.translatable("ontime.command.start.running", name));
@@ -196,9 +198,9 @@ final class RunCommands {
         TimerManager.getInstance().saveTimers();
         for (TimerRun run : changed) {
             if (target) {
-                com.mateof24.event.TimerEventBus.fireOnResume(toInfo(run));
+                com.mateof24.event.TimerEventBus.fireResume(run);
             } else {
-                com.mateof24.event.TimerEventBus.fireOnPause(toInfo(run));
+                com.mateof24.event.TimerEventBus.firePause(run);
             }
         }
 
@@ -417,7 +419,7 @@ final class RunCommands {
                     Component.translatable("ontime.command." + verb + ".multi", count), true);
         }
 
-        if (targets != null && affected.stream().anyMatch(run -> run.mode() == TimerRun.Mode.SHARED)) {
+        if (targets != null && affected.stream().anyMatch(run -> run.mode() == RunMode.SHARED)) {
             ctx.getSource().sendSuccess(() ->
                     Component.translatable("ontime.command.selection.shared_note"), false);
         }
@@ -429,10 +431,4 @@ final class RunCommands {
         return ids;
     }
 
-    private static com.mateof24.api.TimerInfo toInfo(TimerRun run) {
-        Timer t = run.timer();
-        return new com.mateof24.api.TimerInfo(t.getName(), run.getCurrentTicks(), run.getTargetTicks(),
-                run.isCountUp(), run.isRunning(), t.isSilent(), t.getCommand(),
-                t.isRepeat(), t.getRepeatCount(), run.getRepeatsDone());
-    }
 }

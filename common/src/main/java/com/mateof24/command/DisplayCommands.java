@@ -210,7 +210,7 @@ final class DisplayCommands {
 
     /** Names the timer in the way, who overlaps, and where there is still room. */
     static void reportConflict(CommandSourceStack source, String timerName,
-                               com.mateof24.timer.Audience audience, String preset, TimerRun other) {
+                               com.mateof24.api.Audience audience, String preset, TimerRun other) {
         source.sendFailure(Component.translatable("ontime.command.slot.conflict",
                 timerName, preset.toLowerCase(java.util.Locale.ROOT), other.timerName()));
 

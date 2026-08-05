@@ -1,6 +1,8 @@
 package com.mateof24.command;
 
-import com.mateof24.timer.Audience;
+import com.mateof24.api.RunMode;
+
+import com.mateof24.api.Audience;
 import com.mateof24.timer.TimerRun;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -64,7 +66,7 @@ final class CommandFormat {
     }
 
     static Component mode(TimerRun run) {
-        return Component.translatable(run.mode() == TimerRun.Mode.EACH
+        return Component.translatable(run.mode() == RunMode.EACH
                 ? "ontime.mode.each" : "ontime.mode.shared");
     }
 

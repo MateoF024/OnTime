@@ -250,5 +250,6 @@
   "ontime.command.list.group.stopped": "§6Stopped §7(%s)",
   "ontime.command.list.entry.running": "§7 · §f%s %s §a%s §7for §f%s §7· %s",
   "ontime.command.list.entry.stopped": "§7 · §f%s %s §7%s%s",
-  "ontime.help.status.desc": "Everything about one timer, executions included"
+  "ontime.help.status.desc": "Everything about one timer, executions included",
+  "ontime.command.trigger.ftb_missing": "§eNote: FTB Quests is not installed, so this trigger will not fire until it is"
 }
