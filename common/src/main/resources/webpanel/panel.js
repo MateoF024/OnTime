@@ -12,10 +12,6 @@
 (() => {
   "use strict";
 
-  // Shown in the rail. Bump it whenever this file changes so a stale cache
-  // announces itself instead of looking like an unfixed bug.
-  const BUILD = "panel 2026-08-06.2";
-
   const TOKEN = document.currentScript?.dataset.token || window.ONTIME_TOKEN || "";
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -1276,7 +1272,6 @@
     lang = lang || (STRINGS[serverLang] ? serverLang : "en");
     picker.value = lang;
     applyLanguage();
-    $("#build").textContent = BUILD;
     await refresh();
     connect();
     setInterval(refresh, 5000);
