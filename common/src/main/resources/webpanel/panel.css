@@ -664,3 +664,5 @@ dialog[open] { animation: pop .2s var(--ease); }
     transition-duration: .01ms !important;
   }
 }
+
+.build { font-size: 10.5px; letter-spacing: .04em; opacity: .62; padding-top: 2px; }

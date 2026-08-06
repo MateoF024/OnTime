@@ -12,6 +12,10 @@
 (() => {
   "use strict";
 
+  // Shown in the rail. Bump it whenever this file changes so a stale cache
+  // announces itself instead of looking like an unfixed bug.
+  const BUILD = "panel 2026-08-06.1";
+
   const TOKEN = document.currentScript?.dataset.token || window.ONTIME_TOKEN || "";
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -209,6 +213,41 @@
     return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
   };
 
+  /**
+   * Moves only the cards that are actually in the wrong place.
+   *
+   * <p>Appending a node that is already a child is not free: the browser
+   * detaches it and attaches it again, which cancels and restarts its
+   * animations and makes it re-enter :hover under a stationary cursor.
+   * Re-appending every card on every refresh is what made them flicker, and
+   * why it stopped on a hidden tab and came back on the smallest mouse
+   * movement.</p>
+   */
+  function reorder(host, wanted) {
+    wanted.forEach((node, i) => {
+      if (host.children[i] !== node) host.insertBefore(node, host.children[i] || null);
+    });
+  }
+
+  /**
+   * The same colour, dark enough to be read on a pale surface.
+   *
+   * <p>The counter wears the colour it wears in game, which is chosen against
+   * a dark HUD: white on white is the common case and it is invisible. Scaling
+   * the channels keeps the hue, so the warning and danger colours still read as
+   * yellow and red.</p>
+   */
+  function legible(hex) {
+    if (document.documentElement.dataset.theme !== "light") return hex;
+    const n = parseInt(hex.slice(1), 16);
+    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    if (lum <= 0.5) return hex;
+    const k = 0.5 / lum;
+    const ch = v => Math.round(v * k).toString(16).padStart(2, "0");
+    return "#" + ch(r) + ch(g) + ch(b);
+  }
+
   /** The colour the counter wears in game, by the timer's own thresholds. */
   function runColour(run, ticks) {
     const target = run.targetTicks || 1;
@@ -216,9 +255,9 @@
     if (run.countUp) pct = 100 - pct;
     const d = run.display || {};
     const hex = n => "#" + ((n ?? 0xFFFFFF) & 0xFFFFFF).toString(16).padStart(6, "0");
-    if (pct >= (d.thresholdMid ?? 30)) return hex(d.colorHigh);
-    if (pct >= (d.thresholdLow ?? 10)) return hex(d.colorMid);
-    return hex(d.colorLow);
+    if (pct >= (d.thresholdMid ?? 30)) return legible(hex(d.colorHigh));
+    if (pct >= (d.thresholdLow ?? 10)) return legible(hex(d.colorMid));
+    return legible(hex(d.colorLow));
   }
 
   /**
@@ -379,7 +418,7 @@
       });
     });
     // Order can change; keep the DOM in the server's order without rebuilding.
-    runs.forEach(run => host.append(runCards.get(run.runId)));
+    reorder(host, runs.map(run => runCards.get(run.runId)));
   }
 
   /** Redraws only the numbers, without touching the shape of the page. */
@@ -497,7 +536,7 @@
       add(t("clone"), "", () => cloneDialog(timer));
       add(t("delete"), "danger", () => deleteDialog(timer));
     }
-    for (const timer of timers) host.append(timerCards.get(timer.name));
+    reorder(host, timers.map(timer => timerCards.get(timer.name)));
   }
 
   // -------------------------------------------------------------- editing
@@ -1215,6 +1254,7 @@
     lang = lang || (STRINGS[serverLang] ? serverLang : "en");
     picker.value = lang;
     applyLanguage();
+    $("#build").textContent = BUILD;
     await refresh();
     connect();
     setInterval(refresh, 5000);
