@@ -443,5 +443,6 @@
   "ontime.gui.editor.command.hours": "H",
   "ontime.gui.editor.command.minutes": "M",
   "ontime.gui.editor.command.seconds": "S",
-  "ontime.gui.editor.command.add.tip": "§fDeja §bH M S§f vacios para ejecutar el comando §bal terminar el contador§f."
+  "ontime.gui.editor.command.add.tip": "§fDeja §bH M S§f vacios para ejecutar el comando §bal terminar el contador§f.",
+  "ontime.command.webpanel.open": "Pulsa para abrirlo en el navegador"
 }

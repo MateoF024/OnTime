@@ -443,5 +443,6 @@
   "ontime.gui.editor.command.hours": "H",
   "ontime.gui.editor.command.minutes": "M",
   "ontime.gui.editor.command.seconds": "S",
-  "ontime.gui.editor.command.add.tip": "§fLeave §bH M S§f empty to run the command §bwhen the timer ends§f."
+  "ontime.gui.editor.command.add.tip": "§fLeave §bH M S§f empty to run the command §bwhen the timer ends§f.",
+  "ontime.command.webpanel.open": "Click to open in your browser"
 }

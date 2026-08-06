@@ -27,6 +27,9 @@
 - The web panel is rebuilt: cards, light and dark themes, a language selector,
   and progress bars in the same colour the counter has in game.
 - The web panel can do everything the in-game screen and the commands can do.
+- The address `/timer webpanel` gives you is clickable in chat.
+- Clicking a timer in the web panel opens its editor; clicking a running one
+  opens a read-only summary of everything about it.
 - Web panel clocks are predicted between updates, so they no longer read a
   second behind the counters in game.
 - Consumers receive a `HELLO` message on connecting, listing everything already

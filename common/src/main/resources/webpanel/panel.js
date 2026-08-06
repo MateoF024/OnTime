@@ -234,7 +234,7 @@
     $("#panel-runs").hidden = tab !== "runs";
     $("#panel-timers").hidden = tab !== "timers";
     $("#panel-settings").hidden = tab !== "settings";
-    if (tab === "runs") renderRuns();
+    if (tab === "runs") { renderRuns(); startTicking(); }
     if (tab === "timers") renderTimers();
     if (tab === "settings") renderSettings();
   }
@@ -252,65 +252,127 @@
     return run.running ? "running" : "paused";
   }
 
+  /**
+   * The cards, built once and then only updated.
+   *
+   * <p>Rebuilding the list on every snapshot replayed the entrance animation
+   * once a second, which is a board that will not sit still. A card is created
+   * when its execution appears, removed when it goes, and otherwise has its
+   * text set in place.</p>
+   */
+  const runCards = new Map();
+
   function renderRuns() {
     const host = $("#runs");
     const runs = state.runs || [];
     $("#runs-empty").hidden = runs.length > 0;
     $("#stop-all").hidden = runs.length === 0;
 
-    host.replaceChildren(...runs.map((run, i) => {
-      const card = document.createElement("article");
+    for (const [id, card] of runCards) {
+      if (!runs.some(r => r.runId === id)) {
+        card.remove();
+        runCards.delete(id);
+      }
+    }
+
+    runs.forEach(run => {
+      let card = runCards.get(run.runId);
+      if (!card) {
+        card = document.createElement("article");
+        card.className = "card fresh";
+        card.tabIndex = 0;
+        card.dataset.runId = run.runId;
+        card.innerHTML = `
+          <div class="card-head">
+            <span class="card-name"></span>
+            <span class="state"></span>
+          </div>
+          <div class="clock"></div>
+          <div class="sub"></div>
+          <div class="progress"><i></i></div>
+          <div class="actions"></div>`;
+        // The card is the way in; the buttons on it are not.
+        card.addEventListener("click", e => {
+          if (!e.target.closest("button")) runDialog(run.runId);
+        });
+        card.addEventListener("keydown", e => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); runDialog(run.runId); }
+        });
+        card.addEventListener("animationend", () => card.classList.remove("fresh"));
+        runCards.set(run.runId, card);
+        host.append(card);
+      }
+
       const kind = stateOf(run);
-      card.className = "card " + kind;
-      card.style.animationDelay = Math.min(i * 30, 240) + "ms";
-      card.dataset.runId = run.runId;
-      card.innerHTML = `
-        <div class="card-head">
-          <span class="card-name"></span>
-          <span class="state ${kind}"></span>
-        </div>
-        <div class="clock"></div>
-        <div class="sub"></div>
-        <div class="progress"><i></i></div>
-        <div class="actions"></div>`;
+      card.classList.remove("running", "paused", "cooldown");
+      card.classList.add(kind);
       $(".card-name", card).textContent = run.timerName;
-      $(".state", card).textContent = t("state." + kind);
+      const state_ = $(".state", card);
+      state_.className = "state " + kind;
+      state_.textContent = t("state." + kind);
       $(".sub", card).textContent =
         `${t("runs.seenBy")} ${audienceOf(run)} · ${t(run.mode === "EACH" ? "each" : "shared")}`;
 
       const actions = $(".actions", card);
-      for (const [op, label, cls] of [
-        ["run.pause", "pause", "ghost"], ["run.resume", "resume", "ghost"],
-        ["run.reset", "reset", "ghost"], ["run.stop", "stop", "danger"]
-      ]) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = cls + " small";
-        button.textContent = t(label);
-        const cooling = run.phase && run.phase !== "ACTIVE";
-        button.disabled = (op === "run.pause" && (!run.running || cooling))
-          || (op === "run.resume" && (run.running || cooling));
-        button.onclick = () => act(op, { runId: run.runId });
-        actions.append(button);
+      const cooling = run.phase && run.phase !== "ACTIVE";
+      const wanted = [
+        ["run.pause", "pause", "ghost", !run.running || cooling],
+        ["run.resume", "resume", "ghost", run.running || cooling],
+        ["run.reset", "reset", "ghost", false],
+        ["run.stop", "stop", "danger", false]
+      ];
+      if (actions.children.length !== wanted.length) {
+        actions.replaceChildren(...wanted.map(([op, label, cls]) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = cls + " small";
+          button.textContent = t(label);
+          button.onclick = () => act(op, { runId: run.runId });
+          return button;
+        }));
       }
-      return card;
-    }));
-    tick();
+      wanted.forEach(([, label, , off], i) => {
+        actions.children[i].textContent = t(label);
+        actions.children[i].disabled = off;
+      });
+    });
+    // Order can change; keep the DOM in the server's order without rebuilding.
+    runs.forEach(run => host.append(runCards.get(run.runId)));
   }
 
-  /** Redraws only the numbers, sixty times a second, without touching the DOM shape. */
+  /** Redraws only the numbers, without touching the shape of the page. */
+  let ticking = false;
   function tick() {
-    for (const card of $$("#runs .card")) {
-      const run = (state.runs || []).find(r => r.runId === card.dataset.runId);
-      if (!run) continue;
-      const ticks = liveTicks(run);
-      $(".clock", card).textContent = clock(ticks);
-      $(".clock", card).style.color = runColour(run, ticks);
-      const bar = $(".progress > i", card);
-      const pct = run.targetTicks ? (ticks * 100) / run.targetTicks : 0;
-      bar.style.width = Math.max(0, Math.min(100, pct)) + "%";
-      bar.style.background = runColour(run, ticks);
+    if (tab === "runs") {
+      for (const [id, card] of runCards) {
+        const run = (state.runs || []).find(r => r.runId === id);
+        if (!run) continue;
+        const ticks = liveTicks(run);
+        const colour = runColour(run, ticks);
+        const face = $(".clock", card);
+        const text = clock(ticks);
+        // Written only when it changes: assigning the same string every frame
+        // is work the browser still has to check.
+        if (face.textContent !== text) face.textContent = text;
+        if (face.dataset.colour !== colour) {
+          face.style.color = colour;
+          face.dataset.colour = colour;
+        }
+        const bar = $(".progress > i", card);
+        const pct = run.targetTicks
+          ? Math.max(0, Math.min(100, (ticks * 100) / run.targetTicks)) : 0;
+        bar.style.width = pct.toFixed(1) + "%";
+        if (bar.dataset.colour !== colour) {
+          bar.style.background = colour;
+          bar.dataset.colour = colour;
+        }
+      }
     }
+    requestAnimationFrame(tick);
+  }
+  function startTicking() {
+    if (ticking) return;
+    ticking = true;
     requestAnimationFrame(tick);
   }
 
@@ -324,7 +386,6 @@
     host.replaceChildren(...timers.map((timer, i) => {
       const card = document.createElement("article");
       card.className = "card" + (timer.runCount > 0 ? " running" : "");
-      card.style.animationDelay = Math.min(i * 30, 240) + "ms";
       card.innerHTML = `
         <div class="card-head"><span class="card-name"></span><span class="tag"></span></div>
         <div class="clock"></div>
@@ -339,6 +400,17 @@
       if (timer.nextTimer) bits.push("→ " + timer.nextTimer);
       if (timer.silent) bits.push(t("group.sound") + ": " + t("off"));
       $(".sub", card).textContent = bits.join(" · ") || " ";
+
+      card.tabIndex = 0;
+      // The card opens the editor; only the buttons do something else.
+      card.addEventListener("click", e => {
+        if (!e.target.closest("button")) editDialog(timer);
+      });
+      card.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); editDialog(timer); }
+      });
+      card.addEventListener("animationend", () => card.classList.remove("fresh"));
+      card.classList.add("fresh");
 
       const actions = $(".actions", card);
       const add = (label, cls, fn) => {
@@ -359,7 +431,6 @@
       } else {
         add(t("start"), "primary", () => startDialog(timer));
       }
-      add(t("edit"), "ghost", () => editDialog(timer));
       add(t("clone"), "ghost", () => cloneDialog(timer));
       add(t("delete"), "danger", () => deleteDialog(timer));
       return card;
@@ -387,10 +458,19 @@
     ["sound", [["soundId", "text"], ["soundVolume", "float"], ["soundPitch", "float"]]]
   ];
 
-  const label = key => key
-    .replace(/([A-Z])/g, " $1")
-    .replace(/^./, c => c.toUpperCase())
-    .trim();
+  /** A field's own name, without the prefix that says which form it is in. */
+  const label = key => {
+    const bare = key.replace(/^[a-z]:/, "");
+    const named = {
+      preset: "position", x: "customX", y: "customY", scale: "scale",
+      soundId: "tickSound", soundVolume: "soundVolume", soundPitch: "soundPitch",
+      above: "above", below: "below", left: "left", right: "right"
+    }[bare] || bare;
+    return named
+      .replace(/([A-Z])/g, " $1")
+      .replace(/^./, c => c.toUpperCase())
+      .trim();
+  };
 
   function field(key, kind, value, onInput) {
     const wrap = document.createElement("div");
@@ -408,8 +488,16 @@
       input.value = String(value);
     } else if (kind === "preset") {
       input = document.createElement("select");
-      for (const preset of (state.presets || [])) input.append(new Option(preset, preset));
-      input.value = value;
+      // The server sends {name, display, anchor}; the value is the name and
+      // the label is the display. Handing the object straight to Option is
+      // what put "[object Object]" in the list.
+      for (const preset of (state.presets || [])) {
+        const name = typeof preset === "string" ? preset : preset.name;
+        const shown = typeof preset === "string" ? preset : (preset.display || preset.name);
+        input.append(new Option(shown, name));
+      }
+      if (value !== undefined && value !== null && value !== "") input.value = value;
+      if (!input.value && input.options.length) input.selectedIndex = 0;
     } else if (kind === "color") {
       input = document.createElement("input");
       input.type = "color";
@@ -434,6 +522,7 @@
   /** Whether what is typed can be used, asked before anything is sent. */
   function parses(input) {
     const value = input.value.trim();
+    if (input.dataset.optional && value === "") return true;
     if (input.dataset.kind === "int") return /^-?\d+$/.test(value);
     if (input.dataset.kind === "float") return value !== "" && !Number.isNaN(Number(value));
     return true;
@@ -667,7 +756,11 @@
       group("titles", s => {
         const titles = timer.titles || {};
         for (const slot of ["above", "below", "left", "right"]) {
-          s.append(field("t:" + slot, "text", titles[slot] || ""));
+          const f = field("t:" + slot, "text", titles[slot] || "");
+          // A title that is empty is a title that is not there, which is a
+          // perfectly good answer.
+          $("input", f).dataset.optional = "1";
+          s.append(f);
         }
       });
 
@@ -681,12 +774,16 @@
       });
 
       group("sequence", s => {
-        s.append(field("nextTimer", "text", timer.nextTimer || ""));
+        const next = field("nextTimer", "text", timer.nextTimer || "");
+        $("input", next).dataset.optional = "1";
+        s.append(next);
         s.append(field("sequenceCooldown", "int", Math.floor((timer.sequenceCooldownTicks || 0) / 20)));
       });
 
       group("score", s => {
-        s.append(field("objective", "text", timer.conditionObjective || ""));
+        const objective = field("objective", "text", timer.conditionObjective || "");
+        $("input", objective).dataset.optional = "1";
+        s.append(objective);
         s.append(field("score", "int", timer.conditionScore ?? 0));
         s.append(field("target", "text", timer.conditionTarget || "*"));
         const action = field("scoreAction", "bool", timer.conditionAction || "finish");
@@ -697,7 +794,9 @@
       });
 
       group("expression", s => {
-        s.append(field("expression", "text", timer.conditionExpression || ""));
+        const expr = field("expression", "text", timer.conditionExpression || "");
+        $("input", expr).dataset.optional = "1";
+        s.append(expr);
         const action = field("expressionAction", "bool", timer.conditionExpressionAction || "finish");
         $("select", action).replaceChildren(new Option(t("finish"), "finish"),
           new Option(t("startIt"), "start"));
@@ -753,9 +852,9 @@
         s.append(list);
 
         const adder = document.createElement("div");
-        adder.className = "cmd-row";
+        adder.className = "cmd-add";
         const cells = document.createElement("div");
-        cells.className = "row";
+        cells.className = "units";
         for (const [key, ph] of [["ch", "H"], ["cm", "M"], ["cs", "S"]]) {
           const input = document.createElement("input");
           input.type = "number";
@@ -796,6 +895,17 @@
           { name: timer.name, hours: num("hours"), minutes: num("minutes"), seconds: num("seconds") });
         await act("timer.setSilent", { name: timer.name, silent: get("silent").value === "true" });
 
+        // Nothing empty and nothing unparseable leaves this dialog. Sending
+        // it earned an "Unknown preset" from the server, which told the person
+        // reading it nothing about which box was wrong.
+        const bad = $$("#modal-body [data-key]").filter(i => !parses(i) || i.value.trim() === "");
+        if (bad.length) {
+          bad.forEach(i => i.classList.add("bad"));
+          bad[0].focus();
+          toast(t("badValue"), true);
+          return false;
+        }
+
         for (const [, keys] of DISPLAY_KEYS) {
           for (const [key, kind] of keys) {
             const input = get("d:" + key);
@@ -828,9 +938,111 @@
     ]);
   }
 
+  /**
+   * Everything about one execution, and nothing to press.
+   *
+   * <p>A summary rather than a form: what it is, who sees it, where it draws,
+   * what it will do when it ends and what it runs on the way. Editing belongs
+   * to the timer, not to a run of it.</p>
+   */
+  function runDialog(runId) {
+    const run = (state.runs || []).find(r => r.runId === runId);
+    if (!run) return;
+    const timer = (state.timers || []).find(x => x.name === run.timerName) || {};
+    const display = timer.display || {};
+
+    modal(run.timerName, body => {
+      const wrap = document.createElement("div");
+      wrap.className = "detail";
+
+      const big = document.createElement("div");
+      big.className = "big";
+      big.textContent = clock(liveTicks(run));
+      big.style.color = runColour(run, liveTicks(run));
+      wrap.append(big);
+
+      const list = (title, rows) => {
+        const section = document.createElement("section");
+        const head = document.createElement("h3");
+        head.textContent = title;
+        head.style.cssText = "font-size:12px;letter-spacing:.08em;text-transform:uppercase;"
+          + "color:var(--muted);margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid var(--line)";
+        const dl = document.createElement("dl");
+        for (const [key, value] of rows) {
+          if (value === undefined || value === null || value === "") continue;
+          const dt = document.createElement("dt");
+          dt.textContent = key;
+          const dd = document.createElement("dd");
+          dd.textContent = value;
+          dl.append(dt, dd);
+        }
+        if (!dl.children.length) return;
+        section.append(head, dl);
+        wrap.append(section);
+      };
+
+      list(t("group.identity"), [
+        [t("state." + stateOf(run)), clock(run.targetTicks)],
+        [t("field.direction"), t(run.countUp ? "countup" : "countdown")],
+        [t("field.mode"), t(run.mode === "EACH" ? "each" : "shared")],
+        [t("field.audience"), audienceOf(run)],
+        ["ID", run.runId.slice(0, 8)]
+      ]);
+
+      list(t("group.display"), [
+        [t("group.display"), display.preset],
+        ["X / Y", display.x + " / " + display.y],
+        [label("scale"), display.scale]
+      ]);
+
+      list(t("group.repeat"), [
+        [t("group.repeat"), timer.repeat
+          ? (timer.repeatCount < 0 ? "∞" : timer.repeatCount)
+          : t("off")],
+        [t("group.sequence"), timer.nextTimer || t("none")]
+      ]);
+
+      list(t("group.trigger"), [
+        [t("group.score"), timer.conditionObjective
+          ? `${timer.conditionObjective} ≥ ${timer.conditionScore} (${timer.conditionTarget})` : t("none")],
+        [t("group.expression"), timer.conditionExpression || t("none")],
+        [t("group.trigger"), timer.triggerType ? t("trigger." + timer.triggerType) : t("none")]
+      ]);
+
+      const commands = timer.commandList || [];
+      if (commands.length) {
+        const section = document.createElement("section");
+        const head = document.createElement("h3");
+        head.textContent = t("group.commands");
+        head.style.cssText = "font-size:12px;letter-spacing:.08em;text-transform:uppercase;"
+          + "color:var(--muted);margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid var(--line)";
+        section.append(head);
+        for (const entry of commands) {
+          const row = document.createElement("div");
+          row.className = "cmd-row";
+          const at = document.createElement("span");
+          at.className = "cmd-at" + (entry.at === undefined ? " end" : "");
+          at.textContent = entry.at === undefined ? t("cmd.end") : clock(entry.at * 20);
+          const text = document.createElement("span");
+          text.className = "cmd-text";
+          text.textContent = entry.command;
+          row.append(at, text, document.createElement("span"));
+          section.append(row);
+        }
+        wrap.append(section);
+      }
+
+      body.append(wrap);
+    }, [[t("close"), "ghost", null]]);
+  }
+
   // ---------------------------------------------------------------- wiring
 
-  $$(".tab").forEach(b => b.onclick = () => { tab = b.dataset.tab; render(); });
+  $$(".tab").forEach(b => b.onclick = () => {
+    tab = b.dataset.tab;
+    if (tab !== "runs") { runCards.clear(); $("#runs").replaceChildren(); }
+    render();
+  });
   $("#new-timer").onclick = newDialog;
   $("#search").oninput = e => { filter = e.target.value; renderTimers(); };
   $("#stop-all").onclick = () => {

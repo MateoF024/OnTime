@@ -162,17 +162,35 @@ main { max-width: 1200px; margin: 0 auto; padding: 0 20px 60px; }
   gap: 14px;
 }
 
+/*
+ * The entrance plays when a card first appears and never again. It used to be
+ * on the class itself, and the list is rebuilt whenever the server speaks, so
+ * every card replayed it once a second: a board that would not sit still.
+ */
 .card {
   position: relative;
   background: var(--raised-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 16px 16px 14px;
+  padding: 18px 18px 16px;
   overflow: hidden;
-  transition: border-color .18s var(--ease), transform .18s var(--ease);
-  animation: rise .22s var(--ease) backwards;
+  cursor: pointer;
+  transition: border-color .18s var(--ease), background .18s var(--ease),
+              box-shadow .18s var(--ease);
 }
-.card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.card.fresh { animation: rise .24s var(--ease) backwards; }
+.card:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  background: color-mix(in srgb, var(--accent) 5%, var(--raised-2));
+  box-shadow: 0 2px 14px rgba(0, 0, 0, .18);
+}
+.card:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+/* The buttons inside a clickable card are their own thing. */
+.card .actions { cursor: default; }
 
 /* The state, in the same place on every card: a stripe down its left edge. */
 .card::before {
@@ -320,7 +338,9 @@ dialog {
   width: min(680px, 94vw);
   box-shadow: var(--shadow);
 }
-dialog::backdrop { background: rgba(0, 0, 0, .55); backdrop-filter: blur(2px); }
+/* No blur here. Blurring a full-screen backdrop is repainted on every
+   scroll frame, and it made the editor crawl. */
+dialog::backdrop { background: rgba(0, 0, 0, .62); }
 dialog[open] { animation: pop .18s var(--ease); }
 
 @keyframes pop {
@@ -328,9 +348,50 @@ dialog[open] { animation: pop .18s var(--ease); }
   to { opacity: 1; transform: none; }
 }
 
-dialog form { padding: 20px; max-height: 82vh; overflow: auto; }
-dialog h3 { margin: 0 0 14px; font-size: 16px; }
-dialog menu { display: flex; justify-content: flex-end; gap: 8px; margin: 18px 0 0; padding: 0; }
+dialog form {
+  padding: 0;
+  max-height: min(82vh, 760px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* The heading and the buttons stay; only the middle scrolls, so the border
+   never has a scrollbar running through the corner of it. */
+dialog h3 {
+  margin: 0;
+  padding: 18px 22px 14px;
+  font-size: 17px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--raised);
+  border-radius: 14px 14px 0 0;
+  z-index: 1;
+}
+
+#modal-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px 22px 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+#modal-body::-webkit-scrollbar { width: 10px; }
+#modal-body::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+  border: 3px solid var(--raised);
+}
+dialog menu {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--raised);
+  border-radius: 0 0 14px 14px;
+}
 
 .tag {
   display: inline-block;
@@ -343,18 +404,57 @@ dialog menu { display: flex; justify-content: flex-end; gap: 8px; margin: 18px 0
 
 .cmd-row {
   display: grid;
-  grid-template-columns: 88px 1fr auto;
+  grid-template-columns: 92px 1fr auto;
   gap: 10px;
   align-items: center;
-  padding: 6px 0;
+  padding: 7px 0;
   border-bottom: 1px solid var(--line);
 }
 .cmd-row:last-of-type { border-bottom: 0; }
-.cmd-at { color: var(--accent); }
-.cmd-at.end { font-style: italic; }
+.cmd-at { color: var(--accent); font-variant-numeric: tabular-nums; }
+.cmd-at.end { font-style: italic; color: var(--muted); }
 .cmd-text { word-break: break-all; font-size: 13px; }
 
+/* The adding row is its own shape: three small boxes for the time, then the
+   command, then the button. Dropping it into the three columns above put the
+   three boxes inside the 92px one and they climbed over each other. */
+.cmd-add {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.cmd-add .units { display: flex; gap: 4px; }
+.cmd-add .units > input { width: 56px; text-align: center; }
+
+@media (max-width: 560px) {
+  .cmd-add { grid-template-columns: 1fr; }
+  .cmd-row { grid-template-columns: 72px 1fr auto; }
+}
+
 /* --------------------------------------------------------------- toasts */
+
+/* The read-only view of one execution: everything about it, nothing to press. */
+.detail { display: grid; gap: 18px; }
+.detail .big {
+  font-size: 40px;
+  font-weight: 650;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.detail dl {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) 1fr;
+  gap: 6px 18px;
+  margin: 0;
+}
+.detail dt { color: var(--muted); font-size: 13px; }
+.detail dd { margin: 0; word-break: break-word; }
+.detail ul { margin: 0; padding-left: 18px; }
+.detail li { padding: 2px 0; }
 
 #toasts {
   position: fixed;

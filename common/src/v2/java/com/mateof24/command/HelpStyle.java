@@ -25,6 +25,13 @@ final class HelpStyle {
                 .withHoverEvent(new HoverEvent.ShowText(hover));
     }
 
+    /** Style that opens {@code url} in the browser when clicked. */
+    static Style openUrl(Style style, String url, Component hover) {
+        return style
+                .withClickEvent(new ClickEvent.OpenUrl(java.net.URI.create(url)))
+                .withHoverEvent(new HoverEvent.ShowText(hover));
+    }
+
     /** Style that runs {@code command} when clicked. */
     static Style run(Style style, String command, Component hover) {
         return style
