@@ -430,5 +430,17 @@
   "ontime.gui.editor.field.config.timer_sound_volume": "Volumen del tic",
   "ontime.gui.editor.field.config.timer_sound_volume.tip": "Volumen del sonido del contador (0.0 - 1.0)",
   "ontime.gui.editor.field.config.timer_sound_pitch": "Tono del tic",
-  "ontime.gui.editor.field.config.timer_sound_pitch.tip": "Tono del sonido del contador (0.5 - 2.0)"
+  "ontime.gui.editor.field.config.timer_sound_pitch.tip": "Tono del sonido del contador (0.5 - 2.0)",
+  "ontime.gui.editor.group.identity": "El contador",
+  "ontime.gui.editor.group.display": "Donde se dibuja",
+  "ontime.gui.editor.group.colors": "Colores",
+  "ontime.gui.editor.group.sound": "Sonido",
+  "ontime.gui.editor.group.titles": "Texto alrededor",
+  "ontime.gui.editor.group.repeat": "Repeticion",
+  "ontime.gui.editor.group.sequence": "Cesion del turno",
+  "ontime.gui.editor.group.score": "Marcador",
+  "ontime.gui.editor.group.expression": "Expresion",
+  "ontime.gui.editor.group.trigger": "Evento del juego",
+  "ontime.gui.editor.advanced": "Avanzado",
+  "ontime.gui.editor.advanced.tip": "Titulos, comandos, repeticion, condiciones y eventos"
 }

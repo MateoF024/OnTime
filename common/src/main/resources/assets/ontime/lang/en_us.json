@@ -430,5 +430,17 @@
   "ontime.gui.editor.field.config.timer_sound_volume": "Tick volume",
   "ontime.gui.editor.field.config.timer_sound_volume.tip": "Volume of the timer sound (0.0 - 1.0)",
   "ontime.gui.editor.field.config.timer_sound_pitch": "Tick pitch",
-  "ontime.gui.editor.field.config.timer_sound_pitch.tip": "Pitch of the timer sound (0.5 - 2.0)"
+  "ontime.gui.editor.field.config.timer_sound_pitch.tip": "Pitch of the timer sound (0.5 - 2.0)",
+  "ontime.gui.editor.group.identity": "The timer",
+  "ontime.gui.editor.group.display": "Where it draws",
+  "ontime.gui.editor.group.colors": "Colours",
+  "ontime.gui.editor.group.sound": "Sound",
+  "ontime.gui.editor.group.titles": "Text around it",
+  "ontime.gui.editor.group.repeat": "Repeating",
+  "ontime.gui.editor.group.sequence": "Handing over",
+  "ontime.gui.editor.group.score": "Scoreboard",
+  "ontime.gui.editor.group.expression": "Expression",
+  "ontime.gui.editor.group.trigger": "Game event",
+  "ontime.gui.editor.advanced": "Advanced",
+  "ontime.gui.editor.advanced.tip": "Titles, commands, repeating, conditions and events"
 }

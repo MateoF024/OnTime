@@ -27,8 +27,15 @@ import java.util.Map;
  */
 public final class TimerEditor {
 
-    /** The groups on the rail, in the order they are shown. */
-    public enum Section { BASICS, APPEARANCE, TITLES, COMMANDS, REPEAT, CONDITIONS }
+    /**
+     * Where a field lives.
+     *
+     * <p>{@link #QUICK} is the column beside the list: what gets changed often,
+     * and what can be changed without leaving the list you are working through.
+     * The rest are the pages of the advanced editor, which holds everything
+     * else a timer can do.</p>
+     */
+    public enum Section { QUICK, TITLES, COMMANDS, REPEAT, CONDITIONS }
 
     /** How one field is edited. */
     public enum Kind {
@@ -41,8 +48,20 @@ public final class TimerEditor {
         TRIGGER
     }
 
-    /** One editable field. {@code key} is what the pending map and the ops use. */
-    public record Field(Section section, String key, Kind kind, String label) {}
+    /**
+     * One editable field.
+     *
+     * <p>{@code key} is what the pending map and the operations use;
+     * {@code group} is the heading it sits under, because eighteen fields in a
+     * column with nothing between them is a wall.</p>
+     */
+    public record Field(Section section, String group, String key, Kind kind, String label) {}
+
+    /** Either a heading or a field, never both. */
+    public record Entry(String heading, Field field) {
+
+        public boolean isHeading() { return heading != null; }
+    }
 
     /** What a condition or a trigger does when it fires. */
     public static final List<String> ACTIONS = List.of("finish", "start");
@@ -54,16 +73,22 @@ public final class TimerEditor {
 
     private static List<Field> buildFields() {
         List<Field> out = new ArrayList<>();
-        out.add(new Field(Section.BASICS, "name", Kind.TEXT, "name"));
-        out.add(new Field(Section.BASICS, "hours", Kind.INT, "hours"));
-        out.add(new Field(Section.BASICS, "minutes", Kind.INT, "minutes"));
-        out.add(new Field(Section.BASICS, "seconds", Kind.INT, "seconds"));
-        out.add(new Field(Section.BASICS, "countUp", Kind.BOOL, "direction"));
-        out.add(new Field(Section.BASICS, "silent", Kind.BOOL, "silent"));
+        // ---- the column beside the list ----
+        out.add(new Field(Section.QUICK, "identity", "name", Kind.TEXT, "name"));
+        out.add(new Field(Section.QUICK, "identity", "hours", Kind.INT, "hours"));
+        out.add(new Field(Section.QUICK, "identity", "minutes", Kind.INT, "minutes"));
+        out.add(new Field(Section.QUICK, "identity", "seconds", Kind.INT, "seconds"));
+        out.add(new Field(Section.QUICK, "identity", "countUp", Kind.BOOL, "direction"));
+        out.add(new Field(Section.QUICK, "identity", "silent", Kind.BOOL, "silent"));
 
-        // The twelve a timer owns a copy of, named as the timer names them.
+        // The twelve a timer owns a copy of, under the same three headings the
+        // settings tab gives the defaults: the same things, so the same shape.
+        String group = "display";
         for (SettingsForm.Row row : SettingsForm.displayRows()) {
-            if (row.isHeader()) continue;
+            if (row.isHeader()) {
+                group = row.header();
+                continue;
+            }
             Kind kind = switch (row.kind()) {
                 case INT -> Kind.INT;
                 case FLOAT -> Kind.FLOAT;
@@ -71,29 +96,52 @@ public final class TimerEditor {
                 case PRESET -> Kind.PRESET;
                 default -> Kind.TEXT;
             };
-            out.add(new Field(Section.APPEARANCE, "display." + row.displayKey(), kind,
+            out.add(new Field(Section.QUICK, group, "display." + row.displayKey(), kind,
                     "config." + snake(row.key())));
         }
 
+        // ---- everything else ----
         for (String slot : List.of("above", "below", "left", "right")) {
-            out.add(new Field(Section.TITLES, "title." + slot, Kind.TEXT, "title." + slot));
+            out.add(new Field(Section.TITLES, "titles", "title." + slot, Kind.TEXT, "title." + slot));
         }
 
-        out.add(new Field(Section.REPEAT, "repeat", Kind.BOOL, "repeat"));
-        out.add(new Field(Section.REPEAT, "repeatCount", Kind.INT, "repeat_count"));
-        out.add(new Field(Section.REPEAT, "repeatCooldown", Kind.INT, "repeat_cooldown"));
-        out.add(new Field(Section.REPEAT, "nextTimer", Kind.TEXT, "next_timer"));
-        out.add(new Field(Section.REPEAT, "sequenceCooldown", Kind.INT, "sequence_cooldown"));
+        out.add(new Field(Section.REPEAT, "repeat", "repeat", Kind.BOOL, "repeat"));
+        out.add(new Field(Section.REPEAT, "repeat", "repeatCount", Kind.INT, "repeat_count"));
+        out.add(new Field(Section.REPEAT, "repeat", "repeatCooldown", Kind.INT, "repeat_cooldown"));
+        out.add(new Field(Section.REPEAT, "sequence", "nextTimer", Kind.TEXT, "next_timer"));
+        out.add(new Field(Section.REPEAT, "sequence", "sequenceCooldown", Kind.INT, "sequence_cooldown"));
 
-        out.add(new Field(Section.CONDITIONS, "objective", Kind.TEXT, "objective"));
-        out.add(new Field(Section.CONDITIONS, "score", Kind.INT, "score"));
-        out.add(new Field(Section.CONDITIONS, "target", Kind.TEXT, "target"));
-        out.add(new Field(Section.CONDITIONS, "scoreAction", Kind.ACTION, "score_action"));
-        out.add(new Field(Section.CONDITIONS, "expression", Kind.TEXT, "expression"));
-        out.add(new Field(Section.CONDITIONS, "expressionAction", Kind.ACTION, "expression_action"));
-        out.add(new Field(Section.CONDITIONS, "trigger", Kind.TRIGGER, "trigger"));
-        out.add(new Field(Section.CONDITIONS, "triggerAction", Kind.ACTION, "trigger_action"));
+        out.add(new Field(Section.CONDITIONS, "score", "objective", Kind.TEXT, "objective"));
+        out.add(new Field(Section.CONDITIONS, "score", "score", Kind.INT, "score"));
+        out.add(new Field(Section.CONDITIONS, "score", "target", Kind.TEXT, "target"));
+        out.add(new Field(Section.CONDITIONS, "score", "scoreAction", Kind.ACTION, "score_action"));
+        out.add(new Field(Section.CONDITIONS, "expression", "expression", Kind.TEXT, "expression"));
+        out.add(new Field(Section.CONDITIONS, "expression", "expressionAction",
+                Kind.ACTION, "expression_action"));
+        out.add(new Field(Section.CONDITIONS, "trigger", "trigger", Kind.TRIGGER, "trigger"));
+        out.add(new Field(Section.CONDITIONS, "trigger", "triggerAction", Kind.ACTION, "trigger_action"));
         return List.copyOf(out);
+    }
+
+    /**
+     * A section's fields with a heading in front of each run of them.
+     *
+     * <p>Headings are not stored in the table; they are implied by the field
+     * that follows, which is what keeps a field and its heading from ever
+     * getting out of step.</p>
+     */
+    public static List<Entry> laidOut(Section section) {
+        List<Entry> out = new ArrayList<>();
+        String heading = null;
+        for (Field field : FIELDS) {
+            if (field.section() != section) continue;
+            if (!field.group().equals(heading)) {
+                heading = field.group();
+                out.add(new Entry(heading, null));
+            }
+            out.add(new Entry(null, field));
+        }
+        return out;
     }
 
     /** {@code timerSoundId} to {@code timer_sound_id}, which is how the keys read. */
@@ -116,7 +164,8 @@ public final class TimerEditor {
 
     // ---- state ----
 
-    private Section section = Section.BASICS;
+    private Section section = Section.TITLES;
+    private boolean advanced = false;
     private String timerName = null;
     private boolean creating = false;
     private final Map<String, String> pending = new LinkedHashMap<>();
@@ -125,7 +174,8 @@ public final class TimerEditor {
     public void open(String name) {
         timerName = name;
         creating = false;
-        section = Section.BASICS;
+        advanced = false;
+        section = Section.TITLES;
         pending.clear();
     }
 
@@ -139,7 +189,8 @@ public final class TimerEditor {
     public void openNew() {
         timerName = null;
         creating = true;
-        section = Section.BASICS;
+        advanced = false;
+        section = Section.TITLES;
         pending.clear();
         pending.put("hours", "0");
         pending.put("minutes", "1");
@@ -151,6 +202,7 @@ public final class TimerEditor {
     public void close() {
         timerName = null;
         creating = false;
+        advanced = false;
         pending.clear();
     }
 
@@ -164,10 +216,15 @@ public final class TimerEditor {
 
     public void setSection(Section section) { this.section = section; }
 
-    /** The groups that mean anything right now. */
-    public List<Section> sections() {
-        return creating ? List.of(Section.BASICS) : List.of(Section.values());
+    /** The pages the advanced editor offers: everything that is not QUICK. */
+    public static List<Section> advancedSections() {
+        return List.of(Section.TITLES, Section.COMMANDS, Section.REPEAT, Section.CONDITIONS);
     }
+
+    /** True while the advanced editor is the thing on screen. */
+    public boolean advanced() { return advanced; }
+
+    public void setAdvanced(boolean advanced) { this.advanced = advanced; }
 
     public void put(String key, String value) { pending.put(key, value); }
 
