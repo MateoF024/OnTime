@@ -1,5 +1,34 @@
 # OnTime Mod - Changelog
 
+## Version 5.0.0
+
+### Changed
+
+- The event feed is a real WebSocket. Browsers and the `ws` libraries of Node
+  and Python can connect to it now; the plain TCP line protocol still works on
+  the same port.
+- **Breaking:** the event feed requires a token. A TCP consumer must send it as
+  its first line, before anything is delivered:
+
+  ```
+  printf '%s
+' "$TOKEN" | nc localhost 25581
+  ```
+
+  A browser passes it as `?t=<token>` or as the `ontime.token.<token>`
+  subprotocol. The token is printed to the server console on every start.
+- The event feed can be bound to one interface with `webSocketBindAddress`,
+  the same way the web panel already could.
+
+### Added
+
+- Consumers receive a `HELLO` message on connecting, listing everything already
+  running, so one that starts halfway through a countdown knows it is there.
+- Events carry `runId`, `scope` and `audienceSize` alongside the fields they
+  always had.
+- A limit on how many consumers may be connected at once, and a lockout for
+  addresses that keep guessing the token.
+
 ## Version 4.0.0
 
 ### Added

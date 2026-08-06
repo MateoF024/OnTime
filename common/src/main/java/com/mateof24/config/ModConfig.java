@@ -56,6 +56,15 @@ public class ModConfig {
     // restricts it to the machine running the server. File-only on purpose —
     // it is not editable from the panel itself.
     private String webPanelBindAddress = "0.0.0.0";
+    /**
+     * Where the event feed listens.
+     *
+     * <p>Same default and same reasoning as the web panel: every
+     * interface, because an operator usually wants to reach it from
+     * elsewhere, and 127.0.0.1 for anyone who does not. Before 5.0.0 this
+     * had no setting and no token either.</p>
+     */
+    private String webSocketBindAddress = "0.0.0.0";
     // Global pause in ticks between commands that run as a sequence at the
     // SAME moment (a scheduled point or the finish list). 0 = all in one
     // tick, the pre-4.0.0 behavior.
@@ -109,6 +118,10 @@ public class ModConfig {
                 String bind = root.get("webPanelBindAddress").getAsString().trim();
                 if (!bind.isEmpty()) webPanelBindAddress = bind;
             }
+            if (root.has("webSocketBindAddress")) {
+                String bind = root.get("webSocketBindAddress").getAsString().trim();
+                if (!bind.isEmpty()) webSocketBindAddress = bind;
+            }
             if (root.has("commandDelayTicks")) {
                 commandDelayTicks = root.get("commandDelayTicks").getAsInt();
                 commandDelayTicks = Math.max(0, Math.min(1200, commandDelayTicks));
@@ -159,6 +172,7 @@ public class ModConfig {
             root.addProperty("webSocketPort", webSocketPort);
             root.addProperty("webPanelPort", webPanelPort);
             root.addProperty("webPanelBindAddress", webPanelBindAddress);
+        root.addProperty("webSocketBindAddress", webSocketBindAddress);
             root.addProperty("commandDelayTicks", commandDelayTicks);
             root.addProperty("confirmRunThreshold", confirmRunThreshold);
             com.mateof24.storage.AtomicJsonIO.write(GSON, CONFIG_FILE, root);
@@ -288,6 +302,8 @@ public class ModConfig {
     public int getWebPanelPort() { return webPanelPort; }
     public void setWebPanelPort(int port) { this.webPanelPort = port; dirty = true; }
     public String getWebPanelBindAddress() { return webPanelBindAddress; }
+
+    public String getWebSocketBindAddress() { return webSocketBindAddress; }
 
     public int getConfirmRunThreshold() { return confirmRunThreshold; }
     public void setConfirmRunThreshold(int threshold) {
