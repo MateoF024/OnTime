@@ -73,6 +73,14 @@
 }
 
 * { box-sizing: border-box; }
+
+/*
+ * The browser hides [hidden] with display:none from its own stylesheet, and an
+ * author rule of any specificity beats it. Setting display on .empty and .view
+ * therefore stopped hidden from hiding, which is why an empty box sat under a
+ * card that plainly existed and the count above it disagreed with both.
+ */
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 
 body {

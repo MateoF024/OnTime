@@ -137,7 +137,10 @@
       });
       if (result && result.message) toast(result.message, !result.success);
       if (result && result.success === false) {
-        // The server disagreeing about what exists means this board is behind.
+        // The server disagreeing about what exists means this board is behind,
+        // and behind by enough that its cards are lying about what is there.
+        // Thrown away rather than patched: the next state is the truth.
+        forget();
         await refresh();
         return false;
       }
@@ -1101,8 +1104,15 @@
       ]);
 
       const commands = timer.commandList || [];
-      if (commands.length) {
+      {
         const { section, body: into } = sheet(t("group.commands"));
+        if (!commands.length) {
+          const none = document.createElement("p");
+          none.className = "muted";
+          none.style.margin = "10px 0";
+          none.textContent = t("cmd.none");
+          into.append(none);
+        }
         for (const entry of commands) {
           const row = document.createElement("div");
           row.className = "cmd-row";
