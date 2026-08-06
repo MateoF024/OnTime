@@ -1502,11 +1502,16 @@ public final class AdminPanel {
                 ? Component.translatable("ontime.gui.timers.dialog.new").getString()
                 : editor.timerName());
         painter.text(title, GUTTER, tabY + 4, COLOR_TEXT);
-        painter.rect(GUTTER, advancedTop() - 4, width - 2 * GUTTER, 1, COLOR_RULE);
+        int ruleY = advancedTop() - 4;
+        painter.rect(GUTTER, ruleY, width - 2 * GUTTER, 1, COLOR_RULE);
 
-        // The rail's own edge, so the two halves read as two halves.
-        painter.rect(GUTTER + RAIL_WIDTH + GUTTER / 2, advancedTop() - 2, 1,
-                contentBottom - advancedTop() + 2, COLOR_RULE);
+        // The rail's own edge, so the two halves read as two halves. It never
+        // touches the rule above it, and it stops the same distance short of
+        // the bottom as it starts below the top: a line that clears one end by
+        // four pixels and the other by nothing reads as a mistake.
+        int inset = 4;
+        painter.rect(GUTTER + RAIL_WIDTH + GUTTER / 2, ruleY + 1 + inset, 1,
+                contentBottom - inset - (ruleY + 1 + inset), COLOR_RULE);
 
         boolean dirty = editor.isDirty(timer);
         if (applyButton != null) applyButton.active = dirty && editor.rejected(timer).isEmpty();
@@ -1566,24 +1571,38 @@ public final class AdminPanel {
             return;
         }
 
-        int timeWidth = painter.textWidth(Component.translatable("ontime.gui.detail.on_finish"));
+        // As wide as the widest reading and no wider. Sizing it to the longest
+        // label instead left a hand's width of nothing between the two.
+        int timeWidth = 0;
+        for (AdminModel.Scheduled entry : entries) {
+            if (entry.atSeconds() >= 0) timeWidth = Math.max(timeWidth, painter.textWidth(when(entry)));
+        }
+        timeWidth = Math.max(timeWidth, painter.textWidth(Component.translatable("ontime.gui.detail.on_finish")));
+        int commandX = editorFieldX + timeWidth + 10;
+
         for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
             AdminModel.Scheduled entry = entries.get(detailScroll + i);
             int y = editorFieldTop + i * 20 + 5;
             // The reading in the accent colour, the command in plain white:
             // one glance finds the times, the next reads the command.
-            Component when = entry.atSeconds() < 0
-                    ? Component.translatable("ontime.gui.detail.on_finish")
-                    : Component.literal(com.mateof24.render.ClientTimerState
-                            .formatTicks(entry.atSeconds() * 20L));
-            painter.text(when, editorFieldX, y, COLOR_COOLDOWN);
+            painter.text(entry.atSeconds() < 0
+                            ? Component.translatable("ontime.gui.detail.on_finish").copy()
+                                    .withStyle(ChatFormatting.ITALIC)
+                            : when(entry),
+                    editorFieldX, y, COLOR_COOLDOWN);
             painter.text(trimmed(painter, Component.literal(entry.commands().get(0)),
-                            width - GUTTER - 26 - (editorFieldX + timeWidth + 8)),
-                    editorFieldX + timeWidth + 8, y, COLOR_TEXT);
+                            width - GUTTER - 26 - commandX),
+                    commandX, y, COLOR_TEXT);
         }
 
         drawScrollbar(painter, width - GUTTER - 24, editorFieldTop, contentBottom - 30,
                 entries.size(), editorRowsShown, detailScroll);
+    }
+
+    /** A scheduled command's clock reading. */
+    private static Component when(AdminModel.Scheduled entry) {
+        return Component.literal(
+                com.mateof24.render.ClientTimerState.formatTicks(entry.atSeconds() * 20L));
     }
 
     private static String arrow(boolean countUp) {
@@ -1855,11 +1874,11 @@ public final class AdminPanel {
 
         // The time column is as wide as the widest reading, so short and long
         // ones share an edge instead of each starting wherever they happen to.
-        int timeWidth = 0;
+        int timeWidth = painter.textWidth(Component.translatable("ontime.gui.detail.on_finish"));
         for (AdminModel.Scheduled entry : timer.scheduled()) {
             timeWidth = Math.max(timeWidth, painter.textWidth(atLabel(entry)));
         }
-        int commandX = indent + timeWidth + 8;
+        int commandX = indent + timeWidth + 10;
 
         for (AdminModel.Scheduled entry : timer.scheduled()) {
             Component at = atLabel(entry);
@@ -1881,18 +1900,24 @@ public final class AdminPanel {
         if (y + 2 * LINE > contentBottom) return;
 
         // A gap only when there is something above to be separated from.
-        if (!timer.scheduled().isEmpty()) y += 4;
-        painter.text(Component.translatable("ontime.gui.detail.on_finish"), indent, y, COLOR_COOLDOWN);
-        y += LINE;
+        if (!timer.scheduled().isEmpty()) y += 3;
 
+        // The finish commands line up in the same two columns as the timed
+        // ones, with the marker where a reading would be. Two lists that read
+        // as one list, which is what they are.
+        Component marker = Component.translatable("ontime.gui.detail.on_finish")
+                .copy().withStyle(ChatFormatting.ITALIC);
+        boolean first = true;
         for (String command : timer.finishCommands()) {
             if (y + LINE > contentBottom) {
-                painter.text(Component.translatable("ontime.gui.detail.more", 1), indent + 8, y, COLOR_TEXT);
+                painter.text(Component.translatable("ontime.gui.detail.more", 1), indent, y, COLOR_TEXT);
                 return;
             }
+            if (first) painter.text(marker, indent, y, COLOR_COOLDOWN);
+            first = false;
             painter.text(trimmed(painter, Component.literal(command),
-                            detailX + detailWidth - indent - 8),
-                    indent + 8, y, COLOR_TEXT);
+                            detailX + detailWidth - commandX),
+                    commandX, y, COLOR_TEXT);
             y += LINE;
         }
     }

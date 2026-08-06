@@ -315,7 +315,7 @@
   "ontime.gui.detail.audience_heading": "Audience",
   "ontime.gui.detail.more": "+%s more",
   "ontime.gui.detail.commands_heading": "Commands",
-  "ontime.gui.detail.on_finish": "When it ends",
+  "ontime.gui.detail.on_finish": "At the end",
   "ontime.gui.settings.group.display": "Display",
   "ontime.gui.settings.group.colors": "Colours",
   "ontime.gui.settings.group.sound": "Sound",
