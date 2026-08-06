@@ -19,9 +19,16 @@
   subprotocol. The token is printed to the server console on every start.
 - The event feed can be bound to one interface with `webSocketBindAddress`,
   the same way the web panel already could.
+- The web panel no longer serves `/api/history`. The history is still available
+  through `/timer history`.
 
 ### Added
 
+- The web panel is rebuilt: cards, light and dark themes, a language selector,
+  and progress bars in the same colour the counter has in game.
+- The web panel can do everything the in-game screen and the commands can do.
+- Web panel clocks are predicted between updates, so they no longer read a
+  second behind the counters in game.
 - Consumers receive a `HELLO` message on connecting, listing everything already
   running, so one that starts halfway through a countdown knows it is there.
 - Events carry `runId`, `scope` and `audienceSize` alongside the fields they

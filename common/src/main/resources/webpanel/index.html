@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>OnTime</title>
+<link rel="stylesheet" href="panel.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>&#9201;</text></svg>">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">
+    <span class="dot" id="link" title="" aria-live="polite"></span>
+    <strong>OnTime</strong>
+    <span class="muted" data-i18n="admin">Administration</span>
+  </div>
+  <div class="bar-right">
+    <select id="lang" aria-label="Language"></select>
+    <button id="theme" class="ghost" type="button" aria-label="Theme">&#9788;</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab" role="tab" data-tab="runs" data-i18n="tab.runs">In progress</button>
+  <button class="tab" role="tab" data-tab="timers" data-i18n="tab.timers">Timers</button>
+  <button class="tab" role="tab" data-tab="settings" data-i18n="tab.settings">Settings</button>
+</nav>
+
+<main>
+  <!-- ---------------------------------------------------------- runs -->
+  <section id="panel-runs" class="panel" role="tabpanel">
+    <div class="panel-head">
+      <h2 data-i18n="runs.title">Executions in progress</h2>
+      <button id="stop-all" class="danger" type="button" data-i18n="runs.stopAll">Stop all</button>
+    </div>
+    <div id="runs" class="cards"></div>
+    <p id="runs-empty" class="empty" data-i18n="runs.empty">No timers are running</p>
+  </section>
+
+  <!-- -------------------------------------------------------- timers -->
+  <section id="panel-timers" class="panel" role="tabpanel" hidden>
+    <div class="panel-head">
+      <h2 data-i18n="timers.title">Timers</h2>
+      <div class="head-tools">
+        <input id="search" type="search" data-i18n-ph="timers.search" placeholder="Search">
+        <button id="new-timer" class="primary" type="button" data-i18n="timers.new">New</button>
+      </div>
+    </div>
+    <div id="timers" class="cards"></div>
+    <p id="timers-empty" class="empty" data-i18n="timers.empty">No timers exist yet</p>
+  </section>
+
+  <!-- ------------------------------------------------------ settings -->
+  <section id="panel-settings" class="panel" role="tabpanel" hidden>
+    <div class="panel-head">
+      <h2 data-i18n="settings.title">Server defaults</h2>
+      <div class="head-tools">
+        <button id="settings-discard" class="ghost" type="button" data-i18n="discard">Discard</button>
+        <button id="settings-apply" class="primary" type="button" data-i18n="apply">Apply</button>
+      </div>
+    </div>
+    <div id="settings" class="form-groups"></div>
+  </section>
+</main>
+
+<!-- The editor, and every confirmation, share one dialog. -->
+<dialog id="modal">
+  <form method="dialog" id="modal-form">
+    <h3 id="modal-title"></h3>
+    <div id="modal-body"></div>
+    <menu id="modal-actions"></menu>
+  </form>
+</dialog>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script src="panel.js"></script>
+</body>
+</html>

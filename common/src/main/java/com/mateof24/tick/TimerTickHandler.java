@@ -190,7 +190,7 @@ public class TimerTickHandler {
 
         if (!finished) {
             if (webPanelNow) {
-                com.mateof24.webpanel.TimerWebPanel.getInstance().onServerTick(timer);
+                com.mateof24.webpanel.TimerWebPanel.getInstance().onServerTick(server);
             }
             return;
         }
