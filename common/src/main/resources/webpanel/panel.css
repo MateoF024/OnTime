@@ -206,7 +206,10 @@ svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1
 /* Content                                                                */
 /* ====================================================================== */
 
-.content { padding: 34px clamp(20px, 4vw, 52px) 72px; max-width: 1320px; }
+/* Fills the width beside the rail. It was clamped without being centred, so
+   on a wide screen everything huddled against the rail with a field of nothing
+   to its right. */
+.content { padding: 34px clamp(20px, 3.5vw, 56px) 72px; width: 100%; }
 .view { animation: fade var(--slow); }
 @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
@@ -218,8 +221,13 @@ svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1
   flex-wrap: wrap;
   margin-bottom: 26px;
   padding-bottom: 18px;
-  border-bottom: 1px solid var(--line-soft);
+  /* Runs the whole width and is meant to be seen: it is the line between what
+     this view is and what is in it. */
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 12%, transparent);
 }
+/* The action of a view sits against the right margin, whatever is beside it. */
+.view-head > .btn:last-child, .view-head > .tools { margin-left: auto; }
 .view-head h1 {
   margin: 0;
   font-size: clamp(21px, 2.4vw, 27px);
@@ -231,7 +239,8 @@ svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1
 
 .search { position: relative; display: flex; align-items: center; }
 .search svg { position: absolute; left: 11px; width: 15px; height: 15px; color: var(--muted); }
-.search input { padding-left: 33px; width: clamp(160px, 24vw, 260px); }
+.search input { padding-left: 34px; width: clamp(180px, 22vw, 280px); height: 38px; }
+.tools .btn { height: 38px; }
 
 /* ====================================================================== */
 /* Cards                                                                  */
@@ -399,8 +408,21 @@ input::placeholder { color: var(--muted); }
 /* Empty states                                                           */
 /* ====================================================================== */
 
-.empty { display: grid; justify-items: center; gap: 14px; padding: 72px 0; color: var(--muted); }
-.empty svg { width: 42px; height: 42px; opacity: .35; stroke-width: 1.3; }
+/* Centred in the space the cards would have filled, and quiet enough not to
+   look like a card of its own. */
+.empty {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 16px;
+  min-height: 320px;
+  padding: 40px 20px;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface) 35%, transparent);
+}
+.empty svg { width: 40px; height: 40px; opacity: .3; stroke-width: 1.2; }
 .empty p { margin: 0; font-size: 14.5px; }
 
 /* ====================================================================== */

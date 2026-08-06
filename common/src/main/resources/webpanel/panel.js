@@ -136,7 +136,11 @@
         body: JSON.stringify({ op, args })
       });
       if (result && result.message) toast(result.message, !result.success);
-      if (result && result.success === false) return false;
+      if (result && result.success === false) {
+        // The server disagreeing about what exists means this board is behind.
+        await refresh();
+        return false;
+      }
       await refresh();
       return true;
     } catch (e) {
@@ -214,9 +218,27 @@
     return hex(d.colorLow);
   }
 
+  /**
+   * Fetches the board, and ignores its own answers when they arrive late.
+   *
+   * <p>The stream and the poll both ask, so several are in flight at once and
+   * they do not come back in order. Taking whichever landed last let an older
+   * board overwrite a newer one, and that is where the ghosts came from: an
+   * execution that had finished reappeared, its card said paused and could not
+   * be resumed, and pressing anything on it earned "No such run" because the
+   * server had been right all along. The lead saying "1 running" over an empty
+   * board was the same thing caught halfway.</p>
+   */
+  let asked = 0;
+  let newest = 0;
+
   async function refresh() {
+    const mine = ++asked;
     try {
-      state = await api("/api/state");
+      const board = await api("/api/state");
+      if (mine < newest) return;
+      newest = mine;
+      state = board;
       anchor(state.runs || []);
       render();
       setLink(true);
