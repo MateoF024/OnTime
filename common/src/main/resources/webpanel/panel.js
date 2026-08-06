@@ -576,6 +576,14 @@
   }
 
   /** A titled sheet with its fields inside, which is how every form here reads. */
+  /**
+   * A titled sheet, and the box its fields go in.
+   *
+   * <p>Returned as a pair rather than as an element carrying a property of its
+   * own. {@code section.body} is a name the DOM already has opinions about,
+   * and reading it back gave nothing: every sheet rendered as a heading with
+   * an empty box under it.</p>
+   */
   function sheet(title) {
     const section = document.createElement("section");
     section.className = "sheet";
@@ -586,8 +594,7 @@
     const body = document.createElement("div");
     body.className = "body";
     section.append(header, body);
-    section.body = body;
-    return section;
+    return { section, body };
   }
 
   function renderSettings() {
@@ -597,9 +604,9 @@
       // are global by nature and there is no per-timer version of them.
       const title = ["display", "colors", "sound"].includes(group)
         ? t("default") + " · " + t("group." + group) : t("group." + group);
-      const section = sheet(title);
+      const { section, body } = sheet(title);
       for (const [key, kind] of keys) {
-        section.body.append(field(key, kind, state.config[key], markSettings));
+        body.append(field(key, kind, state.config[key], markSettings));
       }
       return section;
     }));
@@ -765,9 +772,9 @@
     const display = timer.display || {};
     modal(t("dialog.edit", timer.name), body => {
       const group = (name, build) => {
-        const section = sheet(t("group." + name));
-        build(section.body);
-        body.append(section);
+        const sheeted = sheet(t("group." + name));
+        build(sheeted.body);
+        body.append(sheeted.section);
       };
 
       group("identity", s => {
@@ -1025,7 +1032,7 @@
       const facts = (title, rows) => {
         const kept = rows.filter(([, v]) => v !== undefined && v !== null && v !== "");
         if (!kept.length) return;
-        const section = sheet(title);
+        const { section, body: into } = sheet(title);
         const dl = document.createElement("dl");
         dl.className = "facts";
         for (const [key, value, strong] of kept) {
@@ -1039,7 +1046,7 @@
           cell.append(dt, dd);
           dl.append(cell);
         }
-        section.body.append(dl);
+        into.append(dl);
         wrap.append(section);
       };
 
@@ -1073,7 +1080,7 @@
 
       const commands = timer.commandList || [];
       if (commands.length) {
-        const section = sheet(t("group.commands"));
+        const { section, body: into } = sheet(t("group.commands"));
         for (const entry of commands) {
           const row = document.createElement("div");
           row.className = "cmd-row";
@@ -1084,7 +1091,7 @@
           text.className = "cmd-text";
           text.textContent = entry.command;
           row.append(at, text, document.createElement("span"));
-          section.body.append(row);
+          into.append(row);
         }
         wrap.append(section);
       }
@@ -1097,12 +1104,30 @@
 
   $$(".nav-item").forEach(b => b.onclick = () => {
     tab = b.dataset.tab;
-    if (tab !== "runs") { runCards.clear(); $("#runs").replaceChildren(); }
-    if (tab !== "timers") timerCards.clear();
+    // The map and the page have to be forgotten together. Emptying the map
+    // alone left the old cards in the document and built a second set beside
+    // them, so every visit to the tab doubled the board -- and pressing Delete
+    // on one of the ghosts asked the server about a timer it had already
+    // removed.
+    forget();
     render();
   });
+
+  function forget() {
+    runCards.clear();
+    timerCards.clear();
+    $("#runs").replaceChildren();
+    $("#timers").replaceChildren();
+  }
   $("#new-timer").onclick = newDialog;
-  $("#search").oninput = e => { filter = e.target.value; renderTimers(); };
+  $("#search").oninput = e => {
+    filter = e.target.value;
+    // The cards are keyed by name, and filtering changes which names are
+    // there rather than what any of them says.
+    timerCards.clear();
+    $("#timers").replaceChildren();
+    renderTimers();
+  };
   $("#stop-all").onclick = () => {
     modal(t("confirm.stopAll"), body => {
       const p = document.createElement("p");
