@@ -14,7 +14,7 @@
 
   // Shown in the rail. Bump it whenever this file changes so a stale cache
   // announces itself instead of looking like an unfixed bug.
-  const BUILD = "panel 2026-08-06.1";
+  const BUILD = "panel 2026-08-06.2";
 
   const TOKEN = document.currentScript?.dataset.token || window.ONTIME_TOKEN || "";
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -299,6 +299,8 @@
 
   // -------------------------------------------------------------- drawing
 
+  let drawnRuns = "", drawnTimers = "", drawnSettings = "";
+
   function render() {
     $$(".nav-item").forEach(b => {
       b.setAttribute("aria-selected", String(b.dataset.tab === tab));
@@ -315,9 +317,28 @@
     $("#timers-lead").textContent = t("lead.timers", timers);
     $("#settings-lead").textContent = t("lead.settings");
 
-    if (tab === "runs") { renderRuns(); startTicking(); }
-    if (tab === "timers") renderTimers();
-    if (tab === "settings") renderSettings();
+    // Each section is redrawn only when its own slice of the board changes.
+    // The board arrives four times a second, and rebuilding nodes that often
+    // destroys whatever the pointer is on: a button loses its :hover and its
+    // click, and a colour input is replaced in the instant it was opening its
+    // picker, which is why the picker flashed and vanished. The numbers do not
+    // need this — they are painted from the animation frame, not from here.
+    if (tab === "runs") {
+      const key = JSON.stringify((state.runs || []).map(r => [
+        r.runId, r.name, r.running, r.phase, r.mode, r.targetTicks,
+        r.countUp, r.audienceScope, (r.audience || []).length,
+      ]));
+      if (key !== drawnRuns) { drawnRuns = key; renderRuns(); }
+      startTicking();
+    }
+    if (tab === "timers") {
+      const key = filter + " " + JSON.stringify(state.timers || []);
+      if (key !== drawnTimers) { drawnTimers = key; renderTimers(); }
+    }
+    if (tab === "settings") {
+      const key = JSON.stringify(state.config || {});
+      if (key !== drawnSettings) { drawnSettings = key; renderSettings(); }
+    }
   }
 
   function audienceOf(run) {
@@ -1185,6 +1206,7 @@
   });
 
   function forget() {
+    drawnRuns = drawnTimers = drawnSettings = "";
     runCards.clear();
     timerCards.clear();
     $("#runs").replaceChildren();
