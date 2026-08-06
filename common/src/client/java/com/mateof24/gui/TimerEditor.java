@@ -251,20 +251,20 @@ public final class TimerEditor {
         return edited != null && !edited.equals(stored(timer, key));
     }
 
-    /** The next value of a cycled field. */
-    public String cycled(Field field, String current) {
+    /** The value one step along a cycled field, forwards or back. */
+    public String cycled(Field field, String current, int step) {
         return switch (field.kind()) {
             case BOOL -> String.valueOf(!Boolean.parseBoolean(current));
-            case PRESET -> next(SettingsForm.PRESETS, current);
-            case ACTION -> next(ACTIONS, current);
-            case TRIGGER -> next(TRIGGERS, current);
+            case PRESET -> next(SettingsForm.PRESETS, current, step);
+            case ACTION -> next(ACTIONS, current, step);
+            case TRIGGER -> next(TRIGGERS, current, step);
             default -> current;
         };
     }
 
-    private static String next(List<String> values, String current) {
-        int index = values.indexOf(current);
-        return values.get((index + 1) % values.size());
+    private static String next(List<String> values, String current, int step) {
+        int index = Math.max(0, values.indexOf(current));
+        return values.get(Math.floorMod(index + step, values.size()));
     }
 
     // ---- reading the timer ----

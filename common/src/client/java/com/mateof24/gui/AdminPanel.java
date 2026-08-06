@@ -11,6 +11,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 
 /**
@@ -158,6 +159,13 @@ public final class AdminPanel {
 
     /** Text fields a dialog is asking for, in the order it asks. */
     private final List<EditBox> dialogFields = new ArrayList<>();
+
+    /** Cycling buttons and how to walk each one backwards. */
+    private final java.util.Map<AbstractWidget, Runnable> cycleBack = new java.util.LinkedHashMap<>();
+
+    /** The three boxes that say when a scheduled command fires. */
+    private final List<EditBox> atFields = new ArrayList<>();
+    private static final String[] AT_UNITS = {"hours", "minutes", "seconds"};
     /** Answers a dialog collects by cycling rather than typing. */
     private String dialogMode = "shared";
     private boolean dialogCountUp = false;
@@ -199,8 +207,11 @@ public final class AdminPanel {
         clock.onSnapshot(model.runs());
         if (model.tab() == AdminModel.Tab.RUNS) {
             init();
-        } else if (awaitingApply || model.tab() == AdminModel.Tab.TIMERS
-                && !editor.isDirty(model.timer(editor.timerName()))) {
+        } else if (awaitingApply) {
+            // Only the snapshot that carries an answer. Rebuilding on every
+            // one took the caret straight back out of whatever field had just
+            // been clicked, once a second, so the timers tab could not be
+            // typed into at all.
             // The one snapshot the settings tab does want. Applying sends the
             // values and the server answers a moment later; without this the
             // fields keep showing what was there before the click, for good,
@@ -286,6 +297,8 @@ public final class AdminPanel {
         timerMarks.clear();
         timerData.clear();
         dialogFields.clear();
+        atFields.clear();
+        cycleBack.clear();
         searchBox = null;
         applyButton = null;
         discardButton = null;
@@ -326,7 +339,24 @@ public final class AdminPanel {
      * instead, which has the room to show all of it.</p>
      */
     private void buildTimerList() {
-        EditBox search = new EditBox(host.font(), listX, contentTop, listWidth, 16,
+        // New belongs with the list it adds to, not up in the header among
+        // the things that act on the whole panel.
+        int newWidth = 44;
+        host.addWidget(Button.builder(Component.translatable("ontime.gui.timers.action.new"), b -> {
+                    editor.openNew();
+                    // Nothing is selected while a new one is being filled in,
+                    // or the column would show the last timer's values under
+                    // the new one's name.
+                    model.selectTimer(null);
+                    detailScroll = 0;
+                    init();
+                })
+                .bounds(listX, contentTop - 1, newWidth, 18)
+                .tooltip(Tooltip.create(Component.translatable("ontime.gui.timers.action.new.tip")))
+                .build());
+
+        int searchX = listX + newWidth + 4;
+        EditBox search = new EditBox(host.font(), searchX, contentTop, listWidth - newWidth - 4, 16,
                 Component.translatable("ontime.gui.timers.search"));
         search.setMaxLength(32);
         search.setValue(model.filter());
@@ -355,8 +385,12 @@ public final class AdminPanel {
 
         // The name button is small and first; what you do to that timer sits
         // right beside it, so acting on one is not a trip to a panel and back.
-        nameWidth = Math.max(58, Math.min(120, listWidth * 34 / 100));
-        actionWidth = Math.max(28, Math.min(52, (listWidth - nameWidth - 12) * 17 / 100));
+        // No "Running" column: the green bar in the gutter already says it,
+        // and saying it twice cost the row the width its actions wanted.
+        nameWidth = Math.max(58, Math.min(140, listWidth * 32 / 100));
+        int lengthRoom = 62;
+        actionWidth = Math.max(30, Math.min(72,
+                (listWidth - nameWidth - lengthRoom - 20) / 3));
 
         for (int i = 0; i < timerRowsShown && scroll + i < rows.size(); i++) {
             AdminModel.TimerRow row = rows.get(scroll + i);
@@ -391,7 +425,9 @@ public final class AdminPanel {
                         .build());
             }
 
-            timerMarks.add(new int[]{listX, y, running ? COLOR_RUNNING : COLOR_BAND});
+            // Beside the row rather than under it: drawn over the button it
+            // read as a smear on the button's own border.
+            timerMarks.add(new int[]{listX - MARK_WIDTH - 2, y, running ? COLOR_RUNNING : COLOR_BAND});
             timerData.add(row);
         }
     }
@@ -448,7 +484,9 @@ public final class AdminPanel {
         editorControlWidth = Math.min(130, detailWidth / 2);
         editorControlX = detailX + detailWidth - editorControlWidth;
         editorFieldTop = detailBodyTop;
-        buildFieldRows(timer, TimerEditor.Section.QUICK, footerY - 8);
+        // Right up to the footer. Four pixels of clearance is a gap; anything
+        // more is a row that could have been shown and was not.
+        buildFieldRows(timer, TimerEditor.Section.QUICK, footerY - 4);
     }
 
     // ==================================================================
@@ -457,6 +495,11 @@ public final class AdminPanel {
 
     /** Width of the rail that names the groups. */
     private static final int RAIL_WIDTH = 96;
+
+    /** Where the advanced page starts: it has a title, not a tab row. */
+    private int advancedTop() {
+        return tabY + LINE + 6;
+    }
 
     private int editorFieldTop, editorFieldX, editorControlX, editorControlWidth;
 
@@ -471,9 +514,10 @@ public final class AdminPanel {
         AdminModel.TimerRow timer = model.timer(editor.timerName());
 
         int railX = GUTTER;
-        // Level with the fields beside it: the rail used to start below its own
-        // heading, which left a band of nothing across the top of the page.
-        int railTop = contentTop;
+        // The advanced page has no tab row, so it starts where the tabs would
+        // have been rather than below where they are not: the band of nothing
+        // across the top was that missing row still being reserved.
+        int railTop = advancedTop();
         List<TimerEditor.Section> sections = TimerEditor.advancedSections();
         for (int i = 0; i < sections.size(); i++) {
             TimerEditor.Section item = sections.get(i);
@@ -488,8 +532,32 @@ public final class AdminPanel {
             host.addWidget(button);
         }
 
+        // Apply and Discard live with the pages they act on, and they are
+        // called what they are called everywhere else in the panel.
+        AdminModel.TimerRow selected = model.timer(editor.timerName());
+        boolean dirty = editor.isDirty(selected);
+        Button apply = Button.builder(Component.translatable("ontime.gui.settings.apply"),
+                        b -> saveEditor())
+                .bounds(railX, contentBottom - 44, RAIL_WIDTH, 20)
+                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.save.tip")))
+                .build();
+        apply.active = dirty;
+        applyButton = apply;
+        host.addWidget(apply);
+
+        Button discard = Button.builder(Component.translatable("ontime.gui.settings.discard"), b -> {
+                    editor.discard();
+                    model.clearMessage();
+                    init();
+                })
+                .bounds(railX, contentBottom - 20, RAIL_WIDTH, 20)
+                .build();
+        discard.active = dirty;
+        discardButton = discard;
+        host.addWidget(discard);
+
         editorFieldX = railX + RAIL_WIDTH + GUTTER + 6;
-        editorFieldTop = contentTop + 2;
+        editorFieldTop = advancedTop();
         editorControlWidth = Math.min(180, (width - editorFieldX - GUTTER) / 2);
         editorControlX = width - GUTTER - editorControlWidth;
 
@@ -509,7 +577,10 @@ public final class AdminPanel {
      */
     private void buildFieldRows(AdminModel.TimerRow timer, TimerEditor.Section section, int bottom) {
         List<TimerEditor.Entry> entries = TimerEditor.laidOut(section);
-        editorRowsShown = Math.max(1, (bottom - editorFieldTop) / SETTING_HEIGHT);
+        // A row needs its control's height, not a whole slot: the last one fits
+        // whenever there is room for the box itself.
+        int room = bottom - editorFieldTop;
+        editorRowsShown = Math.max(1, (room + (SETTING_HEIGHT - 18)) / SETTING_HEIGHT);
         detailScroll = Math.max(0, Math.min(Math.max(0, entries.size() - editorRowsShown), detailScroll));
 
         for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
@@ -522,14 +593,20 @@ public final class AdminPanel {
                     "ontime.gui.editor.field." + field.label() + ".tip"));
 
             switch (field.kind()) {
-                case BOOL, PRESET, ACTION, TRIGGER -> host.addWidget(
-                        Button.builder(cycleLabelFor(field, value), b -> {
-                                    editor.put(field.key(), editor.cycled(field, value));
-                                    init();
-                                })
-                                .bounds(editorControlX, y, editorControlWidth, 18)
-                                .tooltip(tip)
-                                .build());
+                case BOOL, PRESET, ACTION, TRIGGER -> {
+                    Button cycle = Button.builder(cycleLabelFor(field, value), b -> {
+                                editor.put(field.key(), editor.cycled(field, value, 1));
+                                init();
+                            })
+                            .bounds(editorControlX, y, editorControlWidth, 18)
+                            .tooltip(tip)
+                            .build();
+                    host.addWidget(cycle);
+                    cycleBack.put(cycle, () -> {
+                        editor.put(field.key(), editor.cycled(field, value, -1));
+                        init();
+                    });
+                }
                 default -> {
                     EditBox box = new EditBox(host.font(), editorControlX, y, editorControlWidth, 18,
                             Component.literal(field.key()));
@@ -543,17 +620,32 @@ public final class AdminPanel {
         }
     }
 
+    /**
+     * What a cycling button reads, in the colour of what it says.
+     *
+     * <p>Green for what starts or is on, red for what ends or is off. Only for
+     * the words that name a state — the buttons that <em>do</em> something stay
+     * plain, or the colour would stop meaning anything.</p>
+     */
     private Component cycleLabelFor(TimerEditor.Field field, String value) {
         return switch (field.kind()) {
             case BOOL -> "countUp".equals(field.key())
                     ? Component.translatable(Boolean.parseBoolean(value)
                             ? "ontime.mode.countup" : "ontime.mode.countdown")
-                    : Component.translatable(Boolean.parseBoolean(value) ? "options.on" : "options.off");
-            case ACTION -> Component.translatable("ontime.gui.editor.action." + value);
-            case TRIGGER -> Component.translatable(value.isEmpty()
-                    ? "ontime.gui.editor.trigger.none" : "ontime.gui.editor.trigger." + value);
+                    : state(Component.translatable(Boolean.parseBoolean(value)
+                            ? "options.on" : "options.off"), Boolean.parseBoolean(value));
+            case ACTION -> state(Component.translatable("ontime.gui.editor.action." + value),
+                    "start".equals(value));
+            case TRIGGER -> value.isEmpty()
+                    ? state(Component.translatable("ontime.gui.editor.trigger.none"), false)
+                    : Component.translatable("ontime.gui.editor.trigger." + value);
             default -> Component.literal(value);
         };
+    }
+
+    /** Green when it starts or is on, red when it ends or is off. */
+    private static Component state(Component text, boolean on) {
+        return text.copy().withStyle(on ? ChatFormatting.GREEN : ChatFormatting.RED);
     }
 
     private void registerEditorField(EditBox box, TimerEditor.Field field, Tooltip tip) {
@@ -608,18 +700,25 @@ public final class AdminPanel {
                     .build());
         }
 
-        // The adding row, at the foot and always there.
+        // The adding row, at the foot and always there. Three boxes rather
+        // than one: nobody should have to work out what an hour and thirty
+        // seven minutes is in seconds to schedule a command there.
         int y = bottom + 6;
-        EditBox at = new EditBox(host.font(), editorFieldX, y, 54, 18,
-                Component.translatable("ontime.gui.editor.command.at"));
-        at.setHint(Component.translatable("ontime.gui.editor.command.at"));
-        at.setMaxLength(8);
-        host.addWidget(at);
-        assist.add(at, FieldAssist.intBetween(0, Integer.MAX_VALUE));
+        int unit = 34;
+        for (int i = 0; i < 3; i++) {
+            EditBox box = new EditBox(host.font(), editorFieldX + i * (unit + 3), y, unit, 18,
+                    Component.translatable("ontime.gui.editor.command." + AT_UNITS[i]));
+            box.setHint(Component.translatable("ontime.gui.editor.command." + AT_UNITS[i]));
+            box.setMaxLength(4);
+            host.addWidget(box);
+            assist.add(box, FieldAssist.intBetween(0, 9999));
+            atFields.add(box);
+        }
 
-        EditBox command = new EditBox(host.font(), editorFieldX + 60, y,
-                width - GUTTER - 54 - (editorFieldX + 60), 18,
-                Component.translatable("ontime.gui.editor.command.text"));
+        int commandX = editorFieldX + 3 * (unit + 3) + 6;
+        EditBox command = new EditBox(host.font(), commandX, y,
+                width - GUTTER - 54 - commandX,
+                18, Component.translatable("ontime.gui.editor.command.text"));
         command.setHint(Component.translatable("ontime.gui.editor.command.text"));
         command.setMaxLength(256);
         host.addWidget(command);
@@ -630,20 +729,15 @@ public final class AdminPanel {
                     JsonObject args = new JsonObject();
                     args.addProperty("name", timer.name());
                     args.addProperty("command", command.getValue().trim());
-                    // No time means a finish command, which is what an empty
-                    // box should mean: "when it ends".
-                    if (!at.getValue().isBlank()) {
-                        try {
-                            args.addProperty("atSeconds", Long.parseLong(at.getValue().trim()));
-                        } catch (NumberFormatException e) {
-                            model.setMessage(at.getValue(), true);
-                            return;
-                        }
-                    }
+                    // All three boxes empty means a finish command, which is
+                    // what empty should mean here: "when it ends".
+                    long at = atSeconds();
+                    if (at > 0) args.addProperty("atSeconds", at);
                     send("timer.addCommand", args);
                     awaitingApply = true;
                 })
                 .bounds(width - GUTTER - 48, y, 48, 18)
+                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.command.add.tip")))
                 .build());
     }
 
@@ -702,13 +796,18 @@ public final class AdminPanel {
                 // what CycleButton looks like, without CycleButton's drift:
                 // 26.2 changed its builder and dropped withInitialValue.
                 String value = settings.displayed(model, row);
-                host.addWidget(Button.builder(cycleLabel(row, value), b -> {
-                            settings.put(row.key(), settings.cycled(row, value));
+                Button cycle = Button.builder(cycleLabel(row, value), b -> {
+                            settings.put(row.key(), settings.cycled(row, value, 1));
                             init();
                         })
                         .bounds(controlX, y, controlWidth, 18)
                         .tooltip(Tooltip.create(Component.translatable(tooltipKey)))
-                        .build());
+                        .build();
+                host.addWidget(cycle);
+                cycleBack.put(cycle, () -> {
+                    settings.put(row.key(), settings.cycled(row, value, -1));
+                    init();
+                });
             } else {
                 EditBox box = new EditBox(host.font(), controlX, y, controlWidth, 18,
                         Component.translatable("ontime.config." + snake(row.key())));
@@ -778,7 +877,8 @@ public final class AdminPanel {
 
     private Component cycleLabel(SettingsForm.Row row, String value) {
         if (row.kind() == SettingsForm.Kind.BOOL) {
-            return Component.translatable(Boolean.parseBoolean(value) ? "options.on" : "options.off");
+            return state(Component.translatable(Boolean.parseBoolean(value)
+                    ? "options.on" : "options.off"), Boolean.parseBoolean(value));
         }
         return Component.literal(value);
     }
@@ -1085,45 +1185,17 @@ public final class AdminPanel {
                 .build());
 
         if (model.tab() == AdminModel.Tab.TIMERS && editor.advanced()) {
-            int saveWidth = editor.isCreating() ? 62 : 54;
             int backWidth = 50;
-            AdminModel.TimerRow timer = model.timer(editor.timerName());
-
-            Button save = Button.builder(Component.translatable(editor.isCreating()
-                                    ? "ontime.gui.timers.accept.new" : "ontime.gui.editor.save"),
-                            b -> saveEditor())
-                    .bounds(doneX - 6 - saveWidth, 5, saveWidth, 20)
-                    .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.save.tip")))
-                    .build();
-            save.active = editor.isDirty(timer);
-            applyButton = save;
-            host.addWidget(save);
-
-            Button back = Button.builder(Component.translatable("ontime.gui.editor.back"), b -> {
+            host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.back"), b -> {
                         // Back to the list, not out of the timer: what was
-                        // typed here is still pending and the column beside the
-                        // list is where it gets applied.
+                        // typed here is still pending, and the column beside
+                        // the list is where it gets applied.
                         editor.setAdvanced(false);
                         detailScroll = 0;
                         init();
                     })
-                    .bounds(doneX - 12 - saveWidth - backWidth, 5, backWidth, 20)
-                    .build();
-            discardButton = back;
-            host.addWidget(back);
-        } else if (model.tab() == AdminModel.Tab.TIMERS) {
-            int newWidth = 50;
-            host.addWidget(Button.builder(Component.translatable("ontime.gui.timers.action.new"), b -> {
-                        editor.openNew();
-                        // Nothing is selected while a new one is being filled
-                        // in, or the column would show the last timer's values
-                        // under the new one's name.
-                        model.selectTimer(null);
-                        detailScroll = 0;
-                        init();
-                    })
-                    .bounds(doneX - 6 - newWidth, 5, newWidth, 20)
-                    .tooltip(Tooltip.create(Component.translatable("ontime.gui.timers.action.new.tip")))
+                    .bounds(doneX - 6 - backWidth, 5, backWidth, 20)
+                    .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.back.tip")))
                     .build());
         }
 
@@ -1358,9 +1430,7 @@ public final class AdminPanel {
 
         int headerTextX = listX + nameWidth + 4 + 3 * (actionWidth + 4) + 6;
         painter.text(Component.translatable("ontime.gui.timers.col.name"), listX + 6, headerRowY, COLOR_TEXT);
-        if (colTimeRight - headerTextX > 60) {
-            painter.text(Component.translatable("ontime.gui.timers.col.runs"),
-                    headerTextX, headerRowY, COLOR_TEXT);
+        if (colTimeRight - headerTextX > 30) {
             Component lengthHeader = Component.translatable("ontime.gui.timers.col.length");
             painter.text(lengthHeader, colTimeRight - painter.textWidth(lengthHeader),
                     headerRowY, COLOR_TEXT);
@@ -1378,23 +1448,12 @@ public final class AdminPanel {
         for (int[] mark : timerMarks) {
             painter.rect(mark[0], mark[1], MARK_WIDTH, ROW_HEIGHT, mark[2]);
         }
-        // The name lives on its own button now, so the columns start after
-        // the row's actions rather than at the row's edge.
         int textX = listX + nameWidth + 4 + 3 * (actionWidth + 4) + 6;
-        boolean room = colTimeRight - textX > 60;
+        boolean room = colTimeRight - textX > 30;
         for (int i = 0; i < timerData.size(); i++) {
+            if (!room) break;
             AdminModel.TimerRow row = timerData.get(i);
             int y = timerMarks.get(i)[1] + (ROW_HEIGHT - 8) / 2;
-            if (!room) continue;
-
-            // "Yes (2)" rather than a bare 2: the question is whether it is
-            // running, and how many is the detail after the answer.
-            boolean running = row.runCount() > 0;
-            painter.text(running
-                            ? Component.translatable("ontime.gui.timers.running.yes", row.runCount())
-                            : Component.translatable("ontime.gui.timers.running.no"),
-                    textX, y, running ? COLOR_RUNNING : COLOR_TEXT);
-
             Component length = Component.literal(arrow(row.countUp()) + " "
                     + com.mateof24.render.ClientTimerState.formatTicks(row.targetTicks()));
             painter.text(length, colTimeRight - painter.textWidth(length), y, COLOR_TEXT);
@@ -1440,17 +1499,21 @@ public final class AdminPanel {
         Component title = Component.literal(editor.isCreating()
                 ? Component.translatable("ontime.gui.timers.dialog.new").getString()
                 : editor.timerName());
-        painter.text(title, GUTTER, headerRowY, COLOR_TEXT);
+        painter.text(title, GUTTER, tabY + 4, COLOR_TEXT);
         if (!editor.isCreating() && timer != null) {
             Component length = Component.literal(arrow(timer.countUp()) + " "
                     + com.mateof24.render.ClientTimerState.formatTicks(timer.targetTicks()));
             painter.text(length, width - GUTTER - painter.textWidth(length), headerRowY, COLOR_TEXT);
         }
-        painter.rect(GUTTER, headerRowY + LINE - 1, width - 2 * GUTTER, 1, COLOR_RULE);
+        painter.rect(GUTTER, advancedTop() - 4, width - 2 * GUTTER, 1, COLOR_RULE);
 
         // The rail's own edge, so the two halves read as two halves.
-        painter.rect(GUTTER + RAIL_WIDTH + GUTTER / 2, contentTop - 2, 1,
-                contentBottom - contentTop + 2, COLOR_RULE);
+        painter.rect(GUTTER + RAIL_WIDTH + GUTTER / 2, advancedTop() - 2, 1,
+                contentBottom - advancedTop() + 2, COLOR_RULE);
+
+        boolean dirty = editor.isDirty(timer);
+        if (applyButton != null) applyButton.active = dirty;
+        if (discardButton != null) discardButton.active = dirty;
 
         if (editor.section() == TimerEditor.Section.COMMANDS) {
             drawCommandRows(painter, timer);
@@ -1924,8 +1987,27 @@ public final class AdminPanel {
      * widget list and would otherwise never be asked. Asking it first is also
      * what makes it safe for it to overlap a field: the row on top wins.</p>
      */
-    public boolean mouseClicked(double mouseX, double mouseY) {
-        return assist.mouseClicked(mouseX, mouseY);
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (assist.mouseClicked(mouseX, mouseY)) return true;
+        if (button != 1) return false;
+
+        // Right-click walks a cycle the other way. A button that only goes
+        // forwards means overshooting costs a lap of everything, and with ten
+        // position presets that is nine clicks to undo one.
+        for (Map.Entry<AbstractWidget, Runnable> entry : cycleBack.entrySet()) {
+            AbstractWidget widget = entry.getKey();
+            if (!widget.visible || !widget.active) continue;
+            if (mouseX < widget.getX() || mouseX >= widget.getX() + widget.getWidth()
+                    || mouseY < widget.getY() || mouseY >= widget.getY() + widget.getHeight()) {
+                continue;
+            }
+            // The click sound too: without it a right-click feels like a
+            // button that did not take, which is the one thing it must not.
+            widget.playDownSound(net.minecraft.client.Minecraft.getInstance().getSoundManager());
+            entry.getValue().run();
+            return true;
+        }
+        return false;
     }
 
     /** Mouse wheel: the list first while it is up, then the tab's own list. */
@@ -1989,6 +2071,22 @@ public final class AdminPanel {
      * its first row. That is what made the sound settings unreachable rather
      * than merely off screen. Each tab's builder clamps its own list.</p>
      */
+    /** Hours, minutes and seconds of the adding row, as one number. */
+    private long atSeconds() {
+        long total = 0;
+        long[] scale = {3600L, 60L, 1L};
+        for (int i = 0; i < atFields.size() && i < 3; i++) {
+            String typed = atFields.get(i).getValue().trim();
+            if (typed.isEmpty()) continue;
+            try {
+                total += Long.parseLong(typed) * scale[i];
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
+        return total;
+    }
+
     private int commandCount() {
         AdminModel.TimerRow timer = model.timer(editor.timerName());
         return timer == null ? 0 : timer.commandList().size();

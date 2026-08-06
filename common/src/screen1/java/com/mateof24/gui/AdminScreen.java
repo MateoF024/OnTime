@@ -71,7 +71,7 @@ public class AdminScreen extends Screen implements PanelHost {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (panel.mouseClicked(mouseX, mouseY)) return true;
+        if (panel.mouseClicked(mouseX, mouseY, button)) return true;
         return super.mouseClicked(mouseX, mouseY, button);
     }
 

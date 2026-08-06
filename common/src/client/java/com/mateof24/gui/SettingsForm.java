@@ -186,11 +186,11 @@ public final class SettingsForm {
         return text;
     }
 
-    /** The next value of a cycled row, given what is showing. */
-    public String cycled(Row row, String current) {
+    /** The value one step along a cycled row, forwards or back. */
+    public String cycled(Row row, String current, int step) {
         if (row.kind() == Kind.BOOL) return String.valueOf(!Boolean.parseBoolean(current));
-        int index = PRESETS.indexOf(current);
-        return PRESETS.get((index + 1) % PRESETS.size());
+        int index = Math.max(0, PRESETS.indexOf(current));
+        return PRESETS.get(Math.floorMod(index + step, PRESETS.size()));
     }
 
     /**

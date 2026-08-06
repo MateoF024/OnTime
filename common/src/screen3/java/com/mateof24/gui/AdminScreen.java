@@ -74,7 +74,7 @@ public class AdminScreen extends Screen implements PanelHost {
 
     @Override
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubled) {
-        if (panel.mouseClicked(event.x(), event.y())) return true;
+        if (panel.mouseClicked(event.x(), event.y(), event.button())) return true;
         return super.mouseClicked(event, doubled);
     }
 
