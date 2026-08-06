@@ -1444,6 +1444,10 @@ public final class AdminPanel {
                             ? "ontime.gui.timers.empty" : "ontime.gui.timers.no_match"),
                     listX + listWidth / 2,
                     (contentTop + SEARCH_HEIGHT + contentBottom) / 2 - painter.lineHeight() / 2, COLOR_TEXT);
+            // The divider stays. An empty tab that keeps its frame reads as
+            // "nothing yet"; one that loses it reads as a screen half drawn,
+            // and the executions tab already keeps its own.
+            drawDivider(painter);
             return;
         }
 
@@ -1613,9 +1617,11 @@ public final class AdminPanel {
         int top = settingsTop();
         List<SettingsForm.Row> rows = SettingsForm.rows();
 
-        // Enabled state follows the form, not the last layout.
+        // Enabled state follows the form, not the last layout. Apply is off
+        // while any field reads red: sending the batch would leave the bad one
+        // as the server had it, which looks like the rest resetting themselves.
         boolean dirty = settings.isDirty(model);
-        if (applyButton != null) applyButton.active = dirty;
+        if (applyButton != null) applyButton.active = dirty && settings.rejected(model).isEmpty();
         if (discardButton != null) discardButton.active = dirty;
 
         for (int i = 0; i < settingsRows && scroll + i < rows.size(); i++) {
@@ -1629,9 +1635,12 @@ public final class AdminPanel {
                 continue;
             }
 
-            // An edited row is marked in the gutter the same way a running
-            // execution is: colour, in the margin, no glyph.
-            if (settings.isEdited(model, row.key())) {
+            // Marked in the gutter the same way a running execution is:
+            // colour, in the margin, no glyph. Red when what is typed cannot
+            // be used at all.
+            if (settings.isRejected(model, row.key())) {
+                painter.rect(GUTTER - 6, y + 2, MARK_WIDTH, 14, COLOR_ERROR);
+            } else if (settings.isEdited(model, row.key())) {
                 painter.rect(GUTTER - 6, y + 2, MARK_WIDTH, 14, COLOR_PAUSED);
             }
             painter.text(Component.translatable("ontime.config." + snake(row.key())),

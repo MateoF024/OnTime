@@ -159,6 +159,54 @@ public final class SettingsForm {
         return fromServer(model, row);
     }
 
+    /**
+     * Whether what is typed in this row cannot be used.
+     *
+     * <p>Asked before anything is sent, not after. A batch with one unusable
+     * value used to send the rest and leave that one at whatever the server
+     * had, which reads as five settings resetting themselves over a typo in a
+     * sixth.</p>
+     */
+    public boolean isRejected(AdminModel model, String key) {
+        String typed = pending.get(key);
+        if (typed == null) return false;
+        Row row = find(key);
+        return row != null && !parses(row, typed);
+    }
+
+    /** Every row whose pending text will not parse. */
+    public List<String> rejected(AdminModel model) {
+        List<String> out = new ArrayList<>();
+        for (String key : pending.keySet()) {
+            if (isRejected(model, key)) out.add(key);
+        }
+        return out;
+    }
+
+    private static boolean parses(Row row, String typed) {
+        String value = typed.trim();
+        return switch (row.kind()) {
+            case INT -> {
+                try {
+                    Long.parseLong(value);
+                    yield true;
+                } catch (NumberFormatException e) {
+                    yield false;
+                }
+            }
+            case FLOAT -> {
+                try {
+                    Double.parseDouble(value);
+                    yield true;
+                } catch (NumberFormatException e) {
+                    yield false;
+                }
+            }
+            case COLOR -> colorOf(value) != null;
+            default -> true;
+        };
+    }
+
     /** Whether this row's value differs from the server's, for the gutter mark. */
     public boolean isEdited(AdminModel model, String key) {
         String edited = pending.get(key);
