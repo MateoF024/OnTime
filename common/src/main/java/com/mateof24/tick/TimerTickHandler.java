@@ -23,8 +23,6 @@ import java.util.List;
 public class TimerTickHandler {
     private static int syncCounter = 0;
     private static final int SYNC_INTERVAL = 20;
-    private static int webPanelTickCounter = 0;
-    private static final int WEB_PANEL_TICK_INTERVAL = 4;
 
     private static int startConditionCheckCounter = 0;
     private static final int START_CHECK_INTERVAL = 20;
@@ -71,6 +69,15 @@ public class TimerTickHandler {
         // Costs nothing while no panel is open, which is the normal case.
         com.mateof24.admin.AdminSubscriptions.tick(server);
 
+        // Unconditionally, and above every early return below. The web panel
+        // serves a snapshot rather than reading the manager per request, so the
+        // moment it stops being ticked it starts serving the past. Ticking it
+        // only while something was running meant the last run to finish left
+        // its final snapshot published forever: the browser kept a card the
+        // server had already deleted, which then answered "No such run".
+        // Refreshing it costs one guarded call while no panel is listening.
+        com.mateof24.webpanel.TimerWebPanel.getInstance().onServerTick(server);
+
         TimerManager manager = TimerManager.getInstance();
         if (manager.runCount() == 0) {
             com.mateof24.network.TimerState.flush(server);
@@ -83,24 +90,18 @@ public class TimerTickHandler {
                 .anyMatch(run -> !run.isInCooldown() && run.isRunning());
 
         boolean syncNow = false;
-        boolean webPanelNow = false;
         if (anyTicking) {
             syncCounter++;
             if (syncCounter >= SYNC_INTERVAL) {
                 syncCounter = 0;
                 syncNow = true;
             }
-            webPanelTickCounter++;
-            if (webPanelTickCounter >= WEB_PANEL_TICK_INTERVAL) {
-                webPanelTickCounter = 0;
-                webPanelNow = true;
-            }
         }
 
         // Snapshot: finishing a run can start the next timer of a sequence,
         // which adds and removes entries from the registry.
         for (TimerRun run : List.copyOf(manager.runsView())) {
-            tickRun(server, run, syncNow, webPanelNow);
+            tickRun(server, run, syncNow);
         }
 
         // One send per tick at most, covering every change made above plus the
@@ -108,8 +109,7 @@ public class TimerTickHandler {
         com.mateof24.network.TimerState.flush(server);
     }
 
-    private static void tickRun(MinecraftServer server, TimerRun run,
-                                boolean syncNow, boolean webPanelNow) {
+    private static void tickRun(MinecraftServer server, TimerRun run, boolean syncNow) {
         drainPendingCommands(server, run);
 
         switch (run.phase()) {
@@ -188,12 +188,7 @@ public class TimerTickHandler {
             run.setLastScoreboardSecond(currentSecond);
         }
 
-        if (!finished) {
-            if (webPanelNow) {
-                com.mateof24.webpanel.TimerWebPanel.getInstance().onServerTick(server);
-            }
-            return;
-        }
+        if (!finished) return;
 
         onRunFinished(server, run, timer);
     }

@@ -197,6 +197,7 @@ public class TimerWebPanel {
                     "<script src=\"panel.js\"></script>",
                     "<script>window.ONTIME_TOKEN=\"" + accessToken + "\";</script>\n"
                             + "<script src=\"panel.js\"></script>");
+            ex.getResponseHeaders().set("Cache-Control", "no-store, must-revalidate");
             send(ex, 200, "text/html; charset=utf-8", html.getBytes(StandardCharsets.UTF_8));
             return;
         }
@@ -213,6 +214,12 @@ public class TimerWebPanel {
             send(ex, 404, "text/plain", "Not found".getBytes(StandardCharsets.UTF_8));
             return;
         }
+        // These ship inside the jar and change with every update, and their
+        // address never does. Without this the browser is entitled to keep the
+        // copy it fetched the first time, so an updated mod serves a page whose
+        // script and stylesheet are from whichever version was installed when
+        // the tab was first opened.
+        ex.getResponseHeaders().set("Cache-Control", "no-store, must-revalidate");
         send(ex, 200, contentType(name), body);
     }
 
