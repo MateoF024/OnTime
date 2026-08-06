@@ -53,7 +53,10 @@
       "trigger.join": "A player joins", "trigger.leave": "A player leaves",
       "trigger.death": "A player dies", "trigger.respawn": "A player respawns",
       connected: "Connected", offline: "Reconnecting", badValue: "Check the values in red",
-      "default": "Default"
+      "default": "Default", "runs.of": "of %s",
+      "lead.runs": "%s running right now",
+      "lead.timers": "%s defined on this server",
+      "lead.settings": "What a new timer starts with, and what the server itself does"
     },
     es: {
       admin: "Administración", "tab.runs": "En curso", "tab.timers": "Contadores",
@@ -90,7 +93,10 @@
       "trigger.join": "Entra un jugador", "trigger.leave": "Sale un jugador",
       "trigger.death": "Muere un jugador", "trigger.respawn": "Reaparece un jugador",
       connected: "Conectado", offline: "Reconectando", badValue: "Revisa los valores en rojo",
-      "default": "Por defecto"
+      "default": "Por defecto", "runs.of": "de %s",
+      "lead.runs": "%s en marcha ahora mismo",
+      "lead.timers": "%s definidos en este servidor",
+      "lead.settings": "Con qué arranca un contador nuevo, y qué hace el servidor"
     }
   };
 
@@ -222,18 +228,29 @@
   function setLink(live) {
     const dot = $("#link");
     dot.classList.toggle("live", live);
-    dot.title = live ? t("connected") : t("offline");
+    const text = live ? t("connected") : t("offline");
+    dot.title = text;
+    $("#link-text").textContent = text;
   }
 
   // -------------------------------------------------------------- drawing
 
   function render() {
-    $$(".tab").forEach(b => {
+    $$(".nav-item").forEach(b => {
       b.setAttribute("aria-selected", String(b.dataset.tab === tab));
     });
     $("#panel-runs").hidden = tab !== "runs";
     $("#panel-timers").hidden = tab !== "timers";
     $("#panel-settings").hidden = tab !== "settings";
+
+    const runs = (state.runs || []).length;
+    const timers = (state.timers || []).length;
+    $("#count-runs").textContent = runs ? String(runs) : "";
+    $("#count-timers").textContent = timers ? String(timers) : "";
+    $("#runs-lead").textContent = t("lead.runs", runs);
+    $("#timers-lead").textContent = t("lead.timers", timers);
+    $("#settings-lead").textContent = t("lead.settings");
+
     if (tab === "runs") { renderRuns(); startTicking(); }
     if (tab === "timers") renderTimers();
     if (tab === "settings") renderSettings();
@@ -316,16 +333,16 @@
       const actions = $(".actions", card);
       const cooling = run.phase && run.phase !== "ACTIVE";
       const wanted = [
-        ["run.pause", "pause", "ghost", !run.running || cooling],
-        ["run.resume", "resume", "ghost", run.running || cooling],
-        ["run.reset", "reset", "ghost", false],
+        ["run.pause", "pause", "", !run.running || cooling],
+        ["run.resume", "resume", "", run.running || cooling],
+        ["run.reset", "reset", "", false],
         ["run.stop", "stop", "danger", false]
       ];
       if (actions.children.length !== wanted.length) {
         actions.replaceChildren(...wanted.map(([op, label, cls]) => {
           const button = document.createElement("button");
           button.type = "button";
-          button.className = cls + " small";
+          button.className = "btn " + cls + " small";
           button.textContent = t(label);
           button.onclick = () => act(op, { runId: run.runId });
           return button;
@@ -376,54 +393,75 @@
     requestAnimationFrame(tick);
   }
 
+  /**
+   * The timers, built once and then only updated.
+   *
+   * <p>Same reason as the executions: rebuilding the list on every snapshot
+   * replayed the entrance on every card once a second. This one was missed the
+   * first time round, and the board would not sit still.</p>
+   */
+  const timerCards = new Map();
+
   function renderTimers() {
     const host = $("#timers");
     const needle = filter.trim().toLowerCase();
     const timers = (state.timers || []).filter(x => !needle || x.name.toLowerCase().includes(needle));
     $("#timers-empty").hidden = timers.length > 0;
-    $("#timers-empty").textContent = (state.timers || []).length ? t("timers.noMatch") : t("timers.empty");
+    $("p", $("#timers-empty")).textContent =
+      (state.timers || []).length ? t("timers.noMatch") : t("timers.empty");
 
-    host.replaceChildren(...timers.map((timer, i) => {
-      const card = document.createElement("article");
-      card.className = "card" + (timer.runCount > 0 ? " running" : "");
-      card.innerHTML = `
-        <div class="card-head"><span class="card-name"></span><span class="tag"></span></div>
-        <div class="clock"></div>
-        <div class="sub"></div>
-        <div class="actions"></div>`;
+    for (const [name, card] of timerCards) {
+      if (!timers.some(x => x.name === name)) {
+        card.remove();
+        timerCards.delete(name);
+      }
+    }
+
+    for (const timer of timers) {
+      let card = timerCards.get(timer.name);
+      if (!card) {
+        card = document.createElement("article");
+        card.className = "card fresh";
+        card.tabIndex = 0;
+        card.innerHTML = `
+          <div class="card-head"><span class="card-name"></span><span class="tag"></span></div>
+          <div class="clock"></div>
+          <div class="sub"></div>
+          <div class="actions"></div>`;
+        card.addEventListener("animationend", () => card.classList.remove("fresh"));
+        timerCards.set(timer.name, card);
+        host.append(card);
+      }
+
+      // Rebound each time: the row it closes over is a new object every
+      // snapshot, and a stale one would edit yesterday's values.
+      card.onclick = e => { if (!e.target.closest("button")) editDialog(timer); };
+      card.onkeydown = e => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); editDialog(timer); }
+      };
+
+      card.classList.toggle("running", timer.runCount > 0);
       $(".card-name", card).textContent = timer.name;
       $(".tag", card).textContent = timer.resolvedPreset || "";
-      $(".clock", card).textContent =
-        (timer.countUp ? "↑ " : "↓ ") + clock(timer.targetTicks);
+      $(".clock", card).textContent = (timer.countUp ? "↑ " : "↓ ") + clock(timer.targetTicks);
       const bits = [];
       if (timer.repeat) bits.push(t("group.repeat"));
       if (timer.nextTimer) bits.push("→ " + timer.nextTimer);
       if (timer.silent) bits.push(t("group.sound") + ": " + t("off"));
-      $(".sub", card).textContent = bits.join(" · ") || " ";
-
-      card.tabIndex = 0;
-      // The card opens the editor; only the buttons do something else.
-      card.addEventListener("click", e => {
-        if (!e.target.closest("button")) editDialog(timer);
-      });
-      card.addEventListener("keydown", e => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); editDialog(timer); }
-      });
-      card.addEventListener("animationend", () => card.classList.remove("fresh"));
-      card.classList.add("fresh");
+      $(".sub", card).textContent = bits.join(" · ") || " ";
 
       const actions = $(".actions", card);
-      const add = (label, cls, fn) => {
+      actions.replaceChildren();
+      const add = (text, cls, fn) => {
         const button = document.createElement("button");
         button.type = "button";
-        button.className = cls + " small";
-        button.textContent = label;
+        button.className = "btn " + cls + " small";
+        button.textContent = text;
         button.onclick = fn;
         actions.append(button);
-        return button;
       };
       if (timer.runCount > 0) {
-        add(t("stop"), "ghost", () => {
+        add(t("stop"), "", () => {
           for (const run of state.runs.filter(r => r.timerName === timer.name)) {
             act("run.stop", { runId: run.runId });
           }
@@ -431,10 +469,10 @@
       } else {
         add(t("start"), "primary", () => startDialog(timer));
       }
-      add(t("clone"), "ghost", () => cloneDialog(timer));
+      add(t("clone"), "", () => cloneDialog(timer));
       add(t("delete"), "danger", () => deleteDialog(timer));
-      return card;
-    }));
+    }
+    for (const timer of timers) host.append(timerCards.get(timer.name));
   }
 
   // -------------------------------------------------------------- editing
@@ -537,19 +575,31 @@
     return input.value.trim();
   }
 
+  /** A titled sheet with its fields inside, which is how every form here reads. */
+  function sheet(title) {
+    const section = document.createElement("section");
+    section.className = "sheet";
+    const header = document.createElement("header");
+    const h3 = document.createElement("h3");
+    h3.textContent = title;
+    header.append(h3);
+    const body = document.createElement("div");
+    body.className = "body";
+    section.append(header, body);
+    section.body = body;
+    return section;
+  }
+
   function renderSettings() {
     const host = $("#settings");
     host.replaceChildren(...CONFIG_GROUPS.map(([group, keys]) => {
-      const section = document.createElement("section");
-      section.className = "group";
-      const head = document.createElement("h3");
       // Only the three a timer takes a copy of are "defaults"; server and web
       // are global by nature and there is no per-timer version of them.
-      head.textContent = ["display", "colors", "sound"].includes(group)
+      const title = ["display", "colors", "sound"].includes(group)
         ? t("default") + " · " + t("group." + group) : t("group." + group);
-      section.append(head);
+      const section = sheet(title);
       for (const [key, kind] of keys) {
-        section.append(field(key, kind, state.config[key], markSettings));
+        section.body.append(field(key, kind, state.config[key], markSettings));
       }
       return section;
     }));
@@ -578,20 +628,23 @@
     $("#modal-title").textContent = title;
     const body = $("#modal-body");
     body.replaceChildren();
+    body.scrollTop = 0;
     build(body);
     const menu = $("#modal-actions");
-    menu.replaceChildren(...actions.map(([label, cls, fn]) => {
+    menu.replaceChildren(...actions.map(([text, cls, fn]) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = cls;
-      button.textContent = label;
+      button.className = "btn " + cls;
+      button.textContent = text;
       button.onclick = async () => {
         if (!fn || (await fn()) !== false) dialog.close();
       };
       return button;
     }));
-    dialog.showModal();
+    if (!dialog.open) dialog.showModal();
   }
+
+  $("#modal-close").onclick = () => $("#modal").close();
 
   function startDialog(timer) {
     let audience = "global";
@@ -620,7 +673,7 @@
       modeSelect.onchange = () => { mode = modeSelect.value; };
       body.append(modeField);
     }, [
-      [t("cancel"), "ghost", null],
+      [t("cancel"), "", null],
       [t("start"), "primary", () => {
         const args = { name: timer.name, mode };
         if (audience === "global") {
@@ -643,7 +696,7 @@
       $("label", name).textContent = t("field.newName");
       body.append(name);
     }, [
-      [t("cancel"), "ghost", null],
+      [t("cancel"), "", null],
       [t("clone"), "primary", () =>
         act("timer.clone", { name: timer.name, dest: $("#modal-body [data-key='dest']").value.trim() })]
     ]);
@@ -656,7 +709,7 @@
       p.textContent = t("confirm.delete.body");
       body.append(p);
     }, [
-      [t("cancel"), "ghost", null],
+      [t("cancel"), "", null],
       [t("delete"), "danger", () => act("timer.delete", { name: timer.name })]
     ]);
   }
@@ -687,7 +740,7 @@
       $("label", dir).textContent = t("field.direction");
       body.append(dir);
     }, [
-      [t("cancel"), "ghost", null],
+      [t("cancel"), "", null],
       [t("save"), "primary", () => {
         const get = key => $(`#modal-body [data-key='${key}']`);
         return act("timer.create", {
@@ -712,12 +765,8 @@
     const display = timer.display || {};
     modal(t("dialog.edit", timer.name), body => {
       const group = (name, build) => {
-        const section = document.createElement("section");
-        section.className = "group";
-        const head = document.createElement("h3");
-        head.textContent = t("group." + name);
-        section.append(head);
-        build(section);
+        const section = sheet(t("group." + name));
+        build(section.body);
         body.append(section);
       };
 
@@ -886,7 +935,7 @@
         s.append(adder);
       });
     }, [
-      [t("cancel"), "ghost", null],
+      [t("cancel"), "", null],
       [t("apply"), "primary", async () => {
         const get = key => $(`#modal-body [data-key='${key}']`);
         const num = key => parseInt(get(key).value, 10) || 0;
@@ -955,68 +1004,76 @@
       const wrap = document.createElement("div");
       wrap.className = "detail";
 
-      const big = document.createElement("div");
-      big.className = "big";
-      big.textContent = clock(liveTicks(run));
-      big.style.color = runColour(run, liveTicks(run));
-      wrap.append(big);
+      const ticks = liveTicks(run);
+      const hero = document.createElement("div");
+      hero.className = "hero";
+      const left = document.createElement("div");
+      const face = document.createElement("div");
+      face.className = "clock";
+      face.textContent = clock(ticks);
+      face.style.color = runColour(run, ticks);
+      const of = document.createElement("div");
+      of.className = "of";
+      of.textContent = t("runs.of", clock(run.targetTicks));
+      left.append(face, of);
+      const badge = document.createElement("span");
+      badge.className = "state " + stateOf(run);
+      badge.textContent = t("state." + stateOf(run));
+      hero.append(left, badge);
+      wrap.append(hero);
 
-      const list = (title, rows) => {
-        const section = document.createElement("section");
-        const head = document.createElement("h3");
-        head.textContent = title;
-        head.style.cssText = "font-size:12px;letter-spacing:.08em;text-transform:uppercase;"
-          + "color:var(--muted);margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid var(--line)";
+      const facts = (title, rows) => {
+        const kept = rows.filter(([, v]) => v !== undefined && v !== null && v !== "");
+        if (!kept.length) return;
+        const section = sheet(title);
         const dl = document.createElement("dl");
-        for (const [key, value] of rows) {
-          if (value === undefined || value === null || value === "") continue;
+        dl.className = "facts";
+        for (const [key, value, strong] of kept) {
+          const cell = document.createElement("div");
+          cell.className = "fact";
           const dt = document.createElement("dt");
           dt.textContent = key;
           const dd = document.createElement("dd");
           dd.textContent = value;
-          dl.append(dt, dd);
+          if (strong) dd.className = "strong";
+          cell.append(dt, dd);
+          dl.append(cell);
         }
-        if (!dl.children.length) return;
-        section.append(head, dl);
+        section.body.append(dl);
         wrap.append(section);
       };
 
-      list(t("group.identity"), [
-        [t("state." + stateOf(run)), clock(run.targetTicks)],
-        [t("field.direction"), t(run.countUp ? "countup" : "countdown")],
+      facts(t("group.identity"), [
+        [t("field.direction"), t(run.countUp ? "countup" : "countdown"), true],
         [t("field.mode"), t(run.mode === "EACH" ? "each" : "shared")],
         [t("field.audience"), audienceOf(run)],
         ["ID", run.runId.slice(0, 8)]
       ]);
 
-      list(t("group.display"), [
-        [t("group.display"), display.preset],
+      facts(t("group.display"), [
+        [label("preset"), display.preset, true],
         ["X / Y", display.x + " / " + display.y],
-        [label("scale"), display.scale]
+        [label("scale"), display.scale],
+        [t("group.sound"), timer.silent ? t("off") : (display.soundId || "")]
       ]);
 
-      list(t("group.repeat"), [
+      facts(t("group.repeat"), [
         [t("group.repeat"), timer.repeat
-          ? (timer.repeatCount < 0 ? "∞" : timer.repeatCount)
-          : t("off")],
+          ? (timer.repeatCount < 0 ? "\u221e" : timer.repeatCount) : t("off"), true],
         [t("group.sequence"), timer.nextTimer || t("none")]
       ]);
 
-      list(t("group.trigger"), [
+      facts(t("group.trigger"), [
         [t("group.score"), timer.conditionObjective
-          ? `${timer.conditionObjective} ≥ ${timer.conditionScore} (${timer.conditionTarget})` : t("none")],
+          ? `${timer.conditionObjective} \u2265 ${timer.conditionScore} (${timer.conditionTarget})`
+          : t("none")],
         [t("group.expression"), timer.conditionExpression || t("none")],
         [t("group.trigger"), timer.triggerType ? t("trigger." + timer.triggerType) : t("none")]
       ]);
 
       const commands = timer.commandList || [];
       if (commands.length) {
-        const section = document.createElement("section");
-        const head = document.createElement("h3");
-        head.textContent = t("group.commands");
-        head.style.cssText = "font-size:12px;letter-spacing:.08em;text-transform:uppercase;"
-          + "color:var(--muted);margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid var(--line)";
-        section.append(head);
+        const section = sheet(t("group.commands"));
         for (const entry of commands) {
           const row = document.createElement("div");
           row.className = "cmd-row";
@@ -1027,20 +1084,21 @@
           text.className = "cmd-text";
           text.textContent = entry.command;
           row.append(at, text, document.createElement("span"));
-          section.append(row);
+          section.body.append(row);
         }
         wrap.append(section);
       }
 
       body.append(wrap);
-    }, [[t("close"), "ghost", null]]);
+    }, [[t("close"), "", null]]);
   }
 
   // ---------------------------------------------------------------- wiring
 
-  $$(".tab").forEach(b => b.onclick = () => {
+  $$(".nav-item").forEach(b => b.onclick = () => {
     tab = b.dataset.tab;
     if (tab !== "runs") { runCards.clear(); $("#runs").replaceChildren(); }
+    if (tab !== "timers") timerCards.clear();
     render();
   });
   $("#new-timer").onclick = newDialog;
@@ -1051,7 +1109,7 @@
       p.className = "muted";
       p.textContent = t("confirm.stopAll.body", (state.runs || []).length);
       body.append(p);
-    }, [[t("cancel"), "ghost", null], [t("stop"), "danger", () => act("run.stopAll")]]);
+    }, [[t("cancel"), "", null], [t("stop"), "danger", () => act("run.stopAll")]]);
   };
 
   $("#theme").onclick = () => {
