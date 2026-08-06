@@ -351,7 +351,7 @@ public final class AdminPanel {
                     detailScroll = 0;
                     init();
                 })
-                .bounds(listX, contentTop - 1, newWidth, 18)
+                .bounds(listX, contentTop, newWidth, 16)
                 .tooltip(Tooltip.create(Component.translatable("ontime.gui.timers.action.new.tip")))
                 .build());
 
@@ -691,7 +691,7 @@ public final class AdminPanel {
                             b -> {
                                 JsonObject args = new JsonObject();
                                 args.addProperty("name", timer.name());
-                                args.addProperty("index", index + 1);
+                                args.addProperty("index", index);
                                 send("timer.removeCommand", args);
                                 awaitingApply = true;
                             })
@@ -1299,7 +1299,9 @@ public final class AdminPanel {
             button.active = !row.runId().equals(model.selectedRunId());
             host.addWidget(button);
 
-            rowMarks.add(new int[]{listX, y, stateColor(row)});
+            // Beside the row, not over it: drawn on the button it read as a
+            // smear along the button's own border.
+            rowMarks.add(new int[]{listX - MARK_WIDTH - 2, y, stateColor(row)});
             rowData.add(row);
         }
     }
@@ -1486,7 +1488,7 @@ public final class AdminPanel {
         }
 
         boolean dirty = editor.isDirty(timer);
-        if (applyButton != null) applyButton.active = dirty;
+        if (applyButton != null) applyButton.active = dirty && editor.rejected(timer).isEmpty();
         if (discardButton != null) discardButton.active = dirty;
 
         drawFieldRows(painter, timer, TimerEditor.Section.QUICK, detailX, detailWidth);
@@ -1500,11 +1502,6 @@ public final class AdminPanel {
                 ? Component.translatable("ontime.gui.timers.dialog.new").getString()
                 : editor.timerName());
         painter.text(title, GUTTER, tabY + 4, COLOR_TEXT);
-        if (!editor.isCreating() && timer != null) {
-            Component length = Component.literal(arrow(timer.countUp()) + " "
-                    + com.mateof24.render.ClientTimerState.formatTicks(timer.targetTicks()));
-            painter.text(length, width - GUTTER - painter.textWidth(length), headerRowY, COLOR_TEXT);
-        }
         painter.rect(GUTTER, advancedTop() - 4, width - 2 * GUTTER, 1, COLOR_RULE);
 
         // The rail's own edge, so the two halves read as two halves.
@@ -1512,7 +1509,7 @@ public final class AdminPanel {
                 contentBottom - advancedTop() + 2, COLOR_RULE);
 
         boolean dirty = editor.isDirty(timer);
-        if (applyButton != null) applyButton.active = dirty;
+        if (applyButton != null) applyButton.active = dirty && editor.rejected(timer).isEmpty();
         if (discardButton != null) discardButton.active = dirty;
 
         if (editor.section() == TimerEditor.Section.COMMANDS) {
@@ -1545,7 +1542,12 @@ public final class AdminPanel {
             }
 
             TimerEditor.Field field = entry.field();
-            if (editor.isEdited(timer, field.key())) {
+            // Red when what is typed cannot be used: Apply is off while any
+            // field reads red, so one mistyped value can no longer take five
+            // good ones down with it.
+            if (editor.isRejected(timer, field)) {
+                painter.rect(x, y + 2, MARK_WIDTH, 14, COLOR_ERROR);
+            } else if (editor.isEdited(timer, field.key())) {
                 painter.rect(x, y + 2, MARK_WIDTH, 14, COLOR_PAUSED);
             }
             painter.text(Component.translatable("ontime.gui.editor.field." + field.label()),
@@ -1553,7 +1555,7 @@ public final class AdminPanel {
         }
 
         drawScrollbar(painter, x + columnWidth + GUTTER / 2 - 1, editorFieldTop,
-                contentBottom - 26, entries.size(), editorRowsShown);
+                contentBottom - 26, entries.size(), editorRowsShown, detailScroll);
     }
 
     private void drawCommandRows(Painter painter, AdminModel.TimerRow timer) {
@@ -1581,7 +1583,7 @@ public final class AdminPanel {
         }
 
         drawScrollbar(painter, width - GUTTER - 24, editorFieldTop, contentBottom - 30,
-                entries.size(), editorRowsShown);
+                entries.size(), editorRowsShown, detailScroll);
     }
 
     private static String arrow(boolean countUp) {
@@ -1930,6 +1932,16 @@ public final class AdminPanel {
      * from the list to do it.</p>
      */
     private void drawScrollbar(Painter painter, int x, int top, int bottom, int total, int shown) {
+        drawScrollbar(painter, x, top, bottom, total, shown, scroll);
+    }
+
+    /**
+     * @param at which row is at the top, which is <em>not</em> always
+     *           {@link #scroll} — the timers tab has two lists at once, and a
+     *           bar drawn from the wrong one never moves
+     */
+    private void drawScrollbar(Painter painter, int x, int top, int bottom,
+                               int total, int shown, int at) {
         if (total <= shown) return;
         int height = bottom - top;
         if (height < 16) return;
@@ -1937,7 +1949,7 @@ public final class AdminPanel {
         painter.rect(x, top, 2, height, COLOR_BAND);
         int thumb = Math.max(12, height * shown / total);
         int travel = height - thumb;
-        int offset = total == shown ? 0 : travel * scroll / (total - shown);
+        int offset = travel * Math.max(0, Math.min(total - shown, at)) / (total - shown);
         painter.rect(x, top + offset, 2, thumb, COLOR_RULE);
     }
 

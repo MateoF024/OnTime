@@ -564,9 +564,10 @@ public final class AdminOps {
     /**
      * Removes one command by its place in the flattened list.
      *
-     * <p>The same numbering {@code /timer commands list} shows and
-     * {@code /timer commands remove} takes, so a panel and a command line
-     * cannot disagree about which one row three is.</p>
+     * <p>{@code index} is <b>zero-based</b>, matching
+     * {@link com.mateof24.timer.Timer#removeScheduledEntry(int)} exactly.
+     * Passing the one-based number a person would read is what made this
+     * remove the next command along and fail outright on the last one.</p>
      */
     private static Result removeCommand(JsonObject args) {
         String name = requireTimer(args);

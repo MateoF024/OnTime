@@ -246,6 +246,57 @@ public final class TimerEditor {
         return edited != null ? edited : stored(timer, field.key());
     }
 
+    /**
+     * Whether what is typed in this field cannot be used.
+     *
+     * <p>Checked before anything is sent rather than after. Applying a batch
+     * where one value is nonsense used to send the rest and leave that one at
+     * whatever the server already had, which reads as five settings resetting
+     * themselves because of a typo in a sixth.</p>
+     */
+    public boolean isRejected(AdminModel.TimerRow timer, Field field) {
+        String typed = pending.get(field.key());
+        if (typed == null) return false;
+        return !parses(field, typed);
+    }
+
+    /** Every field whose pending text will not parse. */
+    public List<String> rejected(AdminModel.TimerRow timer) {
+        List<String> out = new ArrayList<>();
+        for (Field field : FIELDS) {
+            if (isRejected(timer, field)) out.add(field.key());
+        }
+        return out;
+    }
+
+    private static boolean parses(Field field, String typed) {
+        String value = typed.trim();
+        return switch (field.kind()) {
+            case INT -> {
+                try {
+                    Integer.parseInt(value);
+                    yield true;
+                } catch (NumberFormatException e) {
+                    yield false;
+                }
+            }
+            case FLOAT -> {
+                try {
+                    Double.parseDouble(value);
+                    yield true;
+                } catch (NumberFormatException e) {
+                    yield false;
+                }
+            }
+            case COLOR -> SettingsForm.colorOf(value) != null;
+            // A name is the one piece of text with a shape the server insists
+            // on, and it is the one the server cannot fix for you.
+            case TEXT -> !"name".equals(field.key())
+                    || value.matches("[A-Za-z0-9_.+-]{1,32}");
+            default -> true;
+        };
+    }
+
     public boolean isEdited(AdminModel.TimerRow timer, String key) {
         String edited = pending.get(key);
         return edited != null && !edited.equals(stored(timer, key));
