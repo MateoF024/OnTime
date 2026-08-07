@@ -308,6 +308,7 @@ public class OnTimeAPI {
             run.reset();
             if (TimerManager.getInstance().isPrimaryRunOf(run)) run.mirrorToTimer();
             com.mateof24.trigger.TriggerRegistry.resetFor(run.timerName());
+            com.mateof24.trigger.TriggerProgress.resetFor(run.timerName());
             TimerManager.getInstance().endRun(run);
             TimerManager.getInstance().saveTimers();
             com.mateof24.network.TimerState.markDirty();

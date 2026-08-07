@@ -234,6 +234,7 @@ final class RunCommands {
             run.reset();
             if (TimerManager.getInstance().isPrimaryRunOf(run)) run.mirrorToTimer();
             com.mateof24.trigger.TriggerRegistry.resetFor(run.timerName());
+            com.mateof24.trigger.TriggerProgress.resetFor(run.timerName());
         }
         TimerManager.getInstance().endRuns(selected);
         TimerManager.getInstance().saveTimers();
@@ -274,6 +275,7 @@ final class RunCommands {
 
         for (TimerRun run : selected) {
             com.mateof24.trigger.TriggerRegistry.resetFor(run.timerName());
+            com.mateof24.trigger.TriggerProgress.resetFor(run.timerName());
             // Its timer already finished and was reset; the run only existed to
             // hold the cooldown. Clearing the cooldown and keeping it would
             // leave an idle execution behind that rejects the next start.

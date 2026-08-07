@@ -45,6 +45,10 @@ public class TimerTickHandler {
             }
         }
         com.mateof24.trigger.TriggerRegistry.resetAll();
+        // The tally of who has already acted goes with it: a round that starts
+        // again starts from nobody, or "all four have died" stays true for ever
+        // after the first round.
+        com.mateof24.trigger.TriggerProgress.resetAll();
     }
 
     public static boolean hasPendingCooldown() {
