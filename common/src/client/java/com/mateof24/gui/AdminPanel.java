@@ -574,7 +574,7 @@ public final class AdminPanel {
         if (editor.section() == TimerEditor.Section.COMMANDS) {
             buildCommandRows(timer, contentBottom - 30);
         } else if (editor.section() == TimerEditor.Section.TRIGGERS) {
-            buildTriggerRows(timer, contentBottom - 30);
+            buildTriggerRows(timer, contentBottom - (kindHasSubject() ? 51 : 30));
         } else {
             buildFieldRows(timer, editor.section(), contentBottom - 4);
         }
@@ -753,6 +753,24 @@ public final class AdminPanel {
     private EditBox triggerScore;
     private EditBox triggerTarget;
 
+
+    /**
+     * A button that walks a list, forwards on left click and back on right.
+     *
+     * <p>Right-click-to-reverse is how every other cycling control in this
+     * panel works, and these four were added without it — with ten trigger
+     * kinds, overshooting by one meant nine more clicks.</p>
+     */
+    private void cycler(Component label, int x, int y, int width, String tooltipKey,
+                        int size, java.util.function.IntConsumer set, int current) {
+        Button button = Button.builder(label, b -> { set.accept((current + 1) % size); init(); })
+                .bounds(x, y, width, 18)
+                .tooltip(Tooltip.create(Component.translatable(tooltipKey)))
+                .build();
+        host.addWidget(button);
+        cycleBack.put(button, () -> { set.accept((current - 1 + size) % size); init(); });
+    }
+
     private int triggerCount() {
         AdminModel.TimerRow timer = model.timer(model.selectedTimer());
         return timer == null ? 0 : timer.triggers().size();
@@ -800,15 +818,9 @@ public final class AdminPanel {
         int y = bottom + 6;
         int right = width - GUTTER;
 
-        host.addWidget(Button.builder(
-                        Component.translatable("ontime.trigger.kind." + TRIGGER_KINDS[triggerKind]),
-                        b -> {
-                            triggerKind = (triggerKind + 1) % TRIGGER_KINDS.length;
-                            init();
-                        })
-                .bounds(editorFieldX, y, 118, 18)
-                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.kind.tip")))
-                .build());
+        cycler(Component.translatable("ontime.trigger.kind." + TRIGGER_KINDS[triggerKind]),
+                editorFieldX, y, 118, "ontime.gui.editor.trigger.kind.tip",
+                TRIGGER_KINDS.length, next -> triggerKind = next, triggerKind);
 
         int cursor = editorFieldX + 122;
         int addX = right - 48;
@@ -851,15 +863,9 @@ public final class AdminPanel {
             triggerTarget = null;
         }
 
-        host.addWidget(Button.builder(
-                        Component.translatable("ontime.trigger.action." + (triggerStarts ? "start" : "finish")),
-                        b -> {
-                            triggerStarts = !triggerStarts;
-                            init();
-                        })
-                .bounds(actionX, y, 58, 18)
-                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.action.tip")))
-                .build());
+        cycler(Component.translatable("ontime.trigger.action." + (triggerStarts ? "start" : "finish")),
+                actionX, y, 58, "ontime.gui.editor.trigger.action.tip",
+                2, next -> triggerStarts = next == 1, triggerStarts ? 1 : 0);
 
         buildSubjectRow(y + 21, right);
 
@@ -910,16 +916,10 @@ public final class AdminPanel {
         }
 
         int x = editorFieldX;
-        host.addWidget(Button.builder(
-                        Component.translatable("ontime.who.q." + QUANTIFIERS[triggerQuantifier]),
-                        b -> {
-                            triggerQuantifier = (triggerQuantifier + 1) % QUANTIFIERS.length;
-                            init();
-                        })
-                .bounds(x, y, 74, 18)
-                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.quantifier.tip")))
-                .build());
-        x += 78;
+        cycler(Component.translatable("ontime.who.q." + QUANTIFIERS[triggerQuantifier]),
+                x, y, 82, "ontime.gui.editor.trigger.quantifier.tip",
+                QUANTIFIERS.length, next -> triggerQuantifier = next, triggerQuantifier);
+        x += 86;
 
         if (countIsUsed()) {
             triggerCount = new EditBox(host.font(), x, y, 34, 18,
@@ -934,16 +934,10 @@ public final class AdminPanel {
             triggerCount = null;
         }
 
-        int scopeWidth = scopeNeedsValue() ? 96 : Math.max(96, right - x);
-        host.addWidget(Button.builder(
-                        Component.translatable("ontime.who.s." + SCOPES[triggerScope]),
-                        b -> {
-                            triggerScope = (triggerScope + 1) % SCOPES.length;
-                            init();
-                        })
-                .bounds(x, y, scopeWidth, 18)
-                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.scope.tip")))
-                .build());
+        int scopeWidth = scopeNeedsValue() ? 118 : Math.max(118, right - x);
+        cycler(Component.translatable("ontime.who.s." + SCOPES[triggerScope]),
+                x, y, scopeWidth, "ontime.gui.editor.trigger.scope.tip",
+                SCOPES.length, next -> triggerScope = next, triggerScope);
         x += scopeWidth + 4;
 
         if (scopeNeedsValue()) {
