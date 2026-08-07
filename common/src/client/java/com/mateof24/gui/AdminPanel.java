@@ -349,6 +349,11 @@ public final class AdminPanel {
         int newWidth = 44;
         host.addWidget(Button.builder(Component.translatable("ontime.gui.timers.action.new"), b -> {
                     editor.openNew();
+        // Seeded from the server defaults. The creation form draws the same
+        // display fields a timer has, and with nothing pending they came up
+        // empty -- a new timer does copy the defaults, so the form was lying
+        // about what it was going to make.
+        seedCreationDefaults();
                     // Nothing is selected while a new one is being filled in,
                     // or the column would show the last timer's values under
                     // the new one's name.
@@ -618,6 +623,7 @@ public final class AdminPanel {
                                             (px, py) -> {
                                                 sendDisplay(timer.name(), "x", px);
                                                 sendDisplay(timer.name(), "y", py);
+                                                saveEditor();
                                             });
                                 })
                         .bounds(editorControlX, y, editorControlWidth, 18)
@@ -977,6 +983,15 @@ public final class AdminPanel {
         send("timer.setDisplay", args);
     }
 
+
+    /** What a timer created right now would copy, put into the form up front. */
+    private void seedCreationDefaults() {
+        for (SettingsForm.Row row : SettingsForm.displayRows()) {
+            if (row.isHeader() || row.isAction()) continue;
+            editor.put("display." + row.displayKey(), settings.displayed(model, row));
+        }
+    }
+
     private void buildCommandRows(AdminModel.TimerRow timer, int bottom) {
         List<AdminModel.Scheduled> entries = timer == null ? List.of() : timer.commandList();
         editorRowsShown = Math.max(1, (bottom - editorFieldTop) / 20);
@@ -1117,6 +1132,11 @@ public final class AdminPanel {
                                             (px, py) -> {
                                                 sendConfig("timerX", px);
                                                 sendConfig("timerY", py);
+                                                // And whatever was already
+                                                // pending, so leaving the
+                                                // placement screen leaves
+                                                // nothing behind to apply.
+                                                applySettings();
                                             }))
                             .bounds(controlX, y, controlWidth, 18)
                             .tooltip(Tooltip.create(Component.translatable(
