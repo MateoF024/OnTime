@@ -925,9 +925,15 @@ public final class AdminPanel {
                 settings.displayed(model, SettingsForm.rowOf("positionPreset")));
     }
 
-    /** The same question for one timer's own copy. */
+    /**
+     * The same question for one timer's own copy.
+     *
+     * <p>Also while creating, where there is no timer yet but the form has
+     * been seeded with the defaults: the row has to follow what the preset
+     * field says right now, not what a timer that does not exist holds.</p>
+     */
     private boolean timerIsCustom(AdminModel.TimerRow timer) {
-        if (timer == null) return false;
+        if (timer == null && !editor.isCreating()) return false;
         return "CUSTOM".equalsIgnoreCase(
                 editor.displayed(timer, TimerEditor.fieldOf("display.preset")));
     }
@@ -2479,7 +2485,11 @@ public final class AdminPanel {
             }
             // Two columns again, so the wheel goes to whichever the pointer
             // is over. Anything else guesses, and guesses wrong.
-            if (twoColumn && pointerX >= detailX - GUTTER / 2 && model.selectedTimer() != null) {
+            // Creating counts as having the column open: there is no selected
+            // timer then, and the guard used to say there was nothing to
+            // scroll, so the wheel did nothing on the creation page.
+            if (twoColumn && pointerX >= detailX - GUTTER / 2
+                    && (model.selectedTimer() != null || editor.isCreating())) {
                 int rows = TimerEditor.laidOut(TimerEditor.Section.QUICK, editor.isCreating(),
                 timerIsCustom(model.timer(model.selectedTimer()))).size();
                 if (rows <= editorRowsShown) return false;

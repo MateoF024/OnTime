@@ -317,7 +317,16 @@ public final class TimerEditor {
         };
     }
 
+    /**
+     * Whether a field has been changed from what the timer holds.
+     *
+     * <p>Never while creating: there is no timer yet, so there is nothing for
+     * a value to differ from. The form is seeded with the server defaults and
+     * every one of them came up marked as an edit, which said the opposite of
+     * what is true — those are the values a new timer is made with.</p>
+     */
     public boolean isEdited(AdminModel.TimerRow timer, String key) {
+        if (creating) return false;
         String edited = pending.get(key);
         return edited != null && !edited.equals(stored(timer, key));
     }
