@@ -35,9 +35,12 @@ public class PositionScreen extends Screen {
 
     @Override
     public void extractRenderState(net.minecraft.client.gui.GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
-        // No super call: that draws the darkening the menu screens use, and
-        // the whole job here is seeing the game exactly as it will look.
         picker.draw(new GfxPainter(graphics), this.width, this.height);
+        // Then the widgets, on top. Skipping this is what left the ESC dialog
+        // with a title and no buttons: super is what draws them, and with the
+        // background overridden to nothing there is no longer a reason to
+        // avoid it.
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
         if (picker.answered() != null) closeBack();
     }
 

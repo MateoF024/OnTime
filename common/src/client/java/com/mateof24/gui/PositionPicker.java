@@ -81,7 +81,10 @@ public final class PositionPicker {
         this.timeText = timeText == null || timeText.isEmpty() ? "00:00:00" : timeText;
         this.titles = titles == null ? new String[4] : titles;
         this.save = save;
-        this.placed = "CUSTOM".equalsIgnoreCase(this.preset);
+        // -1 is the sentinel the preset table uses for "centred", so it is
+        // also what a never-placed counter carries. Anything else is a
+        // position somebody chose, and it is kept.
+        this.placed = x != -1;
     }
 
     /**
@@ -192,10 +195,10 @@ public final class PositionPicker {
 
     /** True when the click was taken, so the screen leaves it alone. */
     public boolean mouseDown(Painter painter, double mouseX, double mouseY, int screenW, int screenH) {
-        // The three buttons are widgets and vanilla routes to them first;
-        // swallowing the rest keeps a click beside the dialog from grabbing
-        // the counter hidden behind it.
-        if (asking) return true;
+        // Not taken while the dialog is up: the three choices are widgets and
+        // the screen has to be free to hand the click to them. Dragging is
+        // already blocked by the same flag.
+        if (asking) return false;
         int[] box = bounds(painter);
         if (mouseX < box[0] || mouseX > box[0] + box[2]
                 || mouseY < box[1] || mouseY > box[1] + box[3]) {

@@ -609,7 +609,8 @@ public final class AdminPanel {
                                     // fields when Custom X and Custom Y went,
                                     // so looking them up returned nothing and
                                     // the button did nothing.
-                                    AdminClientState.openPicker(timer.name(), "CUSTOM",
+                                    AdminClientState.openPicker(timer.name(),
+                                            model.configString("positionPreset", "BOSSBAR"),
                                             displayInt(timer, "x", -1),
                                             displayInt(timer, "y", 4),
                                             displayFloat(timer, "scale", 1f),
@@ -1077,7 +1078,12 @@ public final class AdminPanel {
                                     // The defaults, so a sample counter and the
                                     // four sample titles: there is no one timer
                                     // here to show the real state of.
-                                    b -> AdminClientState.openPicker(null, "CUSTOM",
+                                    // Falls back to whatever preset the server
+                                    // defaults to, so a counter that has never
+                                    // been placed opens where it draws today
+                                    // rather than in the corner.
+                                    b -> AdminClientState.openPicker(null,
+                                            model.configString("positionPreset", "BOSSBAR"),
                                             model.configInt("timerX", -1),
                                             model.configInt("timerY", 4),
                                             model.configFloat("timerScale", 1f),
@@ -1950,7 +1956,7 @@ public final class AdminPanel {
 
     private void drawSettings(Painter painter) {
         int top = settingsTop();
-        List<SettingsForm.Row> rows = SettingsForm.rows();
+        List<SettingsForm.Row> rows = SettingsForm.rows(defaultsAreCustom());
 
         // Enabled state follows the form, not the last layout. Apply is off
         // while any field reads red: sending the batch would leave the bad one
@@ -2410,7 +2416,7 @@ public final class AdminPanel {
             total = model.runs().size();
             shown = visibleRows;
         } else if (model.tab() == AdminModel.Tab.SETTINGS) {
-            total = SettingsForm.rows().size();
+            total = SettingsForm.rows(defaultsAreCustom()).size();
             shown = settingsRows;
         } else if (model.tab() == AdminModel.Tab.TIMERS) {
             if (editor.advanced()) {
