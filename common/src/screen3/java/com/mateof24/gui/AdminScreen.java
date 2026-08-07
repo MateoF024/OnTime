@@ -158,16 +158,12 @@ public class AdminScreen extends Screen implements PanelHost {
 
         @Override
         public void pushScale(float scale, int originX, int originY) {
-            var pose = graphics.pose();
-            pose.pushMatrix();
-            pose.translate(originX, originY);
-            pose.scale(scale, scale);
-            pose.translate(-originX, -originY);
+            PoseScale.push(graphics, scale, originX, originY);
         }
 
         @Override
         public void popScale() {
-            graphics.pose().popMatrix();
+            PoseScale.pop(graphics);
         }
 
         @Override

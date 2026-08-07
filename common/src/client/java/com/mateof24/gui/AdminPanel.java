@@ -596,6 +596,35 @@ public final class AdminPanel {
             Tooltip tip = Tooltip.create(Component.translatable(
                     "ontime.gui.editor.field." + field.label() + ".tip"));
 
+            if (field.kind() == TimerEditor.Kind.PICKER) {
+                // Only means anything for CUSTOM, exactly as in the settings
+                // tab: every other preset works its anchor out from the screen.
+                if (!"CUSTOM".equalsIgnoreCase(editor.displayed(timer,
+                        TimerEditor.fieldOf("display.preset")))) {
+                    continue;
+                }
+                host.addWidget(Button.builder(
+                                Component.translatable("ontime.gui.settings.custom_position.edit"),
+                                b -> {
+                                    if (timer == null) return;
+                                    AdminClientState.openPicker(timer.name(),
+                                            numberOr(editor.displayed(timer,
+                                                    TimerEditor.fieldOf("display.x")), -1),
+                                            numberOr(editor.displayed(timer,
+                                                    TimerEditor.fieldOf("display.y")), 4),
+                                            (float) decimalOr(editor.displayed(timer,
+                                                    TimerEditor.fieldOf("display.scale")), 1.0),
+                                            (px, py) -> {
+                                                editor.put("display.x", String.valueOf(px));
+                                                editor.put("display.y", String.valueOf(py));
+                                            });
+                                })
+                        .bounds(editorControlX, y, editorControlWidth, 18)
+                        .tooltip(tip)
+                        .build());
+                continue;
+            }
+
             switch (field.kind()) {
                 case BOOL, PRESET, ACTION, TRIGGER -> {
                     Button cycle = Button.builder(cycleLabelFor(field, value), b -> {
@@ -862,6 +891,24 @@ public final class AdminPanel {
         }
         if (trigger.value().isEmpty()) return kind;
         return Component.translatable("ontime.command.trigger.describe.value", kind, trigger.value());
+    }
+
+
+    /** A typed field's value as a number, or the fallback when it is mid-edit. */
+    private static int numberOr(String text, int fallback) {
+        try {
+            return Integer.parseInt(text.trim());
+        } catch (RuntimeException e) {
+            return fallback;
+        }
+    }
+
+    private static double decimalOr(String text, double fallback) {
+        try {
+            return Double.parseDouble(text.trim());
+        } catch (RuntimeException e) {
+            return fallback;
+        }
     }
 
     private void buildCommandRows(AdminModel.TimerRow timer, int bottom) {

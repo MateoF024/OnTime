@@ -54,6 +54,11 @@ public final class SettingsForm {
         /** A row that does something rather than holding a value. */
         static Row action(String key) { return new Row(null, key, Kind.ACTION, null); }
 
+        /** The same, for something a timer can do to its own copy. */
+        static Row action(String key, String displayKey) {
+            return new Row(null, key, Kind.ACTION, displayKey);
+        }
+
         /**
          * A setting that also exists on a timer, and the name it goes by there.
          *
@@ -86,7 +91,7 @@ public final class SettingsForm {
             // sent -- the placement screen is what writes them now, and this
             // row is the way in. Shown only when the preset is CUSTOM, because
             // for every other preset the coordinates mean nothing at all.
-            Row.action("customPosition"),
+            Row.action("customPosition", "customPosition"),
             Row.of("timerScale", Kind.FLOAT, "scale"),
 
             Row.header("colors"),

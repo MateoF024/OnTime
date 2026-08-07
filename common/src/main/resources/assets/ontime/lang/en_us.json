@@ -351,10 +351,6 @@
   "ontime.gui.editor.field.sequence_cooldown.tip": "§fSeconds of pause before the next one starts.",
   "ontime.gui.editor.field.config.position_preset": "Position",
   "ontime.gui.editor.field.config.position_preset.tip": "§fSelect a preset position for the timer. Choose 'Custom' to use manual X/Y coordinates",
-  "ontime.gui.editor.field.config.timer_x": "Custom X",
-  "ontime.gui.editor.field.config.timer_x.tip": "§fX position of the timer (-1 for centered)",
-  "ontime.gui.editor.field.config.timer_y": "Custom Y",
-  "ontime.gui.editor.field.config.timer_y.tip": "§fY position of the timer from the top",
   "ontime.gui.editor.field.config.timer_scale": "Scale",
   "ontime.gui.editor.field.config.timer_scale.tip": "§fScale of the timer display (0.1 - 5.0)",
   "ontime.gui.editor.field.config.color_high": "Plenty left",
@@ -448,5 +444,7 @@
   "ontime.gui.settings.custom_position.edit": "Edit",
   "ontime.gui.settings.custom_position.tip": "Opens the game with a sample counter you can drag where you want it.",
   "ontime.config.custom_position": "Custom position",
-  "ontime.config.custom_position.tooltip": "Where the counter sits when the preset is CUSTOM."
+  "ontime.config.custom_position.tooltip": "Where the counter sits when the preset is CUSTOM.",
+  "ontime.gui.editor.field.config.custom_position": "Custom position",
+  "ontime.gui.editor.field.config.custom_position.tip": "Opens the game with this timer as a sample you can drag where you want it. Only applies when the preset is CUSTOM."
 }

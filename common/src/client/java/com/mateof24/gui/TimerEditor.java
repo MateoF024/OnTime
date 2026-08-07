@@ -45,7 +45,9 @@ public final class TimerEditor {
         /** Cycles "finish" and "start" — what a condition does when it is met. */
         ACTION,
         /** Cycles the trigger kinds. */
-        TRIGGER
+        TRIGGER,
+        /** Not a value: a button that opens the placement screen. */
+        PICKER
     }
 
     /**
@@ -95,6 +97,7 @@ public final class TimerEditor {
                 case FLOAT -> Kind.FLOAT;
                 case COLOR -> Kind.COLOR;
                 case PRESET -> Kind.PRESET;
+                case ACTION -> Kind.PICKER;
                 default -> Kind.TEXT;
             };
             out.add(new Field(Section.QUICK, group, "display." + row.displayKey(), kind,
@@ -162,6 +165,12 @@ public final class TimerEditor {
     }
 
     public static List<Field> fields() { return FIELDS; }
+
+    /** The field a key belongs to, for callers that need another field's value. */
+    public static Field fieldOf(String key) {
+        for (Field field : FIELDS) if (field.key().equals(key)) return field;
+        return null;
+    }
 
     public static List<Field> fieldsOf(Section section) {
         List<Field> out = new ArrayList<>();

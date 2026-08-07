@@ -101,16 +101,12 @@ public class PositionScreen extends Screen {
 
         @Override
         public void pushScale(float scale, int originX, int originY) {
-            var pose = graphics.pose();
-            pose.pushPose();
-            pose.translate(originX, originY, 0);
-            pose.scale(scale, scale, 1);
-            pose.translate(-originX, -originY, 0);
+            PoseScale.push(graphics, scale, originX, originY);
         }
 
         @Override
         public void popScale() {
-            graphics.pose().popPose();
+            PoseScale.pop(graphics);
         }
 
         @Override
