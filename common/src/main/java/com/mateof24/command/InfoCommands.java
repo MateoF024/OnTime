@@ -115,11 +115,11 @@ final class InfoCommands {
 
         // One row per trigger, where there were three separate rows for the
         // three systems and no way to show more than one of each.
-        for (com.mateof24.trigger.Trigger trigger : timer.triggers()) {
+        for (com.mateof24.trigger.TriggerRule rule : timer.rules()) {
             lines.add(CommandFormat.row("ontime.status.label.trigger",
                     Component.translatable("ontime.command.status.trigger",
-                            BehaviorCommands.describe(trigger),
-                            Component.translatable("ontime.trigger.action." + trigger.action().lower()))));
+                            BehaviorCommands.describe(rule),
+                            Component.translatable("ontime.trigger.action." + rule.action().lower()))));
         }
 
         List<TimerRun> runs = TimerManager.getInstance().findRuns(name, null);

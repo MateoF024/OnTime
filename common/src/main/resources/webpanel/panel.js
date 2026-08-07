@@ -1037,7 +1037,11 @@
       // never matched anything.
       group("triggers", s => {
         const list = document.createElement("div");
-        const rows = timer.triggers || [];
+        // The server sends rules; one with a single condition reads exactly
+        // as a trigger always did, which is all any editor writes today.
+        const rows = (timer.rules || [])
+          .filter(rule => rule.condition && rule.condition.node !== "group")
+          .map(rule => ({ ...rule.condition, action: rule.action }));
         if (!rows.length) {
           const p = document.createElement("p");
           p.className = "muted";
@@ -1347,8 +1351,11 @@
         [t("group.sequence"), timer.nextTimer || t("none")]
       ]);
 
-      facts(t("group.triggers"), (timer.triggers || []).length
-        ? (timer.triggers || []).map(trigger => [
+      const shown = (timer.rules || [])
+        .filter(rule => rule.condition && rule.condition.node !== "group")
+        .map(rule => ({ ...rule.condition, action: rule.action }));
+      facts(t("group.triggers"), shown.length
+        ? shown.map(trigger => [
             t(trigger.action === "start" ? "startIt" : "finish"),
             describeTrigger(trigger), true])
         : [[t("trg.none"), "", true]]);

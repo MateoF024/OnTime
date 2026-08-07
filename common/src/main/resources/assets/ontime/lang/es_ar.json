@@ -466,5 +466,6 @@
   "ontime.gui.editor.trigger.scope.tip": "Quién cuenta. Pulsa para recorrer las opciones.",
   "ontime.gui.editor.trigger.count": "n",
   "ontime.gui.editor.trigger.names": "Nombres, separados por comas",
-  "ontime.gui.editor.trigger.selector": "@a[team=red]"
+  "ontime.gui.editor.trigger.selector": "@a[team=red]",
+  "ontime.command.trigger.describe.tree": "%s condiciones combinadas"
 }

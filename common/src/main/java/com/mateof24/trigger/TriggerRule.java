@@ -42,6 +42,23 @@ public record TriggerRule(String id, Trigger.Action action, Condition condition,
         return !condition.leaves().isEmpty();
     }
 
+    /**
+     * The one leaf, when this rule has exactly one.
+     *
+     * <p>Every rule has one today: the editors still write a single watch, and
+     * the tree is there for the shape R9 is building towards. Everything that
+     * used to read a flat trigger reads this, so moving the model did not
+     * change what the game does.</p>
+     *
+     * @return null for a rule with a group, which nothing writes yet
+     */
+    public Condition.Watch singleLeaf() {
+        if (condition instanceof Condition.Watch watch) return watch;
+        java.util.List<Condition.Watch> leaves = condition == null
+                ? java.util.List.of() : condition.leaves();
+        return leaves.size() == 1 ? leaves.get(0) : null;
+    }
+
     public JsonObject toJson() {
         JsonObject json = new JsonObject();
         json.addProperty("id", id);

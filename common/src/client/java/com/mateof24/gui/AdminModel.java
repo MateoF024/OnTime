@@ -96,18 +96,28 @@ public final class AdminModel {
         public boolean startsIt() { return "start".equals(action); }
     }
 
-    /** Every trigger of this timer, in the order the server keeps them. */
+    /**
+     * Every trigger of this timer, in the order the server keeps them.
+     *
+     * <p>The server sends rules, each with a condition. A rule with one
+     * condition — which is all any editor writes today — reads exactly as a
+     * trigger always did, so this flattens that one case and leaves the rest
+     * for the editor that will understand trees.</p>
+     */
     public List<Trigger> triggers() {
         List<Trigger> out = new ArrayList<>();
-        if (raw == null || !raw.has("triggers") || !raw.get("triggers").isJsonArray()) return out;
-        for (JsonElement element : raw.getAsJsonArray("triggers")) {
+        if (raw == null || !raw.has("rules") || !raw.get("rules").isJsonArray()) return out;
+        for (JsonElement element : raw.getAsJsonArray("rules")) {
             if (!element.isJsonObject()) continue;
-            JsonObject json = element.getAsJsonObject();
+            JsonObject rule = element.getAsJsonObject();
+            if (!rule.has("condition") || !rule.get("condition").isJsonObject()) continue;
+            JsonObject json = rule.getAsJsonObject("condition");
+            if (!"watch".equals(str(json, "node", "watch"))) continue;
             JsonObject who = json.has("who") && json.get("who").isJsonObject()
                     ? json.getAsJsonObject("who") : new JsonObject();
             out.add(new Trigger(
                     str(json, "kind", ""),
-                    str(json, "action", "finish"),
+                    str(rule, "action", "finish"),
                     str(json, "value", ""),
                     (int) num(json, "threshold"),
                     str(who, "scope", "audience"),

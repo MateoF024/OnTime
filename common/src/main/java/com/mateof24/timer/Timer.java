@@ -56,7 +56,7 @@ public class Timer {
      * own action field. A timer can now hold several, including several of the
      * same kind.</p>
      */
-    private final List<com.mateof24.trigger.Trigger> triggers = new ArrayList<>();
+    private final List<com.mateof24.trigger.TriggerRule> rules = new ArrayList<>();
     // commandEvents is kept sorted by atSeconds ascending.
     private final List<CommandEvent> commandEvents = new ArrayList<>();
     private final List<String> finishCommands = new ArrayList<>();
@@ -146,12 +146,24 @@ public class Timer {
      * never written back — the old keys do not survive the next save.</p>
      */
     private static void readTriggers(Timer timer, JsonObject json) {
+        if (json.has("rules") && json.get("rules").isJsonArray()) {
+            for (JsonElement element : json.getAsJsonArray("rules")) {
+                if (!element.isJsonObject()) continue;
+                com.mateof24.trigger.TriggerRule rule =
+                        com.mateof24.trigger.TriggerRule.fromJson(element.getAsJsonObject());
+                if (rule != null) timer.addRule(rule);
+            }
+            return;
+        }
+
+        // The flat list, one rule each. Lossless: a list of rules still means
+        // "any of these", which is what the flat list meant.
         if (json.has("triggers") && json.get("triggers").isJsonArray()) {
             for (JsonElement element : json.getAsJsonArray("triggers")) {
                 if (!element.isJsonObject()) continue;
                 com.mateof24.trigger.Trigger trigger =
                         com.mateof24.trigger.Trigger.fromJson(element.getAsJsonObject());
-                if (trigger != null) timer.addTrigger(trigger);
+                if (trigger != null) timer.addRule(com.mateof24.trigger.TriggerRule.fromFlat(trigger));
             }
             return;
         }
@@ -160,25 +172,28 @@ public class Timer {
         if (!type.isEmpty()) {
             com.mateof24.trigger.Trigger.Action action = com.mateof24.trigger.Trigger.Action.parse(
                     json.has("triggerAction") ? json.get("triggerAction").getAsString() : null);
-            timer.addTrigger(fromOldTriggerString(type, action));
+            timer.addRule(com.mateof24.trigger.TriggerRule.fromFlat(
+                    fromOldTriggerString(type, action)));
         }
 
         String objective = json.has("conditionObjective") ? json.get("conditionObjective").getAsString() : "";
         if (!objective.isEmpty()) {
-            timer.addTrigger(com.mateof24.trigger.Trigger.scoreboard(
+            timer.addRule(com.mateof24.trigger.TriggerRule.fromFlat(
+                    com.mateof24.trigger.Trigger.scoreboard(
                     com.mateof24.trigger.Trigger.Action.parse(
                             json.has("scoreConditionAction") ? json.get("scoreConditionAction").getAsString() : null),
                     objective,
                     json.has("conditionScore") ? json.get("conditionScore").getAsInt() : 0,
-                    oldHolder(json.has("conditionTarget") ? json.get("conditionTarget").getAsString() : null)));
+                    oldHolder(json.has("conditionTarget") ? json.get("conditionTarget").getAsString() : null))));
         }
 
         String expression = json.has("conditionExpression") ? json.get("conditionExpression").getAsString() : "";
         if (!expression.isEmpty()) {
-            timer.addTrigger(com.mateof24.trigger.Trigger.expression(
+            timer.addRule(com.mateof24.trigger.TriggerRule.fromFlat(
+                    com.mateof24.trigger.Trigger.expression(
                     com.mateof24.trigger.Trigger.Action.parse(
                             json.has("conditionExpressionAction") ? json.get("conditionExpressionAction").getAsString() : null),
-                    expression));
+                    expression)));
         }
     }
 
@@ -234,9 +249,9 @@ public class Timer {
         json.addProperty("nextTimer", nextTimer != null ? nextTimer : "");
         json.addProperty("repeatCooldownTicks", repeatCooldownTicks);
         json.addProperty("sequenceCooldownTicks", sequenceCooldownTicks);
-        JsonArray triggerArray = new JsonArray();
-        for (com.mateof24.trigger.Trigger trigger : triggers) triggerArray.add(trigger.toJson());
-        json.add("triggers", triggerArray);
+        JsonArray ruleArray = new JsonArray();
+        for (com.mateof24.trigger.TriggerRule rule : rules) ruleArray.add(rule.toJson());
+        json.add("rules", ruleArray);
         JsonArray events = new JsonArray();
         for (CommandEvent event : commandEvents) {
             JsonObject e = new JsonObject();
@@ -393,29 +408,26 @@ public class Timer {
         this.nextTimer = (nextTimer == null || nextTimer.isEmpty()) ? null : nextTimer;
     }
     /** Live list, insertion order. Server thread only. */
-    public List<com.mateof24.trigger.Trigger> triggers() { return triggers; }
+    public List<com.mateof24.trigger.TriggerRule> rules() { return rules; }
 
-    public boolean hasTriggers() { return !triggers.isEmpty(); }
+    public boolean hasRules() { return !rules.isEmpty(); }
 
-    /** Refuses a duplicate: the same watch for the same outcome twice does nothing. */
-    public boolean addTrigger(com.mateof24.trigger.Trigger trigger) {
-        if (trigger == null || !trigger.isValid()) return false;
-        if (triggers.size() >= MAX_TRIGGERS) return false;
-        for (com.mateof24.trigger.Trigger existing : triggers) {
-            if (existing.key().equals(trigger.key())) return false;
-        }
-        triggers.add(trigger);
+    /** Refuses one that could never fire rather than storing a rule that does nothing. */
+    public boolean addRule(com.mateof24.trigger.TriggerRule rule) {
+        if (rule == null || !rule.isValid()) return false;
+        if (rules.size() >= MAX_TRIGGERS) return false;
+        rules.add(rule);
         return true;
     }
 
-    /** Removes by position in {@link #triggers()}, zero-based. */
-    public boolean removeTrigger(int index) {
-        if (index < 0 || index >= triggers.size()) return false;
-        triggers.remove(index);
+    /** Removes by position in {@link #rules()}, zero-based. */
+    public boolean removeRule(int index) {
+        if (index < 0 || index >= rules.size()) return false;
+        rules.remove(index);
         return true;
     }
 
-    public void clearTriggers() { triggers.clear(); }
+    public void clearRules() { rules.clear(); }
     public long getRepeatCooldownTicks() { return repeatCooldownTicks; }
     public void setRepeatCooldownTicks(long ticks) { this.repeatCooldownTicks = Math.max(0, ticks); }
     public long getSequenceCooldownTicks() { return sequenceCooldownTicks; }

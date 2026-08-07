@@ -195,9 +195,12 @@ public final class AdminOps {
         json.addProperty("repeatCooldownTicks", def.repeatCooldownTicks());
         json.addProperty("nextTimer", def.nextTimer());
         json.addProperty("sequenceCooldownTicks", def.sequenceCooldownTicks());
-        JsonArray triggers = new JsonArray();
-        for (com.mateof24.trigger.Trigger trigger : def.triggers()) triggers.add(trigger.toJson());
-        json.add("triggers", triggers);
+        // Sent as rules, each carrying its condition. The surfaces read the
+        // single leaf for now, which is what they have always shown; the shape
+        // is already the one a tree needs.
+        JsonArray rules = new JsonArray();
+        for (com.mateof24.trigger.TriggerRule rule : def.triggers()) rules.add(rule.toJson());
+        json.add("rules", rules);
         json.addProperty("position", def.position());
         json.addProperty("customX", def.customX());
         json.addProperty("customY", def.customY());
@@ -607,8 +610,10 @@ public final class AdminOps {
                 intOf(args, "threshold", 0),
                 who);
 
-        if (!timer.addTrigger(trigger)) {
-            return Result.fail("That trigger is already there, or this timer has too many");
+        // One watch, wrapped in a rule. The editors still write single-leaf
+        // rules; the tree behind them is what R9's editor will fill.
+        if (!timer.addRule(com.mateof24.trigger.TriggerRule.fromFlat(trigger))) {
+            return Result.fail("That trigger cannot be used, or this timer has too many");
         }
         forget(name);
         TimerManager.getInstance().saveTimer(timer);
@@ -621,7 +626,7 @@ public final class AdminOps {
         if (name == null) return Result.fail("No such timer");
         com.mateof24.timer.Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
         if (timer == null) return Result.fail("No such timer");
-        if (!timer.removeTrigger(intOf(args, "index", -1))) return Result.fail("No such trigger");
+        if (!timer.removeRule(intOf(args, "index", -1))) return Result.fail("No such trigger");
         forget(name);
         TimerManager.getInstance().saveTimer(timer);
         return Result.ok();
@@ -632,7 +637,7 @@ public final class AdminOps {
         if (name == null) return Result.fail("No such timer");
         com.mateof24.timer.Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
         if (timer == null) return Result.fail("No such timer");
-        timer.clearTriggers();
+        timer.clearRules();
         forget(name);
         TimerManager.getInstance().saveTimer(timer);
         return Result.ok();

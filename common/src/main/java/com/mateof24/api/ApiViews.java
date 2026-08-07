@@ -55,7 +55,7 @@ public final class ApiViews {
                 timer.getRepeatCooldownTicks(),
                 timer.getNextTimer(),
                 timer.getSequenceCooldownTicks(),
-                java.util.List.copyOf(timer.triggers()),
+                java.util.List.copyOf(timer.rules()),
                 timer.display().preset(),
                 timer.display().x(),
                 timer.display().y(),

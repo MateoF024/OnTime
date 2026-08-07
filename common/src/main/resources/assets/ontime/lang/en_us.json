@@ -466,5 +466,6 @@
   "ontime.gui.editor.trigger.scope.tip": "Whose behaviour counts. Click to walk through them.",
   "ontime.gui.editor.trigger.count": "n",
   "ontime.gui.editor.trigger.names": "Names, separated by commas",
-  "ontime.gui.editor.trigger.selector": "@a[team=red]"
+  "ontime.gui.editor.trigger.selector": "@a[team=red]",
+  "ontime.command.trigger.describe.tree": "%s conditions combined"
 }

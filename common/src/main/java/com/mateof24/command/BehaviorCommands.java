@@ -366,7 +366,7 @@ final class BehaviorCommands {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
-        java.util.List<com.mateof24.trigger.Trigger> triggers = timerOpt.get().triggers();
+        java.util.List<com.mateof24.trigger.TriggerRule> triggers = timerOpt.get().rules();
         if (triggers.isEmpty()) {
             ctx.getSource().sendSuccess(() ->
                     Component.translatable("ontime.command.trigger.list.empty", name), false);
@@ -375,17 +375,28 @@ final class BehaviorCommands {
         ctx.getSource().sendSuccess(() ->
                 Component.translatable("ontime.command.trigger.list.header", name), false);
         int index = 1;
-        for (com.mateof24.trigger.Trigger trigger : triggers) {
+        for (com.mateof24.trigger.TriggerRule rule : triggers) {
             final int shown = index++;
             ctx.getSource().sendSuccess(() -> Component.translatable(
-                    "ontime.command.trigger.list.row", shown, describe(trigger),
-                    Component.translatable("ontime.trigger.action." + trigger.action().lower())), false);
+                    "ontime.command.trigger.list.row", shown, describe(rule),
+                    Component.translatable("ontime.trigger.action." + rule.action().lower())), false);
         }
         return 1;
     }
 
     /** {@code <kind> <value>}, or just the kind when it watches a bare event. */
-    static Component describe(com.mateof24.trigger.Trigger trigger) {
+    static Component describe(com.mateof24.trigger.TriggerRule rule) {
+        com.mateof24.trigger.Condition.Watch leaf = rule.singleLeaf();
+        if (leaf == null) {
+            // A rule with a tree behind it, which nothing writes yet. Said
+            // plainly rather than guessed at.
+            return Component.translatable("ontime.command.trigger.describe.tree",
+                    rule.condition().leaves().size());
+        }
+        return describeLeaf(leaf);
+    }
+
+    static Component describeLeaf(com.mateof24.trigger.Condition.Watch trigger) {
         Component kind = Component.translatable("ontime.trigger.kind." + trigger.kind().lower());
         if (trigger.kind() == com.mateof24.trigger.Trigger.Kind.SCOREBOARD) {
             return Component.translatable("ontime.command.trigger.describe.scoreboard",
@@ -417,7 +428,8 @@ final class BehaviorCommands {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
-        if (!timerOpt.get().addTrigger(trigger)) {
+        com.mateof24.trigger.TriggerRule rule = com.mateof24.trigger.TriggerRule.fromFlat(trigger);
+        if (!timerOpt.get().addRule(rule)) {
             ctx.getSource().sendFailure(Component.translatable(
                     "ontime.command.trigger.rejected", name, Timer.MAX_TRIGGERS));
             return 0;
@@ -425,8 +437,8 @@ final class BehaviorCommands {
         forget(name);
         TimerManager.getInstance().saveTimers();
         ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.trigger.added",
-                name, describe(trigger),
-                Component.translatable("ontime.trigger.action." + trigger.action().lower())), true);
+                name, describe(rule),
+                Component.translatable("ontime.trigger.action." + rule.action().lower())), true);
 
         // Stored either way — the pack may install FTB Quests later — but a
         // trigger that silently never fires is the kind of thing people spend
@@ -448,7 +460,7 @@ final class BehaviorCommands {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
-        if (!timerOpt.get().removeTrigger(index - 1)) {
+        if (!timerOpt.get().removeRule(index - 1)) {
             ctx.getSource().sendFailure(Component.translatable(
                     "ontime.command.trigger.invalid_index", index, name));
             return 0;
@@ -467,7 +479,7 @@ final class BehaviorCommands {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
-        timerOpt.get().clearTriggers();
+        timerOpt.get().clearRules();
         forget(name);
         TimerManager.getInstance().saveTimers();
         ctx.getSource().sendSuccess(() ->

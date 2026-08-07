@@ -27,8 +27,8 @@ public final class TriggerProgress {
 
     private TriggerProgress() {}
 
-    private static String keyOf(String timerName, Trigger trigger) {
-        return timerName + " " + trigger.key();
+    private static String keyOf(String timerName, TriggerRule rule) {
+        return timerName + " " + rule.id();
     }
 
     /**
@@ -38,9 +38,9 @@ public final class TriggerProgress {
      * @return true when that was the one that completed it, which is also when
      *         the tally is dropped so the next round starts from nothing
      */
-    public static boolean reached(String timerName, Trigger trigger, UUID player, int needed) {
-        if (timerName == null || trigger == null) return false;
-        String key = keyOf(timerName, trigger);
+    public static boolean reached(String timerName, TriggerRule rule, UUID player, int needed) {
+        if (timerName == null || rule == null) return false;
+        String key = keyOf(timerName, rule);
         Set<UUID> seen = done.computeIfAbsent(key, k -> ConcurrentHashMap.newKeySet());
 
         // A player with no identity behind the event cannot be counted twice,
@@ -54,8 +54,8 @@ public final class TriggerProgress {
     }
 
     /** How many have satisfied it so far, for anything that wants to show progress. */
-    public static int countFor(String timerName, Trigger trigger) {
-        Set<UUID> seen = done.get(keyOf(timerName, trigger));
+    public static int countFor(String timerName, TriggerRule rule) {
+        Set<UUID> seen = done.get(keyOf(timerName, rule));
         return seen == null ? 0 : seen.size();
     }
 

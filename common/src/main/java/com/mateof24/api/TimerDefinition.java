@@ -47,7 +47,7 @@ public record TimerDefinition(
          * expression, each with its own action field. They are one kind of
          * thing and a timer may now hold any number of them.</p>
          */
-        List<com.mateof24.trigger.Trigger> triggers,
+        List<com.mateof24.trigger.TriggerRule> triggers,
 
         /**
          * Where this timer draws and how big. Always set: a timer copies the

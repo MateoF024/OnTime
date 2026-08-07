@@ -28,23 +28,25 @@ public final class TriggerEvaluator {
      */
     public static boolean fires(MinecraftServer server, Timer timer, Trigger.Action want) {
         boolean fired = false;
-        for (Trigger trigger : timer.triggers()) {
-            if (trigger.action() != want || !trigger.isValid()) continue;
+        for (TriggerRule rule : timer.rules()) {
+            Condition.Watch leaf = rule.singleLeaf();
+            if (leaf == null || rule.action() != want || !leaf.isValid()) continue;
             // No early exit: a pending event trigger has to be consumed even
             // when an earlier one already answered, or it fires again later
             // for an event that has already been dealt with.
-            if (evaluate(server, timer, trigger)) fired = true;
+            if (evaluate(server, timer, rule, leaf)) fired = true;
         }
         return fired;
     }
 
-    private static boolean evaluate(MinecraftServer server, Timer timer, Trigger trigger) {
-        return switch (trigger.kind()) {
-            case SCOREBOARD -> scoreboard(server, timer, trigger);
+    private static boolean evaluate(MinecraftServer server, Timer timer,
+                                    TriggerRule rule, Condition.Watch leaf) {
+        return switch (leaf.kind()) {
+            case SCOREBOARD -> scoreboard(server, timer, leaf);
             case EXPRESSION -> com.mateof24.command.ConditionEvaluator
-                    .evaluate(trigger.value(), server, timer)
+                    .evaluate(leaf.value(), server, timer)
                     .orElse(false);
-            default -> TriggerRegistry.consume(timer.getName(), trigger) != null;
+            default -> TriggerRegistry.consume(timer.getName(), rule) != null;
         };
     }
 
@@ -56,7 +58,7 @@ public final class TriggerEvaluator {
      * team red have ten kills" is a count over a set, not a question about one
      * name.</p>
      */
-    private static boolean scoreboard(MinecraftServer server, Timer timer, Trigger trigger) {
+    private static boolean scoreboard(MinecraftServer server, Timer timer, Condition.Watch trigger) {
         try {
             java.util.List<net.minecraft.server.level.ServerPlayer> watched =
                     WhoResolver.resolve(server, timer, trigger.who());

@@ -38,7 +38,9 @@ public final class FTBQuestsPoller {
         if (!FTBQuestsIntegration.isReady()) return;
 
         for (Timer timer : TimerManager.getInstance().timersView()) {
-            for (Trigger trigger : timer.triggers()) {
+            for (TriggerRule rule : timer.rules()) {
+                Condition.Watch trigger = rule.singleLeaf();
+                if (trigger == null) continue;
                 if (trigger.kind() != Trigger.Kind.FTB_QUEST
                         && trigger.kind() != Trigger.Kind.FTB_REWARD) continue;
                 if (!trigger.isValid()) continue;
@@ -46,21 +48,21 @@ public final class FTBQuestsPoller {
                 // The action gate first: a start trigger on a running timer has
                 // nothing to do, and firing it would leave the fire pending
                 // until the timer stopped, long after the quest was completed.
-                if (trigger.action() == Trigger.Action.FINISH && !timer.isRunning()) continue;
-                if (trigger.action() == Trigger.Action.START && timer.isRunning()) continue;
+                if (rule.action() == Trigger.Action.FINISH && !timer.isRunning()) continue;
+                if (rule.action() == Trigger.Action.START && timer.isRunning()) continue;
 
-                String key = timer.getName() + " " + trigger.key();
+                String key = timer.getName() + " " + rule.id();
                 if (firedOnce.contains(key)) continue;
 
                 if (anyPlayerHas(server, trigger)) {
-                    TriggerRegistry.fireFor(timer.getName(), trigger);
+                    TriggerRegistry.fireFor(timer.getName(), rule);
                     firedOnce.add(key);
                 }
             }
         }
     }
 
-    private static boolean anyPlayerHas(MinecraftServer server, Trigger trigger) {
+    private static boolean anyPlayerHas(MinecraftServer server, Condition.Watch trigger) {
         boolean quest = trigger.kind() == Trigger.Kind.FTB_QUEST;
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             boolean has = quest
