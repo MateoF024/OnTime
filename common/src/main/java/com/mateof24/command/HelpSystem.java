@@ -272,7 +272,8 @@ public class HelpSystem {
                 "/timer trigger event add player_death finish",
                 "/timer trigger event add dimension_change minecraft:the_nether start",
                 "/timer trigger event add advancement minecraft:story/mine_stone finish",
-                "/timer trigger event add scoreboard kills 10 finish PlayerName",
+                "/timer trigger event add scoreboard kills 10 finish all players Bob,Ann",
+                "/timer trigger event add dimension_change minecraft:the_nether finish at_least 3 selector @a[team=red]",
                 "/timer trigger event add expression finish players_online > 4",
                 "/timer trigger event remove 1"
         ));

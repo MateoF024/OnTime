@@ -131,12 +131,83 @@ public class TimerCommands {
     // others (if / if_start), and absent on the scoreboard branch, which could
     // only ever end a timer.
 
+    /** Builds the trigger once the arguments and the subject are both known. */
+    @FunctionalInterface
+    private interface TriggerFactory {
+        Trigger build(CommandContext<CommandSourceStack> ctx, Who who);
+    }
+
+    /**
+     * One action leaf, and everything that can follow it.
+     *
+     * <p>Bare, it means the default subject — the timer's own audience, any
+     * one of them — which is what every trigger meant before there was a
+     * choice. Spelling out a quantifier and a subject after it is what makes
+     * "when both of them do" a different thing from "when either does".</p>
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> actionNode(
+            String literal, TriggerFactory make) {
+        LiteralArgumentBuilder<CommandSourceStack> node = Commands.literal(literal)
+                .executes(ctx -> BehaviorCommands.addTrigger(ctx, make.build(ctx, Who.DEFAULT)));
+
+        for (Who.Quantifier quantifier : Who.Quantifier.values()) {
+            if (quantifier == Who.Quantifier.AT_LEAST) {
+                node = node.then(Commands.literal(quantifier.lower())
+                        .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                                .then(scopeNodes(make, quantifier, true))
+                                .then(scopeValueNodes(make, quantifier, true))));
+            } else {
+                node = node.then(Commands.literal(quantifier.lower())
+                        .then(scopeNodes(make, quantifier, false))
+                        .then(scopeValueNodes(make, quantifier, false)));
+            }
+        }
+        return node;
+    }
+
+    /** The two subjects that name nobody: they are complete on their own. */
+    private static LiteralArgumentBuilder<CommandSourceStack> scopeNodes(
+            TriggerFactory make, Who.Quantifier quantifier, boolean counted) {
+        LiteralArgumentBuilder<CommandSourceStack> first = null;
+        for (Who.Scope scope : Who.Scope.values()) {
+            if (scope.needsValue()) continue;
+            LiteralArgumentBuilder<CommandSourceStack> node = Commands.literal(scope.lower())
+                    .executes(ctx -> BehaviorCommands.addTrigger(ctx, make.build(ctx,
+                            new Who(scope, "", quantifier, counted
+                                    ? IntegerArgumentType.getInteger(ctx, "count") : 1))));
+            first = first == null ? node : first.then(node);
+        }
+        return first;
+    }
+
+    /**
+     * The two that do name somebody, both greedy and both last.
+     *
+     * <p>A list of names has commas in it and a selector has brackets, so
+     * neither is a word. Greedy is also why they cannot be followed by
+     * anything.</p>
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> scopeValueNodes(
+            TriggerFactory make, Who.Quantifier quantifier, boolean counted) {
+        LiteralArgumentBuilder<CommandSourceStack> first = null;
+        for (Who.Scope scope : Who.Scope.values()) {
+            if (!scope.needsValue()) continue;
+            LiteralArgumentBuilder<CommandSourceStack> node = Commands.literal(scope.lower())
+                    .then(Commands.argument("who", StringArgumentType.greedyString())
+                            .suggests(scope == Who.Scope.PLAYERS
+                                    ? TimerCommands::suggestPlayerNames : TimerCommands::suggestSelectors)
+                            .executes(ctx -> BehaviorCommands.addTrigger(ctx, make.build(ctx,
+                                    new Who(scope, StringArgumentType.getString(ctx, "who"), quantifier,
+                                            counted ? IntegerArgumentType.getInteger(ctx, "count") : 1)))));
+            first = first == null ? node : first.then(node);
+        }
+        return first;
+    }
+
     private static LiteralArgumentBuilder<CommandSourceStack> bareTrigger(String literal, Trigger.Kind kind) {
         return Commands.literal(literal)
-                .then(Commands.literal("start").executes(ctx ->
-                        BehaviorCommands.addTrigger(ctx, Trigger.of(kind, Trigger.Action.START, ""))))
-                .then(Commands.literal("finish").executes(ctx ->
-                        BehaviorCommands.addTrigger(ctx, Trigger.of(kind, Trigger.Action.FINISH, ""))));
+                .then(actionNode("start", (c, who) -> Trigger.of(kind, Trigger.Action.START, "", who)))
+                .then(actionNode("finish", (c, who) -> Trigger.of(kind, Trigger.Action.FINISH, "", who)));
     }
 
     /** A kind narrowed by a resource id, with completion for it. */
@@ -146,42 +217,66 @@ public class TimerCommands {
         return Commands.literal(literal)
                 .then(Commands.argument("id", VanillaCompat.idArgument())
                         .suggests(suggestions)
-                        .then(Commands.literal("start").executes(ctx -> BehaviorCommands.addTrigger(ctx,
-                                Trigger.of(kind, Trigger.Action.START, VanillaCompat.getIdArgument(ctx, "id")))))
-                        .then(Commands.literal("finish").executes(ctx -> BehaviorCommands.addTrigger(ctx,
-                                Trigger.of(kind, Trigger.Action.FINISH, VanillaCompat.getIdArgument(ctx, "id"))))));
+                        .then(actionNode("start", (c, who) -> Trigger.of(kind, Trigger.Action.START,
+                                VanillaCompat.getIdArgument(c, "id"), who)))
+                        .then(actionNode("finish", (c, who) -> Trigger.of(kind, Trigger.Action.FINISH,
+                                VanillaCompat.getIdArgument(c, "id"), who))));
     }
 
     /** FTB ids are opaque hex strings, so there is nothing to complete. */
     private static LiteralArgumentBuilder<CommandSourceStack> wordTrigger(String literal, Trigger.Kind kind) {
         return Commands.literal(literal)
                 .then(Commands.argument("id", StringArgumentType.word())
-                        .then(Commands.literal("start").executes(ctx -> BehaviorCommands.addTrigger(ctx,
-                                Trigger.of(kind, Trigger.Action.START, StringArgumentType.getString(ctx, "id")))))
-                        .then(Commands.literal("finish").executes(ctx -> BehaviorCommands.addTrigger(ctx,
-                                Trigger.of(kind, Trigger.Action.FINISH, StringArgumentType.getString(ctx, "id"))))));
+                        .then(actionNode("start", (c, who) -> Trigger.of(kind, Trigger.Action.START,
+                                StringArgumentType.getString(c, "id"), who)))
+                        .then(actionNode("finish", (c, who) -> Trigger.of(kind, Trigger.Action.FINISH,
+                                StringArgumentType.getString(c, "id"), who))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> scoreboardAction(String literal, Trigger.Action action) {
+        return actionNode(literal, (c, who) -> Trigger.scoreboard(action,
+                StringArgumentType.getString(c, "objective"),
+                IntegerArgumentType.getInteger(c, "score"), who));
     }
 
     /**
-     * The score holder is greedy and last.
+     * The expression takes no subject.
      *
-     * <p>It was a word, and a word rejects an asterisk -- which is exactly what
-     * its own suggestion offered, so the completion proposed a value the parser
-     * refused. Greedy also accepts a selector with brackets in it.</p>
+     * <p>It is one question asked of the server, not of a player, so there is
+     * nobody for a quantifier to count. Everything a per-player condition needs
+     * belongs in the expression itself.</p>
      */
-    private static LiteralArgumentBuilder<CommandSourceStack> scoreboardAction(String literal, Trigger.Action action) {
-        return Commands.literal(literal)
-                .executes(ctx -> BehaviorCommands.addTrigger(ctx, Trigger.scoreboard(action,
-                        StringArgumentType.getString(ctx, "objective"),
-                        IntegerArgumentType.getInteger(ctx, "score"), Who.DEFAULT)));
-    }
-
-    /** The action comes before the expression, which eats the rest of the line. */
     private static LiteralArgumentBuilder<CommandSourceStack> expressionAction(String literal, Trigger.Action action) {
         return Commands.literal(literal)
                 .then(Commands.argument("expression", StringArgumentType.greedyString())
                         .executes(ctx -> BehaviorCommands.addTrigger(ctx,
                                 Trigger.expression(action, StringArgumentType.getString(ctx, "expression")))));
+    }
+
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestPlayerNames(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        net.minecraft.server.MinecraftServer server = ctx.getSource().getServer();
+        if (server == null) return builder.buildFuture();
+        String remaining = builder.getRemaining().toLowerCase();
+        // After a comma the completion is for the next name, not the whole list.
+        int comma = remaining.lastIndexOf(',');
+        String head = comma < 0 ? "" : remaining.substring(0, comma + 1);
+        String tail = comma < 0 ? remaining : remaining.substring(comma + 1).trim();
+        for (net.minecraft.server.level.ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (player.getScoreboardName().toLowerCase().startsWith(tail)) {
+                builder.suggest(head + player.getScoreboardName());
+            }
+        }
+        return builder.buildFuture();
+    }
+
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestSelectors(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        String remaining = builder.getRemaining().toLowerCase();
+        for (String option : new String[]{"@a", "@a[team=]", "@a[tag=]", "@a[gamemode=survival]"}) {
+            if (option.startsWith(remaining)) builder.suggest(option);
+        }
+        return builder.buildFuture();
     }
 
     /**
