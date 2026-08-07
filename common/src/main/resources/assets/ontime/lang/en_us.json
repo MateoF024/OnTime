@@ -467,5 +467,15 @@
   "ontime.gui.editor.trigger.count": "n",
   "ontime.gui.editor.trigger.names": "Names, separated by commas",
   "ontime.gui.editor.trigger.selector": "@a[team=red]",
-  "ontime.command.trigger.describe.tree": "%s conditions combined"
+  "ontime.command.trigger.describe.tree": "%s conditions combined",
+  "ontime.gui.editor.trigger.startsIt": "Starts it",
+  "ontime.gui.editor.trigger.endsIt": "Ends it",
+  "ontime.gui.editor.trigger.group.all": "all of these hold",
+  "ontime.gui.editor.trigger.group.any": "any of these holds",
+  "ontime.gui.editor.trigger.group.at_least": "at least %s of these hold",
+  "ontime.gui.editor.trigger.addGroup": "Or these",
+  "ontime.gui.editor.trigger.addGroup.tip": "Adds another group. The timer acts when any one group is satisfied.",
+  "ontime.gui.editor.trigger.addHere": "Add here",
+  "ontime.gui.editor.trigger.addingHere": "Adding here",
+  "ontime.gui.editor.trigger.addHere.tip": "The next condition you add joins this group, so it has to hold together with the rest. Press again to leave the group and make a reason of its own."
 }

@@ -91,41 +91,85 @@ public final class AdminModel {
         public long sequenceCooldownTicks() { return num(raw, "sequenceCooldownTicks"); }
 
         /** One reason this timer starts or ends, as the server describes it. */
-    public record Trigger(String kind, String action, String value, int threshold,
-                          String scope, String subject, String quantifier, int count) {
+    /** One condition. What it does to the timer belongs to the rule holding it. */
+    public record Trigger(String id, String kind, String value, int threshold,
+                          String scope, String subject, String quantifier, int count) {}
+
+    /** Conditions that all have to hold together. */
+    public record Group(String id, String mode, int count, List<Trigger> conditions) {}
+
+    /** What a timer does, and everything that has to be true for it. */
+    public record Rule(String id, String action, List<Group> groups) {
         public boolean startsIt() { return "start".equals(action); }
     }
 
     /**
-     * Every trigger of this timer, in the order the server keeps them.
+     * The rules, two levels deep.
      *
-     * <p>The server sends rules, each with a condition. A rule with one
-     * condition — which is all any editor writes today — reads exactly as a
-     * trigger always did, so this flattens that one case and leaves the rest
-     * for the editor that will understand trees.</p>
+     * <p>A rule is true when any of its groups is, and a group when all of its
+     * conditions are. A rule whose condition is a single watch reads as one
+     * group of one, so a timer written before groups existed looks no
+     * different — which is what lets the page draw both without asking which
+     * it has.</p>
      */
-    public List<Trigger> triggers() {
-        List<Trigger> out = new ArrayList<>();
+    public List<Rule> rules() {
+        List<Rule> out = new ArrayList<>();
         if (raw == null || !raw.has("rules") || !raw.get("rules").isJsonArray()) return out;
         for (JsonElement element : raw.getAsJsonArray("rules")) {
             if (!element.isJsonObject()) continue;
             JsonObject rule = element.getAsJsonObject();
             if (!rule.has("condition") || !rule.get("condition").isJsonObject()) continue;
-            JsonObject json = rule.getAsJsonObject("condition");
-            if (!"watch".equals(str(json, "node", "watch"))) continue;
-            JsonObject who = json.has("who") && json.get("who").isJsonObject()
-                    ? json.getAsJsonObject("who") : new JsonObject();
-            out.add(new Trigger(
-                    str(json, "kind", ""),
-                    str(rule, "action", "finish"),
-                    str(json, "value", ""),
-                    (int) num(json, "threshold"),
-                    str(who, "scope", "audience"),
-                    str(who, "value", ""),
-                    str(who, "quantifier", "any"),
-                    (int) numOr(who, "count", 1)));
+            JsonObject root = rule.getAsJsonObject("condition");
+
+            List<Group> groups = new ArrayList<>();
+            boolean outer = "group".equals(str(root, "node", "watch"))
+                    && "any".equals(str(root, "mode", "all"));
+            if (outer && root.has("children") && root.get("children").isJsonArray()) {
+                for (JsonElement child : root.getAsJsonArray("children")) {
+                    if (child.isJsonObject()) groups.add(groupOf(child.getAsJsonObject()));
+                }
+            } else {
+                groups.add(groupOf(root));
+            }
+            out.add(new Rule(str(rule, "id", ""), str(rule, "action", "finish"), groups));
         }
         return out;
+    }
+
+    private static Group groupOf(JsonObject node) {
+        List<Trigger> conditions = new ArrayList<>();
+        if ("group".equals(str(node, "node", "watch"))) {
+            if (node.has("children") && node.get("children").isJsonArray()) {
+                for (JsonElement child : node.getAsJsonArray("children")) {
+                    if (!child.isJsonObject()) continue;
+                    JsonObject inner = child.getAsJsonObject();
+                    // A group inside a group is deeper than this page draws.
+                    // The model allows it and the API can make it; the editor
+                    // works in two levels because two levels are every
+                    // combination there is.
+                    if ("group".equals(str(inner, "node", "watch"))) continue;
+                    conditions.add(watchOf(inner));
+                }
+            }
+            return new Group(str(node, "id", ""), str(node, "mode", "all"),
+                    (int) numOr(node, "count", 1), conditions);
+        }
+        conditions.add(watchOf(node));
+        return new Group(str(node, "id", ""), "all", 1, conditions);
+    }
+
+    private static Trigger watchOf(JsonObject json) {
+        JsonObject who = json.has("who") && json.get("who").isJsonObject()
+                ? json.getAsJsonObject("who") : new JsonObject();
+        return new Trigger(
+                str(json, "id", ""),
+                str(json, "kind", ""),
+                str(json, "value", ""),
+                (int) num(json, "threshold"),
+                str(who, "scope", "audience"),
+                str(who, "value", ""),
+                str(who, "quantifier", "any"),
+                (int) numOr(who, "count", 1));
     }
 
     public String conditionObjective() { return str(raw, "conditionObjective", ""); }

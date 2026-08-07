@@ -467,5 +467,15 @@
   "ontime.gui.editor.trigger.count": "n",
   "ontime.gui.editor.trigger.names": "Nombres, separados por comas",
   "ontime.gui.editor.trigger.selector": "@a[team=red]",
-  "ontime.command.trigger.describe.tree": "%s condiciones combinadas"
+  "ontime.command.trigger.describe.tree": "%s condiciones combinadas",
+  "ontime.gui.editor.trigger.startsIt": "Lo arranca",
+  "ontime.gui.editor.trigger.endsIt": "Lo termina",
+  "ontime.gui.editor.trigger.group.all": "se cumplen todas",
+  "ontime.gui.editor.trigger.group.any": "se cumple alguna",
+  "ontime.gui.editor.trigger.group.at_least": "se cumplen al menos %s",
+  "ontime.gui.editor.trigger.addGroup": "O estas",
+  "ontime.gui.editor.trigger.addGroup.tip": "Añade otro grupo. El contador actúa cuando se cumple cualquiera de los grupos.",
+  "ontime.gui.editor.trigger.addHere": "Añadir aquí",
+  "ontime.gui.editor.trigger.addingHere": "Añadiendo aquí",
+  "ontime.gui.editor.trigger.addHere.tip": "La siguiente condición que añadas entra en este grupo, así que tendrá que cumplirse junto con las demás. Pulsa otra vez para salir del grupo y crear un motivo aparte."
 }

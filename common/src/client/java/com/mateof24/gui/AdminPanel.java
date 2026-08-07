@@ -725,6 +725,9 @@ public final class AdminPanel {
             "dimension_change", "advancement", "ftb_quest", "ftb_reward",
             "scoreboard", "expression"};
 
+    /** The group the next condition joins, or null to make a rule of its own. */
+    private String pendingGroup;
+
     private int triggerKind = 0;
     private boolean triggerStarts = false;
     private int triggerQuantifier = 0;
@@ -771,9 +774,46 @@ public final class AdminPanel {
         cycleBack.put(button, () -> { set.accept((current - 1 + size) % size); init(); });
     }
 
+
+    /**
+     * One line of the trigger page.
+     *
+     * <p>The page is a rule, the groups that make it true, and the conditions
+     * inside each group — drawn as indented lines rather than as a tree
+     * control. Flattening it here is what lets the list scroll and measure the
+     * way every other list in this panel does.</p>
+     *
+     * @param depth  0 a rule, 1 a group, 2 a condition
+     * @param nodeId what the remove button on this line would take away
+     */
+    private record TriggerLine(int depth, String nodeId, String ruleId,
+                               Component text, boolean startsIt, boolean removable) {}
+
+    private List<TriggerLine> triggerLines(AdminModel.TimerRow timer) {
+        List<TriggerLine> out = new ArrayList<>();
+        if (timer == null) return out;
+        for (AdminModel.TimerRow.Rule rule : timer.rules()) {
+            out.add(new TriggerLine(0, rule.id(), rule.id(),
+                    Component.translatable(rule.startsIt()
+                            ? "ontime.gui.editor.trigger.startsIt"
+                            : "ontime.gui.editor.trigger.endsIt"),
+                    rule.startsIt(), true));
+            for (AdminModel.TimerRow.Group group : rule.groups()) {
+                out.add(new TriggerLine(1, group.id(), rule.id(),
+                        Component.translatable(
+                                "ontime.gui.editor.trigger.group." + group.mode(), group.count()),
+                        rule.startsIt(), false));
+                for (AdminModel.TimerRow.Trigger condition : group.conditions()) {
+                    out.add(new TriggerLine(2, condition.id(), rule.id(),
+                            describeTrigger(condition), rule.startsIt(), true));
+                }
+            }
+        }
+        return out;
+    }
+
     private int triggerCount() {
-        AdminModel.TimerRow timer = model.timer(model.selectedTimer());
-        return timer == null ? 0 : timer.triggers().size();
+        return triggerLines(model.timer(model.selectedTimer())).size();
     }
 
     /** True while the chosen kind needs no value at all. */
@@ -795,22 +835,65 @@ public final class AdminPanel {
      * only be reached from a command.</p>
      */
     private void buildTriggerRows(AdminModel.TimerRow timer, int bottom) {
-        List<AdminModel.TimerRow.Trigger> entries = timer == null ? List.of() : timer.triggers();
+        List<TriggerLine> lines = triggerLines(timer);
         editorRowsShown = Math.max(1, (bottom - editorFieldTop) / 20);
-        detailScroll = Math.max(0, Math.min(Math.max(0, entries.size() - editorRowsShown), detailScroll));
+        detailScroll = Math.max(0, Math.min(Math.max(0, lines.size() - editorRowsShown), detailScroll));
 
-        for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
-            final int index = detailScroll + i;
+        for (int i = 0; i < editorRowsShown && detailScroll + i < lines.size(); i++) {
+            TriggerLine line = lines.get(detailScroll + i);
             int y = editorFieldTop + i * 20;
+            int right = width - GUTTER;
+
+            // The button that adds a condition lives on the group, because the
+            // group is where the difference between "and" and "or" is.
+            if (line.depth() == 1) {
+                boolean filling = line.nodeId().equals(pendingGroup);
+                host.addWidget(Button.builder(
+                                Component.translatable(filling
+                                        ? "ontime.gui.editor.trigger.addingHere"
+                                        : "ontime.gui.editor.trigger.addHere"),
+                                b -> {
+                                    // Pressing the one already chosen unchooses
+                                    // it, so there is a way back to making a
+                                    // rule of its own without leaving the page.
+                                    pendingGroup = filling ? null : line.nodeId();
+                                    init();
+                                })
+                        .bounds(right - 78, y, 78, 18)
+                        .tooltip(Tooltip.create(Component.translatable(
+                                "ontime.gui.editor.trigger.addHere.tip")))
+                        .build());
+                continue;
+            }
+
+            if (line.depth() == 0) {
+                host.addWidget(Button.builder(
+                                Component.translatable("ontime.gui.editor.trigger.addGroup"),
+                                b -> {
+                                    JsonObject args = new JsonObject();
+                                    args.addProperty("name", timer.name());
+                                    args.addProperty("ruleId", line.ruleId());
+                                    args.addProperty("mode", "all");
+                                    args.addProperty("action", line.startsIt() ? "start" : "finish");
+                                    send("timer.addGroup", args);
+                                    awaitingApply = true;
+                                })
+                        .bounds(right - 102, y, 78, 18)
+                        .tooltip(Tooltip.create(Component.translatable(
+                                "ontime.gui.editor.trigger.addGroup.tip")))
+                        .build());
+            }
+
+            if (!line.removable()) continue;
             host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.trigger.remove"),
                             b -> {
                                 JsonObject args = new JsonObject();
                                 args.addProperty("name", timer.name());
-                                args.addProperty("index", index);
-                                send("timer.removeTrigger", args);
+                                args.addProperty("conditionId", line.nodeId());
+                                send("timer.removeCondition", args);
                                 awaitingApply = true;
                             })
-                    .bounds(width - GUTTER - 20, y, 20, 18)
+                    .bounds(right - 20, y, 20, 18)
                     .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.remove.tip")))
                     .build());
         }
@@ -892,6 +975,11 @@ public final class AdminPanel {
                             args.addProperty("subjectValue", triggerSubject.getValue().trim());
                         }
                     }
+                    // Into the group that was chosen, or a rule of its own
+                    // when none was. Cleared either way, so the next one does
+                    // not quietly land somewhere it was not meant to.
+                    if (pendingGroup != null) args.addProperty("groupId", pendingGroup);
+                    pendingGroup = null;
                     send("timer.addTrigger", args);
                     awaitingApply = true;
                 })
@@ -965,19 +1053,24 @@ public final class AdminPanel {
 
     /** One line per trigger: what it watches, and what it does to the timer. */
     private void drawTriggerRows(Painter painter, AdminModel.TimerRow timer) {
-        List<AdminModel.TimerRow.Trigger> entries = timer == null ? List.of() : timer.triggers();
-        if (entries.isEmpty()) {
+        List<TriggerLine> lines = triggerLines(timer);
+        if (lines.isEmpty()) {
             painter.text(Component.translatable("ontime.gui.editor.trigger.none"),
                     editorFieldX, editorFieldTop, COLOR_TEXT);
             return;
         }
-        for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
-            AdminModel.TimerRow.Trigger trigger = entries.get(detailScroll + i);
+        for (int i = 0; i < editorRowsShown && detailScroll + i < lines.size(); i++) {
+            TriggerLine line = lines.get(detailScroll + i);
             int y = editorFieldTop + i * 20;
-            painter.text(Component.translatable(
-                            "ontime.trigger.action." + (trigger.startsIt() ? "start" : "finish")),
-                    editorFieldX, y, trigger.startsIt() ? COLOR_COOLDOWN : COLOR_PAUSED);
-            painter.text(describeTrigger(trigger), editorFieldX + 56, y, COLOR_TEXT);
+            // Indentation is the whole of the notation. Green for a rule that
+            // starts a timer and red for one that ends it, which is the pairing
+            // every other on-or-off control in this panel already uses.
+            int colour = switch (line.depth()) {
+                case 0 -> line.startsIt() ? COLOR_RUNNING : COLOR_ERROR;
+                case 1 -> COLOR_MUTED_TEXT;
+                default -> COLOR_TEXT;
+            };
+            painter.text(line.text(), editorFieldX + line.depth() * 10, y + 5, colour);
         }
     }
 
