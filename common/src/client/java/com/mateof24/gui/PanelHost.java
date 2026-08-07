@@ -33,4 +33,15 @@ public interface PanelHost {
      *             and validates it, and nothing here assumes it will succeed
      */
     void sendAction(String json);
+
+    /**
+     * Opens the placement screen and comes back to <em>this</em> screen.
+     *
+     * <p>It used to open through a static hook that returned by building a new
+     * panel. A new panel is a new tab and, worse, an empty pending map: the
+     * position the picker had just written was thrown away before Apply could
+     * ever be pressed, which is why nothing it did ever stuck.</p>
+     */
+    void openPicker(String timerName, String preset, int x, int y, float scale,
+                    String timeText, String[] titles, PositionPicker.Save save);
 }

@@ -609,7 +609,7 @@ public final class AdminPanel {
                                     // fields when Custom X and Custom Y went,
                                     // so looking them up returned nothing and
                                     // the button did nothing.
-                                    AdminClientState.openPicker(timer.name(),
+                                    host.openPicker(timer.name(),
                                             model.configString("positionPreset", "BOSSBAR"),
                                             displayInt(timer, "x", -1),
                                             displayInt(timer, "y", 4),
@@ -1082,7 +1082,7 @@ public final class AdminPanel {
                                     // defaults to, so a counter that has never
                                     // been placed opens where it draws today
                                     // rather than in the corner.
-                                    b -> AdminClientState.openPicker(null,
+                                    b -> host.openPicker(null,
                                             model.configString("positionPreset", "BOSSBAR"),
                                             model.configInt("timerX", -1),
                                             model.configInt("timerY", 4),

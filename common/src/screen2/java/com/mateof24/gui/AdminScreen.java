@@ -35,8 +35,6 @@ public class AdminScreen extends Screen implements PanelHost {
     /** Lets {@link AdminClientState} open this screen without naming the class. */
     public static void register() {
         AdminClientState.setOpener(() -> Minecraft.getInstance().setScreen(new AdminScreen()));
-        AdminClientState.setPickerOpener((name, preset, x, y, scale, time, titles, save) ->
-                Minecraft.getInstance().setScreen(new PositionScreen(name, preset, x, y, scale, time, titles, save)));
     }
 
     @Override
@@ -177,5 +175,12 @@ public class AdminScreen extends Screen implements PanelHost {
         public int lineHeight() {
             return font().lineHeight;
         }
+    }
+
+    @Override
+    public void openPicker(String timerName, String preset, int x, int y, float scale,
+                           String timeText, String[] titles, PositionPicker.Save save) {
+        Minecraft.getInstance().setScreen(new PositionScreen(
+                this, timerName, preset, x, y, scale, timeText, titles, save));
     }
 }

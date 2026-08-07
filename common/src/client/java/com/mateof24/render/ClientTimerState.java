@@ -52,8 +52,20 @@ public class ClientTimerState {
     }
 
     public static boolean shouldDisplay() {
-        return visible && !views.isEmpty();
+        return visible && !placing && !views.isEmpty();
     }
+
+    /**
+     * True while the placement screen is up.
+     *
+     * <p>The real overlay is suppressed for exactly as long as that screen is
+     * open, and nowhere else. Otherwise a timer that is running draws itself
+     * behind the sample being dragged and the two read as one duplicated
+     * counter.</p>
+     */
+    private static boolean placing;
+
+    public static void setPlacing(boolean value) { placing = value; }
 
     /**
      * Minimum client ticks between two tick sounds.

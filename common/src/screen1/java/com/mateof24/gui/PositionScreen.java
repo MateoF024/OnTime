@@ -16,21 +16,26 @@ import net.minecraft.network.chat.Component;
 public class PositionScreen extends Screen {
 
     private final PositionPicker picker;
-    public PositionScreen(String timerName, String preset, int x, int y, float scale,
-                          String timeText, String[] titles, PositionPicker.Save save) {
+    private final Screen parent;
+    public PositionScreen(Screen parent, String timerName, String preset, int x, int y,
+                          float scale, String timeText, String[] titles,
+                          PositionPicker.Save save) {
         super(Component.translatable("ontime.gui.picker.title"));
+        this.parent = parent;
+        com.mateof24.render.ClientTimerState.setPlacing(true);
         this.picker = new PositionPicker(timerName, preset, x, y, scale, timeText, titles, save);
     }
 
     /**
      * Back to the panel it was opened from.
      *
-     * <p>A fresh one rather than the instance that opened this: the panel
-     * rebuilds itself from the server's snapshot anyway, and holding on to the
-     * old screen only differs in the versions where reaching it is awkward.</p>
+     * <p>The very screen that opened it, not a new one. A new panel starts on
+     * the first tab with nothing pending, so what was placed here never
+     * survived the trip back.</p>
      */
     private void closeBack() {
-        Minecraft.getInstance().setScreen(new AdminScreen());
+        com.mateof24.render.ClientTimerState.setPlacing(false);
+        Minecraft.getInstance().setScreen(parent);
     }
 
     @Override
@@ -120,6 +125,12 @@ public class PositionScreen extends Screen {
     @Override
     public boolean shouldCloseOnEsc() {
         return false;
+    }
+
+    @Override
+    public void onClose() {
+        com.mateof24.render.ClientTimerState.setPlacing(false);
+        super.onClose();
     }
 
     @Override
