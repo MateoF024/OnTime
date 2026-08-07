@@ -41,11 +41,17 @@ public class TimerCommands {
             // No defensive copy: this runs on the server thread once per
             // keystroke, and only names are read.
             String remaining = builder.getRemaining().toLowerCase();
+
+            // Prefixes first, then anything containing what was typed, the way
+            // vanilla finds an id from the middle of it. Matching only on the
+            // prefix meant you had to remember how a timer's name began.
+            java.util.List<String> contains = new java.util.ArrayList<>();
             for (Timer timer : TimerManager.getInstance().timersView()) {
-                if (timer.getName().toLowerCase().startsWith(remaining)) {
-                    builder.suggest(timer.getName());
-                }
+                String lower = timer.getName().toLowerCase();
+                if (lower.startsWith(remaining)) builder.suggest(timer.getName());
+                else if (!remaining.isEmpty() && lower.contains(remaining)) contains.add(timer.getName());
             }
+            contains.forEach(builder::suggest);
 
             return builder.buildFuture();
         }
