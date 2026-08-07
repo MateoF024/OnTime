@@ -421,7 +421,6 @@
   "ontime.gui.editor.trigger.value": "Id",
   "ontime.gui.editor.trigger.objective": "Objetivo",
   "ontime.gui.editor.trigger.score": "Puntos",
-  "ontime.gui.editor.trigger.target": "Titular, o *",
   "ontime.gui.exit": "Salir",
   "ontime.gui.timers.dialog.start.body": "Quién ve este contador, y si comparten un mismo reloj",
   "ontime.gui.timers.dialog.audience": "Audiencia: %s",
@@ -455,5 +454,17 @@
   "ontime.who.any": "cualquiera de %s",
   "ontime.who.all": "todos de %s",
   "ontime.who.at_least": "al menos %s de %s",
-  "ontime.command.trigger.describe.who": "%s - %s"
+  "ontime.command.trigger.describe.who": "%s - %s",
+  "ontime.who.q.any": "Cualquiera de",
+  "ontime.who.q.all": "Todos de",
+  "ontime.who.q.at_least": "Al menos",
+  "ontime.who.s.audience": "La audiencia del contador",
+  "ontime.who.s.everyone": "Cualquiera del servidor",
+  "ontime.who.s.players": "Estos jugadores",
+  "ontime.who.s.selector": "Un selector",
+  "ontime.gui.editor.trigger.quantifier.tip": "Cuántos de los jugadores vigilados hacen falta.",
+  "ontime.gui.editor.trigger.scope.tip": "Quién cuenta. Pulsa para recorrer las opciones.",
+  "ontime.gui.editor.trigger.count": "n",
+  "ontime.gui.editor.trigger.names": "Nombres, separados por comas",
+  "ontime.gui.editor.trigger.selector": "@a[team=red]"
 }

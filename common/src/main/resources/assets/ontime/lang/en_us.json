@@ -421,7 +421,6 @@
   "ontime.gui.editor.trigger.value": "Id",
   "ontime.gui.editor.trigger.objective": "Objective",
   "ontime.gui.editor.trigger.score": "Score",
-  "ontime.gui.editor.trigger.target": "Holder, or *",
   "ontime.gui.exit": "Exit",
   "ontime.gui.timers.dialog.start.body": "Who sees this timer, and whether they share one clock",
   "ontime.gui.timers.dialog.audience": "Audience: %s",
@@ -455,5 +454,17 @@
   "ontime.who.any": "any of %s",
   "ontime.who.all": "all of %s",
   "ontime.who.at_least": "at least %s of %s",
-  "ontime.command.trigger.describe.who": "%s - %s"
+  "ontime.command.trigger.describe.who": "%s - %s",
+  "ontime.who.q.any": "Any of",
+  "ontime.who.q.all": "All of",
+  "ontime.who.q.at_least": "At least",
+  "ontime.who.s.audience": "The timer's audience",
+  "ontime.who.s.everyone": "Anybody on the server",
+  "ontime.who.s.players": "These players",
+  "ontime.who.s.selector": "A selector",
+  "ontime.gui.editor.trigger.quantifier.tip": "How many of the watched players it takes.",
+  "ontime.gui.editor.trigger.scope.tip": "Whose behaviour counts. Click to walk through them.",
+  "ontime.gui.editor.trigger.count": "n",
+  "ontime.gui.editor.trigger.names": "Names, separated by commas",
+  "ontime.gui.editor.trigger.selector": "@a[team=red]"
 }

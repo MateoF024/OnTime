@@ -58,6 +58,11 @@
       "trg.ftb_reward": "An FTB reward is claimed",
       "trg.scoreboard": "A score reaches a value",
       "trg.expression": "An expression is true",
+      "trg.who": "Watching", "trg.count": "How many",
+      "trg.q.any": "any of", "trg.q.all": "all of", "trg.q.at_least": "at least",
+      "trg.s.audience": "the timer's audience", "trg.s.everyone": "anybody on the server",
+      "trg.s.players": "these players", "trg.s.selector": "a selector",
+      "trg.names": "Names, separated by commas", "trg.selector": "@a[team=red]",
       "group.server": "Server", "group.web": "Web", "group.reset": "Reset",
       "reset.what": "Every setting above, back to what the mod ships with",
       "reset.do": "Restore defaults", "reset.title": "Restore every default?",
@@ -113,6 +118,11 @@
       "trg.ftb_reward": "Se reclama una recompensa de FTB",
       "trg.scoreboard": "Una puntuación llega a un valor",
       "trg.expression": "Una expresión se cumple",
+      "trg.who": "Vigilando", "trg.count": "Cuántos",
+      "trg.q.any": "cualquiera de", "trg.q.all": "todos de", "trg.q.at_least": "al menos",
+      "trg.s.audience": "la audiencia del contador", "trg.s.everyone": "cualquiera del servidor",
+      "trg.s.players": "estos jugadores", "trg.s.selector": "un selector",
+      "trg.names": "Nombres, separados por comas", "trg.selector": "@a[team=red]",
       "group.server": "Servidor", "group.web": "Web", "group.reset": "Restablecer",
       "reset.what": "Todos los ajustes de arriba, a los que trae el mod",
       "reset.do": "Restaurar valores", "reset.title": "¿Restaurar todos los valores?",
@@ -922,15 +932,34 @@
   const TRIGGER_KINDS = ["player_join", "player_leave", "player_death", "player_respawn",
     "dimension_change", "advancement", "ftb_quest", "ftb_reward", "scoreboard", "expression"];
 
+  /** How many of the watched players it takes, and who they are. */
+  const QUANTIFIERS = ["any", "all", "at_least"];
+  const SCOPES = ["audience", "everyone", "players", "selector"];
+
+  /** The one kind that asks the server rather than a player, so it has no subject. */
+  const NO_SUBJECT = "expression";
+
   /** One trigger in words, the same shape the commands use. */
   function describeTrigger(trigger) {
     const kind = t("trg." + trigger.kind);
+    let text = kind;
     if (trigger.kind === "scoreboard") {
-      return kind + " (" + (trigger.value || "") + " \u2265 " + (trigger.threshold ?? 0)
-        + ", " + (trigger.target || "*") + ")";
+      text = kind + " (" + (trigger.value || "") + " \u2265 " + (trigger.threshold ?? 0) + ")";
+    } else if (trigger.value) {
+      text = kind + " (" + trigger.value + ")";
     }
-    if (!trigger.value) return kind;
-    return kind + " (" + trigger.value + ")";
+    if (trigger.kind === NO_SUBJECT) return text;
+    return text + " \u00b7 " + describeWho(trigger.who);
+  }
+
+  /** "all of these players: Bob, Ann" — the same wording the commands print. */
+  function describeWho(who) {
+    if (!who) return t("trg.q.any") + " " + t("trg.s.audience");
+    const quantifier = who.quantifier === "at_least"
+      ? t("trg.q.at_least") + " " + (who.count ?? 1)
+      : t("trg.q." + (who.quantifier || "any"));
+    const scope = t("trg.s." + (who.scope || "audience"));
+    return quantifier + " " + scope + (who.value ? ": " + who.value : "");
   }
 
   function editDialog(timer) {
@@ -1059,6 +1088,20 @@
         const action = document.createElement("select");
         action.append(new Option(t("finish"), "finish"), new Option(t("startIt"), "start"));
 
+        const quantifier = document.createElement("select");
+        for (const q of QUANTIFIERS) quantifier.append(new Option(t("trg.q." + q), q));
+
+        const count = document.createElement("input");
+        count.type = "number";
+        count.min = "1";
+        count.value = "1";
+
+        const scope = document.createElement("select");
+        for (const sc of SCOPES) scope.append(new Option(t("trg.s." + sc), sc));
+
+        const subject = document.createElement("input");
+        subject.type = "text";
+
         // Only the boxes the chosen kind actually uses. A bare event needs
         // nothing, a scoreboard needs three.
         const shape = () => {
@@ -1067,10 +1110,22 @@
           const bare = picked.startsWith("player_");
           value.hidden = bare;
           score.hidden = !scoreboard;
-          target.hidden = !scoreboard;
+          target.hidden = true;
           value.placeholder = picked === "expression" ? t("trg.expr")
             : scoreboard ? t("trg.score") : t("trg.value");
+
+          // An expression asks the server, not a player, so it has nobody to
+          // count and the whole subject row goes away with it.
+          const subjectless = picked === NO_SUBJECT;
+          quantifier.hidden = subjectless;
+          scope.hidden = subjectless;
+          count.hidden = subjectless || quantifier.value !== "at_least";
+          subject.hidden = subjectless
+            || (scope.value !== "players" && scope.value !== "selector");
+          subject.placeholder = scope.value === "selector" ? t("trg.selector") : t("trg.names");
         };
+        quantifier.onchange = shape;
+        scope.onchange = shape;
         kind.onchange = shape;
         shape();
 
@@ -1085,16 +1140,22 @@
             if (!value.value.trim()) return;
             args.value = value.value.trim();
           }
-          if (picked === "scoreboard") {
-            args.threshold = parseInt(score.value, 10) || 0;
-            args.target = target.value.trim() || "*";
+          if (picked === "scoreboard") args.threshold = parseInt(score.value, 10) || 0;
+          if (picked !== NO_SUBJECT) {
+            args.quantifier = quantifier.value;
+            args.subject = scope.value;
+            if (quantifier.value === "at_least") args.count = parseInt(count.value, 10) || 1;
+            if (scope.value === "players" || scope.value === "selector") {
+              if (!subject.value.trim()) return;
+              args.subjectValue = subject.value.trim();
+            }
           }
           if (await act("timer.addTrigger", args)) {
             const fresh = state.timers.find(x => x.name === timer.name);
             if (fresh) editDialog(fresh);
           }
         };
-        adder.append(kind, value, score, target, action, add);
+        adder.append(kind, value, score, quantifier, count, scope, subject, action, add);
         s.append(adder);
       });
 

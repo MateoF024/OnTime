@@ -91,7 +91,8 @@ public final class AdminModel {
         public long sequenceCooldownTicks() { return num(raw, "sequenceCooldownTicks"); }
 
         /** One reason this timer starts or ends, as the server describes it. */
-    public record Trigger(String kind, String action, String value, int threshold, String target) {
+    public record Trigger(String kind, String action, String value, int threshold,
+                          String scope, String subject, String quantifier, int count) {
         public boolean startsIt() { return "start".equals(action); }
     }
 
@@ -102,12 +103,17 @@ public final class AdminModel {
         for (JsonElement element : raw.getAsJsonArray("triggers")) {
             if (!element.isJsonObject()) continue;
             JsonObject json = element.getAsJsonObject();
+            JsonObject who = json.has("who") && json.get("who").isJsonObject()
+                    ? json.getAsJsonObject("who") : new JsonObject();
             out.add(new Trigger(
                     str(json, "kind", ""),
                     str(json, "action", "finish"),
                     str(json, "value", ""),
                     (int) num(json, "threshold"),
-                    str(json, "target", "*")));
+                    str(who, "scope", "audience"),
+                    str(who, "value", ""),
+                    str(who, "quantifier", "any"),
+                    (int) numOr(who, "count", 1)));
         }
         return out;
     }

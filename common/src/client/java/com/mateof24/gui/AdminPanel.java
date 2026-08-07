@@ -727,6 +727,28 @@ public final class AdminPanel {
 
     private int triggerKind = 0;
     private boolean triggerStarts = false;
+    private int triggerQuantifier = 0;
+    private int triggerScope = 0;
+    private EditBox triggerSubject;
+    private EditBox triggerCount;
+
+    /** How many of the watched players it takes, and who they are. */
+    private static final String[] QUANTIFIERS = {"any", "all", "at_least"};
+    private static final String[] SCOPES = {"audience", "everyone", "players", "selector"};
+
+    /** The one kind that asks the server rather than a player. */
+    private boolean kindHasSubject() {
+        return !"expression".equals(TRIGGER_KINDS[triggerKind]);
+    }
+
+    private boolean scopeNeedsValue() {
+        String scope = SCOPES[triggerScope];
+        return "players".equals(scope) || "selector".equals(scope);
+    }
+
+    private boolean countIsUsed() {
+        return "at_least".equals(QUANTIFIERS[triggerQuantifier]);
+    }
     private EditBox triggerValue;
     private EditBox triggerScore;
     private EditBox triggerTarget;
@@ -839,6 +861,8 @@ public final class AdminPanel {
                 .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.action.tip")))
                 .build());
 
+        buildSubjectRow(y + 21, right);
+
         host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.trigger.add"), b -> {
                     if (timer == null) return;
                     String kind = TRIGGER_KINDS[triggerKind];
@@ -852,8 +876,15 @@ public final class AdminPanel {
                     }
                     if (kindIsScoreboard()) {
                         args.addProperty("threshold", parseIntOr(triggerScore, 0));
-                        String target = triggerTarget == null ? "" : triggerTarget.getValue().trim();
-                        args.addProperty("target", target.isEmpty() ? "*" : target);
+                    }
+                    if (kindHasSubject()) {
+                        args.addProperty("quantifier", QUANTIFIERS[triggerQuantifier]);
+                        args.addProperty("subject", SCOPES[triggerScope]);
+                        if (countIsUsed()) args.addProperty("count", parseIntOr(triggerCount, 1));
+                        if (scopeNeedsValue()) {
+                            if (triggerSubject == null || triggerSubject.getValue().isBlank()) return;
+                            args.addProperty("subjectValue", triggerSubject.getValue().trim());
+                        }
                     }
                     send("timer.addTrigger", args);
                     awaitingApply = true;
@@ -861,6 +892,72 @@ public final class AdminPanel {
                 .bounds(addX, y, 48, 18)
                 .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.add.tip")))
                 .build());
+    }
+
+
+    /**
+     * Who the trigger watches, on its own line.
+     *
+     * <p>A second line rather than more boxes on the first: with a kind, an
+     * id, a score, a quantifier, a subject, its value and an action, one row
+     * would be a row of slivers at any window width worth using.</p>
+     */
+    private void buildSubjectRow(int y, int right) {
+        if (!kindHasSubject()) {
+            triggerSubject = null;
+            triggerCount = null;
+            return;
+        }
+
+        int x = editorFieldX;
+        host.addWidget(Button.builder(
+                        Component.translatable("ontime.who.q." + QUANTIFIERS[triggerQuantifier]),
+                        b -> {
+                            triggerQuantifier = (triggerQuantifier + 1) % QUANTIFIERS.length;
+                            init();
+                        })
+                .bounds(x, y, 74, 18)
+                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.quantifier.tip")))
+                .build());
+        x += 78;
+
+        if (countIsUsed()) {
+            triggerCount = new EditBox(host.font(), x, y, 34, 18,
+                    Component.translatable("ontime.gui.editor.trigger.count"));
+            triggerCount.setHint(Component.translatable("ontime.gui.editor.trigger.count"));
+            triggerCount.setMaxLength(4);
+            triggerCount.setValue("1");
+            host.addWidget(triggerCount);
+            assist.add(triggerCount, FieldAssist.intBetween(1, 9999));
+            x += 38;
+        } else {
+            triggerCount = null;
+        }
+
+        int scopeWidth = scopeNeedsValue() ? 96 : Math.max(96, right - x);
+        host.addWidget(Button.builder(
+                        Component.translatable("ontime.who.s." + SCOPES[triggerScope]),
+                        b -> {
+                            triggerScope = (triggerScope + 1) % SCOPES.length;
+                            init();
+                        })
+                .bounds(x, y, scopeWidth, 18)
+                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.scope.tip")))
+                .build());
+        x += scopeWidth + 4;
+
+        if (scopeNeedsValue()) {
+            String hint = "selector".equals(SCOPES[triggerScope])
+                    ? "ontime.gui.editor.trigger.selector" : "ontime.gui.editor.trigger.names";
+            triggerSubject = new EditBox(host.font(), x, y, Math.max(60, right - x), 18,
+                    Component.translatable(hint));
+            triggerSubject.setHint(Component.translatable(hint));
+            triggerSubject.setMaxLength(256);
+            host.addWidget(triggerSubject);
+            assist.add(triggerSubject, text -> true);
+        } else {
+            triggerSubject = null;
+        }
     }
 
     private static int parseIntOr(EditBox box, int fallback) {
@@ -892,12 +989,26 @@ public final class AdminPanel {
 
     private static Component describeTrigger(AdminModel.TimerRow.Trigger trigger) {
         Component kind = Component.translatable("ontime.trigger.kind." + trigger.kind());
+        Component who = describeWho(trigger);
         if ("scoreboard".equals(trigger.kind())) {
             return Component.translatable("ontime.command.trigger.describe.scoreboard",
-                    kind, trigger.value(), trigger.threshold(), trigger.target());
+                    kind, trigger.value(), trigger.threshold(), who);
         }
-        if (trigger.value().isEmpty()) return kind;
-        return Component.translatable("ontime.command.trigger.describe.value", kind, trigger.value());
+        if (trigger.value().isEmpty()) {
+            return Component.translatable("ontime.command.trigger.describe.who", kind, who);
+        }
+        return Component.translatable("ontime.command.trigger.describe.value",
+                kind, trigger.value(), who);
+    }
+
+    /** The same wording the commands print, so both read alike. */
+    private static Component describeWho(AdminModel.TimerRow.Trigger trigger) {
+        Component scope = Component.translatable("ontime.who.scope." + trigger.scope(),
+                trigger.subject());
+        if ("at_least".equals(trigger.quantifier())) {
+            return Component.translatable("ontime.who.at_least", trigger.count(), scope);
+        }
+        return Component.translatable("ontime.who." + trigger.quantifier(), scope);
     }
 
 
