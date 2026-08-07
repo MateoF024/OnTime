@@ -679,14 +679,17 @@ dialog[open] { animation: pop .2s var(--ease); }
   margin-top: 10px;
 }
 
-/* The two ways into the composer, side by side under the list. */
-.trg-new {
+/* One of the two headings, and everything under it. */
+.trg-section { margin-bottom: 18px; }
+.trg-section:last-of-type { margin-bottom: 0; }
+.trg-section-head {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--line);
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 @media (max-width: 620px) {

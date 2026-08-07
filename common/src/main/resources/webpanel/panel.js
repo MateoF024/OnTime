@@ -63,10 +63,12 @@
       "trg.s.audience": "the timer's audience", "trg.s.everyone": "anybody on the server",
       "trg.s.players": "these players", "trg.s.selector": "a selector",
       "trg.names": "Names, separated by commas", "trg.selector": "@a[team=red]",
-      "trg.addGroup": "Add a group", "trg.addCond": "Add a condition",
-      "trg.newStart": "Rule that starts it", "trg.newEnd": "Rule that ends it",
-      "trg.say.when": "when", "trg.say.here": "into this group",
-      "trg.say.newRule": "on its own, as a rule of its own",
+      "trg.addCond": "Add condition", "trg.addToBranch": "Add to this one",
+      "trg.dropBranch": "Remove this alternative",
+      "trg.startsWhen": "Starts it when...", "trg.endsWhen": "Ends it when...",
+      "trg.noStart": "Nothing starts it early", "trg.noFinish": "Nothing ends it early",
+      "trg.say.when": "when", "trg.say.here": "joins this alternative",
+      "trg.say.newRule": "an alternative of its own",
       "trg.v.dimension_change": "Dimension, e.g. minecraft:the_nether",
       "trg.v.advancement": "Advancement", "trg.v.ftb_quest": "Quest id",
       "trg.v.ftb_reward": "Reward id", "trg.v.scoreboard": "Objective",
@@ -134,10 +136,13 @@
       "trg.s.audience": "la audiencia del contador", "trg.s.everyone": "cualquiera del servidor",
       "trg.s.players": "estos jugadores", "trg.s.selector": "un selector",
       "trg.names": "Nombres, separados por comas", "trg.selector": "@a[team=red]",
-      "trg.addGroup": "Añadir un grupo", "trg.addCond": "Añadir una condición",
-      "trg.newStart": "Regla que lo arranca", "trg.newEnd": "Regla que lo termina",
-      "trg.say.when": "cuando", "trg.say.here": "en este grupo",
-      "trg.say.newRule": "por su cuenta, como una regla propia",
+      "trg.addCond": "Añadir condición", "trg.addToBranch": "Añadir a esta",
+      "trg.dropBranch": "Quitar esta alternativa",
+      "trg.startsWhen": "Lo arranca cuando...", "trg.endsWhen": "Lo termina cuando...",
+      "trg.noStart": "Nada lo arranca antes de tiempo",
+      "trg.noFinish": "Nada lo termina antes de tiempo",
+      "trg.say.when": "cuando", "trg.say.here": "se une a esta alternativa",
+      "trg.say.newRule": "una alternativa por su cuenta",
       "trg.v.dimension_change": "Dimensión, p. ej. minecraft:the_nether",
       "trg.v.advancement": "Logro", "trg.v.ftb_quest": "Id de la misión",
       "trg.v.ftb_reward": "Id de la recompensa", "trg.v.scoreboard": "Objetivo",
@@ -994,7 +999,7 @@
     return [root];
   }
 
-  /** A group, its conditions, and the button that opens a composer inside it. */
+  /** One alternative: what has to hold together, and the way to add to it. */
   function groupBlock(timer, rule, group) {
     const box = document.createElement("div");
     box.className = "trg-group";
@@ -1031,10 +1036,19 @@
     // far bottom of the sheet, which nothing on screen ever mentioned: there
     // was no way to tell where the next condition was going to land.
     if (group.node === "group") {
+      const drop = document.createElement("button");
+      drop.type = "button";
+      drop.className = "danger small";
+      drop.textContent = t("trg.dropBranch");
+      drop.onclick = () => act("timer.removeCondition",
+        { name: timer.name, conditionId: group.id })
+        .then(ok => ok && reopen(timer.name));
+      box.append(drop);
+
       const add = document.createElement("button");
       add.type = "button";
       add.className = "btn small";
-      add.textContent = t("trg.addCond");
+      add.textContent = t("trg.addToBranch");
       add.onclick = () => openComposer(box, add, timer, rule.action, group.id);
       box.append(add);
     }
@@ -1281,69 +1295,54 @@
       // never matched anything.
       group("triggers", s => {
         closeComposer();
-        const list = document.createElement("div");
-        const rules = timer.rules || [];
-        if (!rules.length) {
-          const p = document.createElement("p");
-          p.className = "muted";
-          p.textContent = t("trg.none");
-          list.append(p);
-        }
 
-        // One block per rule: what it does, then the groups that make it true.
-        // A rule is true when any of its groups is, and a group when all of
-        // its conditions are -- two levels, which is every combination there
-        // is, because any boolean expression can be written as an or of ands.
-        for (const rule of rules) {
-          const block = document.createElement("div");
-          block.className = "trg-rule";
+        // Two headings, always both, because everything a timer can be told
+        // is one or the other. Under a heading sit alternatives, and any one
+        // of them holding is enough; inside an alternative everything has to
+        // hold at once. There is no third level: a rule and an alternative
+        // were both an "or", so the page used to show one idea twice.
+        for (const action of ["start", "finish"]) {
+          const section = document.createElement("div");
+          section.className = "trg-section";
 
           const head = document.createElement("div");
-          head.className = "trg-rule-head";
+          head.className = "trg-section-head";
           const what = document.createElement("span");
-          what.className = "cmd-at" + (rule.action === "start" ? "" : " end");
-          what.textContent = t(rule.action === "start" ? "trg.startsIt" : "trg.endsIt");
-          head.append(what);
-          block.append(head);
+          what.className = "cmd-at" + (action === "start" ? "" : " end");
+          what.textContent = t(action === "start" ? "trg.startsWhen" : "trg.endsWhen");
 
-          for (const [index, group] of groupsOf(rule).entries()) {
-            if (index > 0) {
-              const or = document.createElement("div");
-              or.className = "trg-or";
-              or.textContent = t("trg.orGroup");
-              block.append(or);
+          const add = document.createElement("button");
+          add.type = "button";
+          add.className = "btn small";
+          add.textContent = t("trg.addCond");
+          add.onclick = () => openComposer(section, null, timer, action, null);
+          head.append(what, add);
+          section.append(head);
+
+          const body = document.createElement("div");
+          let branches = 0;
+          for (const rule of (timer.rules || [])) {
+            if (rule.action !== action) continue;
+            for (const group of groupsOf(rule)) {
+              if (branches > 0) {
+                const or = document.createElement("div");
+                or.className = "trg-or";
+                or.textContent = t("trg.orGroup");
+                body.append(or);
+              }
+              branches++;
+              body.append(groupBlock(timer, rule, group));
             }
-            block.append(groupBlock(timer, rule, group));
           }
-
-          const addGroup = document.createElement("button");
-          addGroup.type = "button";
-          addGroup.className = "btn small";
-          addGroup.textContent = t("trg.addGroup");
-          addGroup.onclick = () => act("timer.addGroup",
-            { name: timer.name, ruleId: rule.id, mode: "all", action: rule.action })
-            .then(ok => ok && reopen(timer.name));
-          block.append(addGroup);
-
-          list.append(block);
+          if (!branches) {
+            const p = document.createElement("p");
+            p.className = "muted";
+            p.textContent = t(action === "start" ? "trg.noStart" : "trg.noFinish");
+            body.append(p);
+          }
+          section.append(body);
+          s.append(section);
         }
-
-        s.append(list);
-
-        // Two ways in rather than one, because what a rule does to the timer
-        // is the one thing about it that cannot be changed afterwards -- and
-        // choosing it here means the composer never has to ask.
-        const ways = document.createElement("div");
-        ways.className = "trg-new";
-        for (const action of ["start", "finish"]) {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "btn small";
-          button.textContent = t(action === "start" ? "trg.newStart" : "trg.newEnd");
-          button.onclick = () => openComposer(list, null, timer, action, null);
-          ways.append(button);
-        }
-        s.append(ways);
       });
 
       group("commands", s => {

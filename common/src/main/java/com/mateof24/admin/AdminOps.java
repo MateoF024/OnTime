@@ -646,7 +646,8 @@ public final class AdminOps {
         if (groupId != null && !groupId.isBlank()) {
             com.mateof24.trigger.TriggerRule host = ruleHolding(timer, groupId);
             if (host == null) return Result.fail("No such group");
-            com.mateof24.trigger.Condition grown = addInto(host.condition(), groupId, leaf);
+            com.mateof24.trigger.Condition grown =
+                    com.mateof24.trigger.Condition.addInto(host.condition(), groupId, leaf);
             if (grown == null) return Result.fail("No such group");
             replace(timer, host, new com.mateof24.trigger.TriggerRule(
                     host.id(), host.action(), grown, host.delayTicks(), host.once()));
@@ -713,39 +714,7 @@ public final class AdminOps {
     /** The rule whose tree contains that group. */
     private static com.mateof24.trigger.TriggerRule ruleHolding(com.mateof24.timer.Timer timer, String groupId) {
         for (com.mateof24.trigger.TriggerRule rule : timer.rules()) {
-            if (contains(rule.condition(), groupId)) return rule;
-        }
-        return null;
-    }
-
-    private static boolean contains(com.mateof24.trigger.Condition node, String id) {
-        if (node == null) return false;
-        if (node.id().equals(id)) return true;
-        if (!(node instanceof com.mateof24.trigger.Condition.Group group)) return false;
-        for (com.mateof24.trigger.Condition child : group.children()) {
-            if (contains(child, id)) return true;
-        }
-        return false;
-    }
-
-    /** A copy of the tree with one condition added inside the named group. */
-    private static com.mateof24.trigger.Condition addInto(
-            com.mateof24.trigger.Condition node, String groupId,
-            com.mateof24.trigger.Condition added) {
-        if (!(node instanceof com.mateof24.trigger.Condition.Group group)) return null;
-        java.util.List<com.mateof24.trigger.Condition> children =
-                new java.util.ArrayList<>(group.children());
-        if (group.id().equals(groupId)) {
-            children.add(added);
-            return new com.mateof24.trigger.Condition.Group(group.id(), group.mode(),
-                    group.count(), group.windowMillis(), children);
-        }
-        for (int i = 0; i < children.size(); i++) {
-            com.mateof24.trigger.Condition grown = addInto(children.get(i), groupId, added);
-            if (grown == null) continue;
-            children.set(i, grown);
-            return new com.mateof24.trigger.Condition.Group(group.id(), group.mode(),
-                    group.count(), group.windowMillis(), children);
+            if (com.mateof24.trigger.Condition.holds(rule.condition(), groupId)) return rule;
         }
         return null;
     }
@@ -795,43 +764,12 @@ public final class AdminOps {
         if (timer == null) return Result.fail("No such timer");
 
         String nodeId = str(args, "conditionId");
-        if (nodeId == null || nodeId.isBlank()) return Result.fail("Which condition?");
+        if (nodeId == null || nodeId.isBlank()) return Result.fail("Which one?");
+        if (!timer.removeNode(nodeId)) return Result.fail("It is not there any more");
 
-        com.mateof24.trigger.TriggerRule host = ruleHolding(timer, nodeId);
-        if (host == null) return Result.fail("No such condition");
-
-        if (host.condition().id().equals(nodeId)) {
-            timer.rules().remove(host);
-        } else {
-            com.mateof24.trigger.Condition pruned = without(host.condition(), nodeId);
-            if (pruned == null || pruned.leaves().isEmpty()) {
-                timer.rules().remove(host);
-            } else {
-                replace(timer, host, new com.mateof24.trigger.TriggerRule(
-                        host.id(), host.action(), pruned, host.delayTicks(), host.once()));
-            }
-        }
         forget(name);
         TimerManager.getInstance().saveTimer(timer);
         return Result.ok();
-    }
-
-    /** A copy of the tree without that node, or null when it holds nothing else. */
-    private static com.mateof24.trigger.Condition without(
-            com.mateof24.trigger.Condition node, String nodeId) {
-        if (!(node instanceof com.mateof24.trigger.Condition.Group group)) return node;
-        java.util.List<com.mateof24.trigger.Condition> kept = new java.util.ArrayList<>();
-        for (com.mateof24.trigger.Condition child : group.children()) {
-            if (child.id().equals(nodeId)) continue;
-            com.mateof24.trigger.Condition pruned = without(child, nodeId);
-            // A group that lost its last condition goes too, rather than
-            // staying as an empty one that can never be true.
-            if (pruned instanceof com.mateof24.trigger.Condition.Group inner && inner.isEmpty()) continue;
-            kept.add(pruned);
-        }
-        if (kept.isEmpty()) return null;
-        return new com.mateof24.trigger.Condition.Group(group.id(), group.mode(),
-                group.count(), group.windowMillis(), kept);
     }
 
     /** Removes by position in the timer's list, zero-based. */

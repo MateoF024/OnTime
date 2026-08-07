@@ -30,11 +30,12 @@
 
 ### Added
 
-- Triggers are built one question at a time in game: what it should do, what
-  has to happen, who it has to happen to, how many of them, and only then the
-  details that answer needs. Every answer explains itself.
-- The web panel writes a trigger as a sentence, opened in the group it will
-  belong to. A control appears only where the sentence has a blank for it.
+- The trigger page is two fixed headings, "Starts it when..." and "Ends it
+  when...", always both. Under a heading sit alternatives, any one of which is
+  enough; inside an alternative everything has to hold at once. Adding a
+  condition asks four questions in game, one at a time, and each answer
+  explains itself; in the web panel it writes a sentence, in place, where the
+  condition will land.
 - A pause between commands can be set on a timer, not only on the server:
   `/timer commands <name> delay <ticks>`, the timer's Commands page in game, and
   the Commands block of its editor in the web panel. `delay reset`, and -1 in

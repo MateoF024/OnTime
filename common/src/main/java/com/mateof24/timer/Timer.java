@@ -439,6 +439,43 @@ public class Timer {
 
     public boolean hasRules() { return !rules.isEmpty(); }
 
+    /**
+     * Removes whatever goes by that id: a rule, a group, or one condition.
+     *
+     * <p>One door, because the surfaces draw one tree and every row of it has
+     * an id. Asking them to know which of three operations a row needs is
+     * asking them to know something they cannot see — and getting it wrong
+     * used to answer "no such condition" for every rule on the page.</p>
+     *
+     * @return true when something was found and taken out
+     */
+    public boolean removeNode(String id) {
+        if (id == null || id.isBlank()) return false;
+
+        for (com.mateof24.trigger.TriggerRule rule : rules) {
+            if (rule.id().equals(id)) {
+                rules.remove(rule);
+                return true;
+            }
+        }
+        for (int i = 0; i < rules.size(); i++) {
+            com.mateof24.trigger.TriggerRule rule = rules.get(i);
+            if (!com.mateof24.trigger.Condition.holds(rule.condition(), id)) continue;
+            com.mateof24.trigger.Condition pruned =
+                    com.mateof24.trigger.Condition.without(rule.condition(), id);
+            // A rule with nothing left to watch goes with it. Keeping it would
+            // leave a row that names an action and can never take it.
+            if (pruned == null || pruned.leaves().isEmpty()) {
+                rules.remove(i);
+            } else {
+                rules.set(i, new com.mateof24.trigger.TriggerRule(
+                        rule.id(), rule.action(), pruned, rule.delayTicks(), rule.once()));
+            }
+            return true;
+        }
+        return false;
+    }
+
     /** Refuses one that could never fire rather than storing a rule that does nothing. */
     public boolean addRule(com.mateof24.trigger.TriggerRule rule) {
         if (rule == null || !rule.isValid()) return false;

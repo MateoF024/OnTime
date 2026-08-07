@@ -40,6 +40,63 @@ public interface Condition {
         return java.util.UUID.randomUUID().toString().substring(0, 8);
     }
 
+    /** True when this node, or anything under it, goes by that id. */
+    static boolean holds(Condition node, String id) {
+        if (node == null || id == null) return false;
+        if (id.equals(node.id())) return true;
+        if (!(node instanceof Group group)) return false;
+        for (Condition child : group.children()) {
+            if (holds(child, id)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * This tree without the node of that id, or null when nothing is left.
+     *
+     * <p>Lives here rather than beside the operation that calls it because it
+     * is the one piece of this that can be run without a server, and it is
+     * the piece that was wrong: a group whose last child was pruned came back
+     * as null, and the caller only checked for an <em>empty group</em> — so
+     * the null went into the parent's child list and the next walk of the tree
+     * threw. A group that empties is dropped, at any depth.</p>
+     */
+    static Condition without(Condition node, String id) {
+        if (node == null || id == null) return node;
+        if (id.equals(node.id())) return null;
+        if (!(node instanceof Group group)) return node;
+
+        List<Condition> kept = new ArrayList<>();
+        for (Condition child : group.children()) {
+            Condition pruned = without(child, id);
+            if (pruned == null) continue;
+            if (pruned instanceof Group inner && inner.isEmpty()) continue;
+            kept.add(pruned);
+        }
+        if (kept.isEmpty()) return null;
+        return new Group(group.id(), group.mode(), group.count(), group.windowMillis(), kept);
+    }
+
+    /** This tree with one condition added inside the group of that id. */
+    static Condition addInto(Condition node, String groupId, Condition added) {
+        if (!(node instanceof Group group)) return null;
+        if (groupId.equals(group.id())) {
+            List<Condition> children = new ArrayList<>(group.children());
+            children.add(added);
+            return new Group(group.id(), group.mode(), group.count(),
+                    group.windowMillis(), children);
+        }
+        List<Condition> children = new ArrayList<>();
+        boolean found = false;
+        for (Condition child : group.children()) {
+            Condition grown = child instanceof Group ? addInto(child, groupId, added) : null;
+            if (grown != null) found = true;
+            children.add(grown == null ? child : grown);
+        }
+        if (!found) return null;
+        return new Group(group.id(), group.mode(), group.count(), group.windowMillis(), children);
+    }
+
     /** Null when the object describes nothing this version understands. */
     static Condition fromJson(JsonObject json) {
         if (json == null || !json.has("node")) return null;
