@@ -316,11 +316,7 @@ public class TimerTickHandler {
 
 
     private static void executeTimerCommand(MinecraftServer server, TimerRun run) {
-        java.util.List<String> toRun = new java.util.ArrayList<>();
-        String legacy = run.timer().getCommand();
-        if (legacy != null && !legacy.trim().isEmpty()) toRun.add(legacy);
-        toRun.addAll(run.timer().getFinishCommands());
-        runCommandList(server, run, toRun);
+        runCommandList(server, run, run.timer().getFinishCommands());
     }
 
     /**

@@ -235,14 +235,6 @@ public class TimerManager {
         return true;
     }
 
-    public boolean setTimerCommand(String name, String command) {
-        Timer timer = timers.get(name);
-        if (timer == null) return false;
-        timer.setCommand(command);
-        saveTimer(timer);
-        return true;
-    }
-
     public boolean addScheduledCommand(String name, long atSeconds, String command) {
         Timer timer = timers.get(name);
         if (timer == null) return false;

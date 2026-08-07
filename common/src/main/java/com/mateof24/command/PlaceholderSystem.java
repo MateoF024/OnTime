@@ -27,11 +27,6 @@ public class PlaceholderSystem {
     }
 
     /**
-     * Comando predeterminado que se asigna a timers sin comando específico
-     */
-    public static final String DEFAULT_COMMAND = "say Timer {name} has finished!";
-
-    /**
      * Reemplaza todos los placeholders en un comando
      */
     /**

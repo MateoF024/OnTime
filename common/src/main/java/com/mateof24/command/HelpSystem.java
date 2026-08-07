@@ -75,8 +75,8 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "pause",
                 "ontime.help.pause.desc",
-                "/timer pause [name] [targets]",
-                "/timer pause",
+                "/timer pause <name|all> [targets]",
+                "/timer pause all",
                 "/timer pause speedrun",
                 "/timer pause speedrun @a[team=red]"
         ));
@@ -84,16 +84,16 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "resume",
                 "ontime.help.resume.desc",
-                "/timer resume [name] [targets]",
-                "/timer resume",
+                "/timer resume <name|all> [targets]",
+                "/timer resume all",
                 "/timer resume speedrun"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
                 "stop",
                 "ontime.help.stop.desc",
-                "/timer stop [name] [targets]",
-                "/timer stop",
+                "/timer stop <name|all> [targets]",
+                "/timer stop all",
                 "/timer stop speedrun",
                 "/timer stop speedrun Bob"
         ));
@@ -101,8 +101,8 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "reset",
                 "ontime.help.reset.desc",
-                "/timer reset [name] [targets]",
-                "/timer reset",
+                "/timer reset <name|all> [targets]",
+                "/timer reset all",
                 "/timer reset speedrun"
         ));
 
@@ -221,15 +221,6 @@ public class HelpSystem {
                 "/timer scale speedrun",
                 "/timer scale speedrun 1.5",
                 "/timer scale speedrun reset"
-        ));
-
-        HELP_ENTRIES.add(new HelpEntry(
-                "command",
-                "ontime.help.command.desc",
-                "/timer command <name> [command]",
-                "/timer command speedrun",
-                "/timer command speedrun say {name} finished in {time}!",
-                "/timer command event title @a [{\"text\":\"\"}] [{\"text\":\"Event over!\"}]"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(

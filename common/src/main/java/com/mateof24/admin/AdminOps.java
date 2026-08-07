@@ -108,7 +108,6 @@ public final class AdminOps {
                 case "timer.clone" -> cloneTimer(args);
                 case "timer.setTime" -> setTime(args);
                 case "timer.addTime" -> addTime(args);
-                case "timer.setCommand" -> setCommand(args);
                 case "timer.setTitle" -> setTitle(args);
                 case "timer.setRepeat" -> setRepeat(args);
                 case "timer.setSequence" -> setSequence(args);
@@ -174,7 +173,6 @@ public final class AdminOps {
         json.addProperty("targetTicks", def.targetTicks());
         json.addProperty("countUp", def.countUp());
         json.addProperty("silent", def.silent());
-        json.addProperty("finishCommand", def.finishCommand());
         json.add("finishCommands", toArray(def.finishCommands()));
 
         JsonArray scheduled = new JsonArray();
@@ -394,17 +392,6 @@ public final class AdminOps {
         return OnTimeAPI.getInstance().addTimerTime(name, h, m, s) ? Result.ok() : Result.fail("Could not add time");
     }
 
-    private static Result setCommand(JsonObject args) {
-        String name = requireTimer(args);
-        if (name == null) return Result.fail("No such timer");
-        String command = str(args, "command");
-        if (command != null && !command.isEmpty()) {
-            var validation = com.mateof24.validation.CommandValidator.validate(command);
-            if (!validation.isValid()) return Result.fail(validation.getErrorMessage().getString());
-        }
-        return OnTimeAPI.getInstance().setTimerCommand(name, command == null ? "" : command)
-                ? Result.ok() : Result.fail("Could not set the command");
-    }
 
     private static Result setTitle(JsonObject args) {
         String name = requireTimer(args);
@@ -814,7 +801,7 @@ public final class AdminOps {
     /** Names of every operation {@link #apply} understands, for tests and docs. */
     public static List<String> operations() {
         return List.of("timer.create", "timer.delete", "timer.clone", "timer.setTime", "timer.addTime",
-                "timer.setCommand", "timer.setTitle", "timer.setRepeat", "timer.setSequence",
+                "timer.setTitle", "timer.setRepeat", "timer.setSequence",
                 "timer.setPosition", "timer.setScale", "timer.setSilent",
                 "run.start", "run.pause", "run.resume", "run.stop", "run.reset", "run.stopAll",
                 "run.setAudience", "config.set");

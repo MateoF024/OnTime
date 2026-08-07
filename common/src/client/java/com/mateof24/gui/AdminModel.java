@@ -313,11 +313,7 @@ public final class AdminModel {
                     scheduled.add(new Scheduled(num(at, "at"), strings(at, "commands")));
                 }
             }
-            // The 4.0.0 single finish command and the 5.0.0 list are the same
-            // thing to a reader, so they are shown as one list.
             List<String> finish = new ArrayList<>(strings(json, "finishCommands"));
-            String legacy = str(json, "finishCommand", null);
-            if (legacy != null && !legacy.isEmpty() && !finish.contains(legacy)) finish.add(0, legacy);
             out.add(new TimerRow(
                     str(json, "name", ""),
                     num(json, "targetTicks"),

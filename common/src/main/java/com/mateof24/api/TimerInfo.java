@@ -16,7 +16,6 @@ public record TimerInfo(
         boolean countUp,
         boolean running,
         boolean silent,
-        String command,
         boolean repeat,
         int repeatCount,
         int repeatsDone

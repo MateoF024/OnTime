@@ -37,7 +37,6 @@ public class Timer {
     private final long targetTicks;
     private final boolean countUp;
     private boolean running;
-    private String command;
     private boolean silent;
     private boolean wasRunningBeforeShutdown;
     private boolean repeat = false;
@@ -75,8 +74,10 @@ public class Timer {
         this.targetTicks = (hours * 3600L + minutes * 60L + seconds) * 20L;
         this.countUp = countUp;
         this.currentTicks = countUp ? 0 : this.targetTicks;
+        // No command. A new timer runs nothing until it is told to: every one
+        // used to be handed "say Timer {name} has finished!" whether or not
+        // anybody asked, which is why a timer with no commands could not exist.
         this.running = false;
-        this.command = com.mateof24.command.PlaceholderSystem.DEFAULT_COMMAND;
         this.silent = false;
         this.wasRunningBeforeShutdown = false;
     }
@@ -140,7 +141,6 @@ public class Timer {
         json.addProperty("targetTicks", targetTicks);
         json.addProperty("countUp", countUp);
         json.addProperty("running", running);
-        json.addProperty("command", command != null ? command : "");
         json.addProperty("silent", silent);
         json.addProperty("wasRunningBeforeShutdown", wasRunningBeforeShutdown);
         json.addProperty("repeat", repeat);
@@ -191,9 +191,13 @@ public class Timer {
         Timer timer = new Timer(name, hours, minutes, seconds, countUp);
         timer.currentTicks = json.get("currentTicks").getAsLong();
         timer.running = json.get("running").getAsBoolean();
-        timer.command = json.has("command") && !json.get("command").isJsonNull()
-                ? json.get("command").getAsString()
-                : com.mateof24.command.PlaceholderSystem.DEFAULT_COMMAND;
+        // A timer saved with the old single command keeps it, as the first
+        // entry of the list it should always have been. Read once and never
+        // written back: nothing else in the mod knows the field exists.
+        if (json.has("command") && !json.get("command").isJsonNull()) {
+            String only = json.get("command").getAsString();
+            if (!only.isEmpty()) timer.addFinishCommand(only);
+        }
         timer.silent = json.has("silent") && json.get("silent").getAsBoolean();
         timer.wasRunningBeforeShutdown = json.has("wasRunningBeforeShutdown")
                 && json.get("wasRunningBeforeShutdown").getAsBoolean();
@@ -295,8 +299,6 @@ public class Timer {
     public boolean isCountUp() { return countUp; }
     public boolean isRunning() { return running; }
     public void setRunning(boolean running) { this.running = running; }
-    public String getCommand() { return command; }
-    public void setCommand(String command) { this.command = command != null ? command : ""; }
     public void setCurrentTicks(long ticks) { this.currentTicks = ticks; }
     public boolean isSilent() { return silent; }
     public void setSilent(boolean silent) { this.silent = silent; }

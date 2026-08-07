@@ -434,17 +434,10 @@ public class TimerCommands {
                                 )
                         )
                 )
-                .then(Commands.literal("command")
-                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_COMMAND, 4))
-                        .then(Commands.argument("name", StringArgumentType.word())
-                                .suggests(TIMER_SUGGESTIONS)
-                                .executes(BehaviorCommands::viewTimerCommand)
-                                .then(Commands.argument("command", StringArgumentType.greedyString())
-                                        .executes(ctx -> BehaviorCommands.updateTimerCommand(ctx,
-                                                StringArgumentType.getString(ctx, "command")))
-                                )
-                        )
-                )
+                // /timer command is gone. It held one command, "the" finish
+                // command, alongside the list that can hold several -- the same
+                // idea kept in two places since 4.0.0 grew the list. A finish
+                // command is now an entry of the list like any other.
                 .then(Commands.literal("commands")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_COMMAND, 4))
                         .then(Commands.argument("name", StringArgumentType.word())

@@ -178,10 +178,7 @@ final class InfoCommands {
      * an overview, and {@code /timer commands <name> list} is the full one.
      */
     private static Component finishCommands(Timer timer) {
-        List<String> all = new ArrayList<>();
-        String legacy = timer.getCommand();
-        if (legacy != null && !legacy.trim().isEmpty()) all.add(legacy);
-        all.addAll(timer.getFinishCommands());
+        List<String> all = timer.getFinishCommands();
         if (all.isEmpty()) return null;
 
         if (all.size() <= MAX_LISTED_COMMANDS) return Component.literal(String.join("  |  ", all));

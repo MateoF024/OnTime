@@ -18,40 +18,6 @@ final class BehaviorCommands {
 
     private BehaviorCommands() {}
 
-    static int viewTimerCommand(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        String command = timerOpt.get().getCommand();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.command.current", name,
-                        command != null && !command.isEmpty() ? command : "(none)"), false);
-        return 1;
-    }
-
-    static int updateTimerCommand(CommandContext<CommandSourceStack> ctx, String command) {
-        String name = StringArgumentType.getString(ctx, "name");
-
-        if (!command.isEmpty()) {
-            com.mateof24.validation.CommandValidator.ValidationResult validation =
-                    com.mateof24.validation.CommandValidator.validate(command);
-            if (!validation.isValid()) {
-                ctx.getSource().sendFailure(validation.getErrorMessage());
-                return 0;
-            }
-        }
-
-        if (TimerManager.getInstance().setTimerCommand(name, command)) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.command.set", name, command), true);
-            return 1;
-        }
-        ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-        return 0;
-    }
 
     // ---- /timer title <name> ... (counter titles, 4.0.0) ----
 

@@ -92,10 +92,6 @@ public class OnTimeAPI {
         return TimerManager.getInstance().addTimerTime(name, hours, minutes, seconds);
     }
 
-    public boolean setTimerCommand(String name, String command) {
-        return TimerManager.getInstance().setTimerCommand(name, command);
-    }
-
     /**
      * Adds a command fired when the timer's displayed time crosses
      * {@code atSeconds} (remaining time for countdown timers, elapsed time
@@ -469,7 +465,7 @@ public class OnTimeAPI {
     public Optional<TimerInfo> getTimer(String name) {
         return TimerManager.getInstance().getTimer(name)
                 .map(t -> new TimerInfo(t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
-                        t.isCountUp(), t.isRunning(), t.isSilent(), t.getCommand(),
+                        t.isCountUp(), t.isRunning(), t.isSilent(),
                         t.isRepeat(), t.getRepeatCount(), t.getRepeatsDone()));
     }
 

@@ -82,12 +82,10 @@ final class LifecycleCommands {
         }
 
         if (TimerManager.getInstance().createTimer(name, hours, minutes, seconds, countUp)) {
-            // Asignar comando personalizado si se proporcionó
+            // The command given at creation is the timer's first finish
+            // command, not a field of its own.
             if (command != null && !command.isEmpty()) {
-                TimerManager.getInstance().getTimer(name).ifPresent(timer -> {
-                    timer.setCommand(command);
-                    TimerManager.getInstance().saveTimers();
-                });
+                TimerManager.getInstance().addFinishCommand(name, command);
             }
 
             ctx.getSource().sendSuccess(() ->

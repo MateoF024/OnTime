@@ -47,7 +47,6 @@ public final class ApiViews {
                 timer.getTargetTicks(),
                 timer.isCountUp(),
                 timer.isSilent(),
-                emptyToNull(timer.getCommand()),
                 java.util.List.copyOf(timer.getFinishCommands()),
                 java.util.Collections.unmodifiableMap(scheduled),
                 java.util.Collections.unmodifiableMap(titles),
@@ -81,7 +80,7 @@ public final class ApiViews {
     public static TimerInfo legacyOf(TimerRun run) {
         Timer timer = run.timer();
         return new TimerInfo(run.timerName(), run.getCurrentTicks(), run.getTargetTicks(),
-                run.isCountUp(), run.isRunning(), timer.isSilent(), timer.getCommand(),
+                run.isCountUp(), run.isRunning(), timer.isSilent(),
                 timer.isRepeat(), timer.getRepeatCount(), run.getRepeatsDone());
     }
 

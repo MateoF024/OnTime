@@ -23,8 +23,7 @@ public record TimerDefinition(
         boolean countUp,
         boolean silent,
 
-        /** The single finish command of 4.0.0; null when unset. Runs before {@link #finishCommands()}. */
-        String finishCommand,
+        /** Everything this timer runs when it ends, in execution order. */
         List<String> finishCommands,
         /** Seconds on the clock → commands fired when it crosses, in execution order. */
         Map<Long, List<String>> scheduledCommands,
