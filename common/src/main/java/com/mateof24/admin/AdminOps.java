@@ -118,6 +118,7 @@ public final class AdminOps {
                 case "timer.addCommand" -> addCommand(args);
                 case "timer.removeCommand" -> removeCommand(args);
                 case "timer.addTrigger" -> addTrigger(args);
+                case "timer.addGroup" -> addGroup(args);
                 case "timer.removeTrigger" -> removeTrigger(args);
                 case "timer.clearTriggers" -> clearTriggers(args);
 
@@ -603,21 +604,149 @@ public final class AdminOps {
                 com.mateof24.trigger.Who.Quantifier.parse(str(args, "quantifier")),
                 intOf(args, "count", 1));
 
-        com.mateof24.trigger.Trigger trigger = new com.mateof24.trigger.Trigger(
-                kind,
-                com.mateof24.trigger.Trigger.Action.parse(str(args, "action")),
-                value.trim(),
-                intOf(args, "threshold", 0),
-                who);
+        com.mateof24.trigger.Condition.Watch leaf = new com.mateof24.trigger.Condition.Watch(
+                com.mateof24.trigger.Condition.freshId(), kind, value.trim(),
+                intOf(args, "threshold", 0), who,
+                !args.has("edge") || args.get("edge").getAsBoolean(),
+                args.has("latched") ? args.get("latched").getAsBoolean() : !kind.polled(),
+                args.has("negated") && args.get("negated").getAsBoolean());
 
-        // One watch, wrapped in a rule. The editors still write single-leaf
-        // rules; the tree behind them is what R9's editor will fill.
-        if (!timer.addRule(com.mateof24.trigger.TriggerRule.fromFlat(trigger))) {
+        // Into an existing group when one is named, so a second condition can
+        // join the first rather than becoming a rule of its own. That is the
+        // whole difference between "and" and "or".
+        String groupId = str(args, "groupId");
+        if (groupId != null && !groupId.isBlank()) {
+            com.mateof24.trigger.TriggerRule host = ruleHolding(timer, groupId);
+            if (host == null) return Result.fail("No such group");
+            com.mateof24.trigger.Condition grown = addInto(host.condition(), groupId, leaf);
+            if (grown == null) return Result.fail("No such group");
+            replace(timer, host, new com.mateof24.trigger.TriggerRule(
+                    host.id(), host.action(), grown, host.delayTicks(), host.once()));
+        } else if (!timer.addRule(com.mateof24.trigger.TriggerRule.of(
+                com.mateof24.trigger.Trigger.Action.parse(str(args, "action")), leaf))) {
             return Result.fail("That trigger cannot be used, or this timer has too many");
         }
         forget(name);
         TimerManager.getInstance().saveTimer(timer);
         return Result.ok();
+    }
+
+
+    /**
+     * Adds a group to a rule, or a whole new rule that is one empty group.
+     *
+     * <p>Groups are how "and" gets written: conditions inside one all have to
+     * hold, and a rule is true when any of its groups is. Two levels cover
+     * every combination there is, because any boolean expression can be
+     * written as an or of ands, so this is the only nesting the surfaces ever
+     * have to make.</p>
+     */
+    private static Result addGroup(JsonObject args) {
+        String name = requireTimer(args);
+        if (name == null) return Result.fail("No such timer");
+        com.mateof24.timer.Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
+        if (timer == null) return Result.fail("No such timer");
+
+        com.mateof24.trigger.Condition.Group.Mode mode =
+                com.mateof24.trigger.Condition.Group.Mode.parse(str(args, "mode"));
+        com.mateof24.trigger.Condition.Group group = new com.mateof24.trigger.Condition.Group(
+                com.mateof24.trigger.Condition.freshId(), mode, intOf(args, "count", 1),
+                (long) intOf(args, "windowSeconds", 0) * 1000L, java.util.List.of());
+
+        String ruleId = str(args, "ruleId");
+        if (ruleId == null || ruleId.isBlank()) {
+            com.mateof24.trigger.Condition.Group outer = new com.mateof24.trigger.Condition.Group(
+                    com.mateof24.trigger.Condition.freshId(),
+                    com.mateof24.trigger.Condition.Group.Mode.ANY, 1, 0L,
+                    java.util.List.of(group));
+            timer.rules().add(new com.mateof24.trigger.TriggerRule(
+                    com.mateof24.trigger.Condition.freshId(),
+                    com.mateof24.trigger.Trigger.Action.parse(str(args, "action")),
+                    outer, 0L, false));
+        } else {
+            com.mateof24.trigger.TriggerRule host = ruleById(timer, ruleId);
+            if (host == null) return Result.fail("No such trigger");
+            com.mateof24.trigger.Condition grown = addGroupInto(host.condition(), group);
+            replace(timer, host, new com.mateof24.trigger.TriggerRule(
+                    host.id(), host.action(), grown, host.delayTicks(), host.once()));
+        }
+        forget(name);
+        TimerManager.getInstance().saveTimer(timer);
+        return Result.ok();
+    }
+
+    private static com.mateof24.trigger.TriggerRule ruleById(com.mateof24.timer.Timer timer, String id) {
+        for (com.mateof24.trigger.TriggerRule rule : timer.rules()) {
+            if (rule.id().equals(id)) return rule;
+        }
+        return null;
+    }
+
+    /** The rule whose tree contains that group. */
+    private static com.mateof24.trigger.TriggerRule ruleHolding(com.mateof24.timer.Timer timer, String groupId) {
+        for (com.mateof24.trigger.TriggerRule rule : timer.rules()) {
+            if (contains(rule.condition(), groupId)) return rule;
+        }
+        return null;
+    }
+
+    private static boolean contains(com.mateof24.trigger.Condition node, String id) {
+        if (node == null) return false;
+        if (node.id().equals(id)) return true;
+        if (!(node instanceof com.mateof24.trigger.Condition.Group group)) return false;
+        for (com.mateof24.trigger.Condition child : group.children()) {
+            if (contains(child, id)) return true;
+        }
+        return false;
+    }
+
+    /** A copy of the tree with one condition added inside the named group. */
+    private static com.mateof24.trigger.Condition addInto(
+            com.mateof24.trigger.Condition node, String groupId,
+            com.mateof24.trigger.Condition added) {
+        if (!(node instanceof com.mateof24.trigger.Condition.Group group)) return null;
+        java.util.List<com.mateof24.trigger.Condition> children =
+                new java.util.ArrayList<>(group.children());
+        if (group.id().equals(groupId)) {
+            children.add(added);
+            return new com.mateof24.trigger.Condition.Group(group.id(), group.mode(),
+                    group.count(), group.windowMillis(), children);
+        }
+        for (int i = 0; i < children.size(); i++) {
+            com.mateof24.trigger.Condition grown = addInto(children.get(i), groupId, added);
+            if (grown == null) continue;
+            children.set(i, grown);
+            return new com.mateof24.trigger.Condition.Group(group.id(), group.mode(),
+                    group.count(), group.windowMillis(), children);
+        }
+        return null;
+    }
+
+    /** Another group beside the ones a rule already has. */
+    private static com.mateof24.trigger.Condition addGroupInto(
+            com.mateof24.trigger.Condition root, com.mateof24.trigger.Condition.Group group) {
+        java.util.List<com.mateof24.trigger.Condition> children = new java.util.ArrayList<>();
+        if (root instanceof com.mateof24.trigger.Condition.Group outer
+                && outer.mode() == com.mateof24.trigger.Condition.Group.Mode.ANY) {
+            children.addAll(outer.children());
+            children.add(group);
+            return new com.mateof24.trigger.Condition.Group(outer.id(), outer.mode(),
+                    outer.count(), outer.windowMillis(), children);
+        }
+        // A rule that was one plain condition becomes the first group of an
+        // "any", which is what it already meant on its own.
+        if (root != null) children.add(root);
+        children.add(group);
+        return com.mateof24.trigger.Condition.Group.of(
+                com.mateof24.trigger.Condition.Group.Mode.ANY, children);
+    }
+
+    private static void replace(com.mateof24.timer.Timer timer,
+                                com.mateof24.trigger.TriggerRule was,
+                                com.mateof24.trigger.TriggerRule now) {
+        java.util.List<com.mateof24.trigger.TriggerRule> rules = timer.rules();
+        int at = rules.indexOf(was);
+        if (at >= 0) rules.set(at, now);
     }
 
     /** Removes by position in the timer's list, zero-based. */
@@ -866,7 +995,7 @@ public final class AdminOps {
                 "timer.setTitle", "timer.setRepeat", "timer.setSequence",
                 "timer.setPosition", "timer.setScale", "timer.setSilent", "timer.setDisplay",
                 "timer.addCommand", "timer.removeCommand",
-                "timer.addTrigger", "timer.removeTrigger", "timer.clearTriggers",
+                "timer.addTrigger", "timer.addGroup", "timer.removeTrigger", "timer.clearTriggers",
                 "run.start", "run.pause", "run.resume", "run.stop", "run.reset", "run.stopAll",
                 "run.setAudience",
                 "config.set", "config.reset");
