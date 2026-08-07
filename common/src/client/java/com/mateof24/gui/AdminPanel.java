@@ -616,8 +616,8 @@ public final class AdminPanel {
                                             displayFloat(timer, "scale", 1f),
                                             startingTime(timer), timerTitles(timer),
                                             (px, py) -> {
-                                                editor.put("display.x", String.valueOf(px));
-                                                editor.put("display.y", String.valueOf(py));
+                                                sendDisplay(timer.name(), "x", px);
+                                                sendDisplay(timer.name(), "y", py);
                                             });
                                 })
                         .bounds(editorControlX, y, editorControlWidth, 18)
@@ -959,6 +959,24 @@ public final class AdminPanel {
                 timer.title("left"), timer.title("right")};
     }
 
+
+    /** One server default, sent now rather than left pending. */
+    private void sendConfig(String key, int value) {
+        JsonObject args = new JsonObject();
+        args.addProperty("key", key);
+        args.addProperty("value", value);
+        send("config.set", args);
+    }
+
+    /** One field of a timer's own display block, sent now. */
+    private void sendDisplay(String name, String key, int value) {
+        JsonObject args = new JsonObject();
+        args.addProperty("name", name);
+        args.addProperty("key", key);
+        args.addProperty("value", value);
+        send("timer.setDisplay", args);
+    }
+
     private void buildCommandRows(AdminModel.TimerRow timer, int bottom) {
         List<AdminModel.Scheduled> entries = timer == null ? List.of() : timer.commandList();
         editorRowsShown = Math.max(1, (bottom - editorFieldTop) / 20);
@@ -1088,9 +1106,17 @@ public final class AdminPanel {
                                             model.configInt("timerY", 4),
                                             model.configFloat("timerScale", 1f),
                                             "00:00:00", SAMPLE_TITLES,
+                                            // Save and leave saves. Writing a
+                                            // pending edit instead meant the
+                                            // position was only really stored
+                                            // if Apply was pressed afterwards,
+                                            // and reopening on an unchanged
+                                            // position left nothing pending, so
+                                            // Apply was greyed out and the work
+                                            // was silently lost.
                                             (px, py) -> {
-                                                settings.put("timerX", String.valueOf(px));
-                                                settings.put("timerY", String.valueOf(py));
+                                                sendConfig("timerX", px);
+                                                sendConfig("timerY", py);
                                             }))
                             .bounds(controlX, y, controlWidth, 18)
                             .tooltip(Tooltip.create(Component.translatable(

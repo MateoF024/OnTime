@@ -141,6 +141,41 @@ public final class PositionPicker {
 
     public boolean asking() { return asking; }
 
+    /**
+     * Changes scale without the counter appearing to walk sideways.
+     *
+     * <p>Drawing is anchored at the top-left, because that is what the anchor
+     * saved with a timer means and what the renderer does with it. Growing
+     * from there sends the counter right and down, so at the same stored
+     * position two scales look like two different placements. Moving the
+     * anchor so the middle of the overlay stays where it was makes it grow
+     * evenly in every direction, which is what somebody choosing a spot is
+     * actually looking at.</p>
+     *
+     * <p>The measurement needs a font, so the correction is deferred to the
+     * next frame, where a {@link Painter} exists.</p>
+     */
+    private void scaleAboutCentre(float next) {
+        pendingScale = next;
+    }
+
+    /** Set while a scale change is waiting for a frame to be measured against. */
+    private float pendingScale;
+
+    private void applyPendingScale(Painter painter) {
+        if (pendingScale == 0f) return;
+        int[] before = bounds(painter);
+        int centreX = before[0] + before[2] / 2;
+        int centreY = before[1] + before[3] / 2;
+
+        previewScale = pendingScale;
+        pendingScale = 0f;
+
+        int[] after = bounds(painter);
+        x += centreX - (after[0] + after[2] / 2);
+        y += centreY - (after[1] + after[3] / 2);
+    }
+
     // ---- what the counter takes up ----
 
     /**
@@ -237,7 +272,7 @@ public final class PositionPicker {
             return true;
         }
         if (keyCode == 83) { // S
-            previewScale = previewScale >= MAX_SCALE ? MIN_SCALE : previewScale + 1.0f;
+            scaleAboutCentre(previewScale >= MAX_SCALE ? MIN_SCALE : previewScale + 1.0f);
             return true;
         }
         return false;
@@ -262,6 +297,7 @@ public final class PositionPicker {
 
     public void draw(Painter painter, int screenW, int screenH) {
         placeFromPreset(painter, screenW, screenH);
+        applyPendingScale(painter);
         drawCounter(painter);
         drawBounds(painter);
         drawHint(painter, screenW, screenH);
