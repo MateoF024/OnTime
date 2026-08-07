@@ -45,9 +45,11 @@ public final class TriggerDispatcher {
 
                 if (!watches(server, timer, leaf, player)) continue;
 
-                if (!enough(server, timer, rule, leaf, player)) continue;
-                TriggerRegistry.fireFor(timer.getName(), rule,
-                        player == null ? null : player.getUUID());
+                // Recorded, not fired. Whether it is enough is the engine's
+                // question now: one player dying says nothing about how many
+                // the rule was waiting for, and the tick is where the tree is
+                // read as a whole.
+                RuleEngine.recordEvent(timer, rule, leaf, player);
             }
         }
     }
@@ -72,16 +74,4 @@ public final class TriggerDispatcher {
         return WhoResolver.covers(server, timer, leaf.who(), player.getUUID());
     }
 
-    /**
-     * For "any", the first player is enough. For "all" and "at least", this
-     * one is counted and the answer waits until enough of them have acted.
-     */
-    private static boolean enough(MinecraftServer server, Timer timer, TriggerRule rule,
-                                  Condition.Watch leaf, ServerPlayer player) {
-        if (!leaf.who().needsProgress()) return true;
-        int subjectSize = WhoResolver.resolve(server, timer, leaf.who()).size();
-        int needed = WhoResolver.required(leaf.who(), subjectSize);
-        return TriggerProgress.reached(timer.getName(), rule,
-                player == null ? null : player.getUUID(), needed);
-    }
 }

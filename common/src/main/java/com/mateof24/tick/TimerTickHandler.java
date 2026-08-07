@@ -44,6 +44,7 @@ public class TimerTickHandler {
                 run.cancelPending();
             }
         }
+        com.mateof24.trigger.RuleEngine.resetAll();
         com.mateof24.trigger.TriggerRegistry.resetAll();
         // The tally of who has already acted goes with it: a round that starts
         // again starts from nobody, or "all four have died" stays true for ever
@@ -63,10 +64,14 @@ public class TimerTickHandler {
         com.mateof24.config.ModConfig.getInstance().flush();
         com.mateof24.trigger.FTBQuestsPoller.poll(server);
 
+        // Every rule, every tick, armed or not. One place where there were
+        // two: the start side ran from here once a second and the finish side
+        // per running execution, and they had already drifted apart.
+        com.mateof24.trigger.RuleEngine.tick(server);
+
         startConditionCheckCounter++;
         if (startConditionCheckCounter >= START_CHECK_INTERVAL) {
             startConditionCheckCounter = 0;
-            checkStartConditions(server);
             com.mateof24.command.PendingConfirmations.sweep();
         }
 
@@ -146,13 +151,6 @@ public class TimerTickHandler {
         Timer timer = run.timer();
         boolean finished = run.tick();
         mirror(run);
-
-        // One question for every reason this timer could end early, asked even
-        // when the clock already ended it: a pending event trigger has to be
-        // consumed either way, or it survives to fire at the next run.
-        boolean triggered = com.mateof24.trigger.TriggerEvaluator
-                .fires(server, timer, com.mateof24.trigger.Trigger.Action.FINISH);
-        if (triggered) finished = true;
 
         if (!finished && com.mateof24.event.TimerConditionRegistry.hasCondition(timer.getName())) {
             finished = com.mateof24.event.TimerConditionRegistry.evaluate(timer.getName());
@@ -283,21 +281,6 @@ public class TimerTickHandler {
      * runs make both guards unnecessary: every eligible timer starts, each in
      * its own run.</p>
      */
-    private static void checkStartConditions(MinecraftServer server) {
-        TimerManager manager = TimerManager.getInstance();
-
-        for (Timer t : manager.timersView()) {
-            if (t.isRunning() || manager.hasRunOf(t.getName())) continue;
-
-            if (com.mateof24.trigger.TriggerEvaluator
-                    .fires(server, t, com.mateof24.trigger.Trigger.Action.START)) {
-                manager.startTimer(t.getName());
-                com.mateof24.network.TimerState.markDirty();
-            }
-        }
-    }
-
-
     private static void executeTimerCommand(MinecraftServer server, TimerRun run) {
         runCommandList(server, run, run.timer().getFinishCommands());
     }

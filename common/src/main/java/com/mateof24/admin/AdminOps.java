@@ -651,6 +651,7 @@ public final class AdminOps {
      * raised for a trigger that no longer exists sits pending forever.</p>
      */
     private static void forget(String name) {
+        com.mateof24.trigger.RuleEngine.resetFor(name);
         com.mateof24.trigger.TriggerRegistry.resetFor(name);
         com.mateof24.trigger.TriggerProgress.resetFor(name);
         com.mateof24.trigger.FTBQuestsPoller.resetFor(name);
