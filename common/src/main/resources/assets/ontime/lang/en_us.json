@@ -477,5 +477,15 @@
   "ontime.gui.editor.trigger.addGroup.tip": "Adds another group. The timer acts when any one group is satisfied.",
   "ontime.gui.editor.trigger.addHere": "Add here",
   "ontime.gui.editor.trigger.addingHere": "Adding here",
-  "ontime.gui.editor.trigger.addHere.tip": "The next condition you add joins this group, so it has to hold together with the rest. Press again to leave the group and make a reason of its own."
+  "ontime.gui.editor.trigger.addHere.tip": "The next condition you add joins this group, so it has to hold together with the rest. Press again to leave the group and make a reason of its own.",
+  "ontime.gui.editor.trigger.value.player_join": "Id",
+  "ontime.gui.editor.trigger.value.player_leave": "Id",
+  "ontime.gui.editor.trigger.value.player_death": "Id",
+  "ontime.gui.editor.trigger.value.player_respawn": "Id",
+  "ontime.gui.editor.trigger.value.dimension_change": "Dimension, like minecraft:the_nether",
+  "ontime.gui.editor.trigger.value.advancement": "Advancement, like minecraft:story/mine_stone",
+  "ontime.gui.editor.trigger.value.ftb_quest": "Quest id",
+  "ontime.gui.editor.trigger.value.ftb_reward": "Reward id",
+  "ontime.gui.editor.trigger.value.scoreboard": "Objective",
+  "ontime.gui.editor.trigger.value.expression": "Expression"
 }

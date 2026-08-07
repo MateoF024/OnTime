@@ -47,7 +47,16 @@ public final class FieldAssist {
         /** Every sound event the client knows about. */
         SOUNDS,
         /** The timers that exist right now, which the panel refreshes each layout. */
-        TIMERS
+        TIMERS,
+        /**
+         * Every advancement this client knows about.
+         *
+         * <p>Read from the connection rather than from a registry: advancements
+         * are data, so a pack can add them and the server sends what it has.
+         * That also means the list is empty on the title screen, which the
+         * panel never is.</p>
+         */
+        ADVANCEMENTS
     }
 
     /** Clearance the list keeps from the edge of the screen. */
@@ -328,6 +337,7 @@ public final class FieldAssist {
 
     private List<String> candidates(Source source) {
         if (source == Source.TIMERS) return timerNames;
+        if (source == Source.ADVANCEMENTS) return advancementIds();
         if (source != Source.SOUNDS) return List.of();
         if (soundIds == null) {
             List<String> ids = new ArrayList<>();
@@ -345,6 +355,34 @@ public final class FieldAssist {
             soundIds = ids;
         }
         return soundIds;
+    }
+
+    /**
+     * The advancements the server has sent this client.
+     *
+     * <p>Not cached the way sounds are: sounds come from a registry that is
+     * fixed once the game has loaded, while this arrives with the connection
+     * and grows as the server sends more. Rebuilt each time the list opens,
+     * which happens on a keystroke and walks a few hundred entries.</p>
+     */
+    private List<String> advancementIds() {
+        List<String> ids = new ArrayList<>();
+        try {
+            var connection = net.minecraft.client.Minecraft.getInstance().getConnection();
+            if (connection == null) return ids;
+            for (net.minecraft.advancements.AdvancementNode node
+                    : connection.getAdvancements().getTree().nodes()) {
+                // Object again: the id class was renamed at 26.1 and the only
+                // thing wanted here is its text.
+                Object id = node.holder().id();
+                ids.add(id.toString());
+            }
+        } catch (Throwable ignored) {
+            // Not connected, or a shape this version does not have. The field
+            // still takes typing, which is what it did before there was a list.
+        }
+        java.util.Collections.sort(ids);
+        return ids;
     }
 
     /**

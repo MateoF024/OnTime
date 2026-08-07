@@ -477,5 +477,15 @@
   "ontime.gui.editor.trigger.addGroup.tip": "Añade otro grupo. El contador actúa cuando se cumple cualquiera de los grupos.",
   "ontime.gui.editor.trigger.addHere": "Añadir aquí",
   "ontime.gui.editor.trigger.addingHere": "Añadiendo aquí",
-  "ontime.gui.editor.trigger.addHere.tip": "La siguiente condición que añadas entra en este grupo, así que tendrá que cumplirse junto con las demás. Pulsa otra vez para salir del grupo y crear un motivo aparte."
+  "ontime.gui.editor.trigger.addHere.tip": "La siguiente condición que añadas entra en este grupo, así que tendrá que cumplirse junto con las demás. Pulsa otra vez para salir del grupo y crear un motivo aparte.",
+  "ontime.gui.editor.trigger.value.player_join": "Id",
+  "ontime.gui.editor.trigger.value.player_leave": "Id",
+  "ontime.gui.editor.trigger.value.player_death": "Id",
+  "ontime.gui.editor.trigger.value.player_respawn": "Id",
+  "ontime.gui.editor.trigger.value.dimension_change": "Dimensión, como minecraft:the_nether",
+  "ontime.gui.editor.trigger.value.advancement": "Logro, como minecraft:story/mine_stone",
+  "ontime.gui.editor.trigger.value.ftb_quest": "Id de la misión",
+  "ontime.gui.editor.trigger.value.ftb_reward": "Id de la recompensa",
+  "ontime.gui.editor.trigger.value.scoreboard": "Objetivo",
+  "ontime.gui.editor.trigger.value.expression": "Expresión"
 }

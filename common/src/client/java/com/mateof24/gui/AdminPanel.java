@@ -934,12 +934,20 @@ public final class AdminPanel {
         } else if (!kindIsBare()) {
             triggerScore = null;
             triggerTarget = null;
+            // The hint names what this kind wants, rather than saying "Id" for
+            // an advancement, a dimension and a quest alike.
+            String hint = "ontime.gui.editor.trigger.value." + TRIGGER_KINDS[triggerKind];
             triggerValue = new EditBox(host.font(), cursor, y, Math.max(60, actionX - 4 - cursor), 18,
-                    Component.translatable("ontime.gui.editor.trigger.value"));
-            triggerValue.setHint(Component.translatable("ontime.gui.editor.trigger.value"));
+                    Component.translatable(hint));
+            triggerValue.setHint(Component.translatable(hint));
             triggerValue.setMaxLength(256);
             host.addWidget(triggerValue);
-            assist.add(triggerValue, text -> true);
+            // Only the kinds with a list behind them get one. An FTB quest id
+            // is a hex string the client has no way to enumerate.
+            assist.add(triggerValue, text -> true, switch (TRIGGER_KINDS[triggerKind]) {
+                case "advancement" -> FieldAssist.Source.ADVANCEMENTS;
+                default -> FieldAssist.Source.NONE;
+            });
         } else {
             triggerValue = null;
             triggerScore = null;
