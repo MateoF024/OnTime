@@ -27,10 +27,6 @@
   "ontime.command.hide.result": "§aTimer display: §fshown for %s player(s)§a, hidden for §f%s player(s)",
   "ontime.command.error.maxtime": "§cTimer exceeds maximum allowed time of §f%s",
   "ontime.command.error.maxtime.add": "§cAdding this time would exceed maximum allowed time of §f%s",
-  "ontime.config.timer_x": "Custom X",
-  "ontime.config.timer_x.tooltip": "X position of the timer (-1 for centered)",
-  "ontime.config.timer_y": "Custom Y",
-  "ontime.config.timer_y.tooltip": "Y position of the timer from the top",
   "ontime.config.timer_scale": "Scale",
   "ontime.config.timer_scale.tooltip": "Scale of the timer display (0.1 - 5.0)",
   "ontime.config.color_high": "Plenty left",
@@ -441,5 +437,16 @@
   "ontime.gui.settings.reset": "Restore defaults",
   "ontime.gui.settings.reset.tip": "Puts every setting above back to what the mod ships with. Timers that already exist keep their own values.",
   "ontime.gui.confirm.reset.title": "Restore every default?",
-  "ontime.gui.confirm.reset.body": "Applied at once, and it cannot be undone."
+  "ontime.gui.confirm.reset.body": "Applied at once, and it cannot be undone.",
+  "ontime.gui.picker.title": "Place the counter",
+  "ontime.gui.picker.hint": "Drag the counter. T shows the titles, S changes the size, ESC leaves.",
+  "ontime.gui.picker.title.sample": "Title",
+  "ontime.gui.picker.exit.title": "Leave the placement screen?",
+  "ontime.gui.picker.exit.body": "Where it sits has not been saved yet.",
+  "ontime.gui.picker.exit.discard": "Leave",
+  "ontime.gui.picker.exit.save": "Save and leave",
+  "ontime.gui.settings.custom_position.edit": "Edit",
+  "ontime.gui.settings.custom_position.tip": "Opens the game with a sample counter you can drag where you want it.",
+  "ontime.config.custom_position": "Custom position",
+  "ontime.config.custom_position.tooltip": "Where the counter sits when the preset is CUSTOM."
 }

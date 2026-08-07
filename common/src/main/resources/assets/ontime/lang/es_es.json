@@ -27,10 +27,6 @@
   "ontime.command.hide.result": "§aVisualización del contador: §fmostrada para %s jugador(es)§a, oculta para §f%s jugador(es)",
   "ontime.command.error.maxtime": "§cEl contador excede el tiempo máximo permitido de §f%s",
   "ontime.command.error.maxtime.add": "§cAgregar este tiempo excedería el tiempo máximo permitido de §f%s",
-  "ontime.config.timer_x": "X personalizada",
-  "ontime.config.timer_x.tooltip": "Posición X del contador (-1 para centrar)",
-  "ontime.config.timer_y": "Y personalizada",
-  "ontime.config.timer_y.tooltip": "Posición Y del contador desde arriba",
   "ontime.config.timer_scale": "Escala",
   "ontime.config.timer_scale.tooltip": "Escala de visualización del contador (0.1 - 5.0)",
   "ontime.config.color_high": "Queda mucho",
@@ -441,5 +437,16 @@
   "ontime.gui.settings.reset": "Restaurar valores",
   "ontime.gui.settings.reset.tip": "Devuelve todos los ajustes de arriba a los que trae el mod. Los contadores ya creados conservan los suyos.",
   "ontime.gui.confirm.reset.title": "¿Restaurar todos los valores?",
-  "ontime.gui.confirm.reset.body": "Se aplica al momento y no se puede deshacer."
+  "ontime.gui.confirm.reset.body": "Se aplica al momento y no se puede deshacer.",
+  "ontime.gui.picker.title": "Colocar el contador",
+  "ontime.gui.picker.hint": "Arrastra el contador. T muestra los títulos, S cambia el tamaño, ESC sale.",
+  "ontime.gui.picker.title.sample": "Título",
+  "ontime.gui.picker.exit.title": "¿Salir de la pantalla de colocación?",
+  "ontime.gui.picker.exit.body": "Dónde queda todavía no se ha guardado.",
+  "ontime.gui.picker.exit.discard": "Salir",
+  "ontime.gui.picker.exit.save": "Guardar y salir",
+  "ontime.gui.settings.custom_position.edit": "Editar",
+  "ontime.gui.settings.custom_position.tip": "Abre el juego con un contador de muestra que puedes arrastrar donde quieras.",
+  "ontime.config.custom_position": "Posición personalizada",
+  "ontime.config.custom_position.tooltip": "Dónde queda el contador cuando el preset es CUSTOM."
 }

@@ -82,8 +82,11 @@ public final class SettingsForm {
     private static final List<Row> ROWS = List.of(
             Row.header("display"),
             Row.of("positionPreset", Kind.PRESET, "preset"),
-            Row.of("timerX", Kind.INT, "x"),
-            Row.of("timerY", Kind.INT, "y"),
+            // Two numbers nobody can picture. They are still stored and still
+            // sent -- the placement screen is what writes them now, and this
+            // row is the way in. Shown only when the preset is CUSTOM, because
+            // for every other preset the coordinates mean nothing at all.
+            Row.action("customPosition"),
             Row.of("timerScale", Kind.FLOAT, "scale"),
 
             Row.header("colors"),
@@ -308,6 +311,9 @@ public final class SettingsForm {
         if (hex.length() != 6) throw new NumberFormatException(text);
         return Integer.parseInt(hex, 16);
     }
+
+    /** The row a key belongs to, for callers that need to read another row's value. */
+    public static Row rowOf(String key) { return find(key); }
 
     private static Row find(String key) {
         for (Row row : ROWS) if (!row.isHeader() && row.key().equals(key)) return row;

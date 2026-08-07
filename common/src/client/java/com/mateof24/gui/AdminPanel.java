@@ -977,6 +977,29 @@ public final class AdminPanel {
             String tooltipKey = "ontime.config." + snake(row.key()) + ".tooltip";
 
             if (row.isAction()) {
+                if ("customPosition".equals(row.key())) {
+                    // Only means anything for CUSTOM: every other preset works
+                    // its own anchor out from the screen size.
+                    if (!"CUSTOM".equalsIgnoreCase(settings.displayed(model,
+                            SettingsForm.rowOf("positionPreset")))) {
+                        continue;
+                    }
+                    host.addWidget(Button.builder(
+                                    Component.translatable("ontime.gui.settings.custom_position.edit"),
+                                    b -> AdminClientState.openPicker(null,
+                                            model.configInt("timerX", -1),
+                                            model.configInt("timerY", 4),
+                                            model.configFloat("timerScale", 1f),
+                                            (px, py) -> {
+                                                settings.put("timerX", String.valueOf(px));
+                                                settings.put("timerY", String.valueOf(py));
+                                            }))
+                            .bounds(controlX, y, controlWidth, 18)
+                            .tooltip(Tooltip.create(Component.translatable(
+                                    "ontime.gui.settings.custom_position.tip")))
+                            .build());
+                    continue;
+                }
                 // Asks first. Everything above this row goes back at once, and
                 // there is no undo.
                 host.addWidget(Button.builder(
