@@ -119,6 +119,7 @@ public final class AdminOps {
                 case "timer.removeCommand" -> removeCommand(args);
                 case "timer.addTrigger" -> addTrigger(args);
                 case "timer.addGroup" -> addGroup(args);
+                case "timer.removeCondition" -> removeCondition(args);
                 case "timer.removeTrigger" -> removeTrigger(args);
                 case "timer.clearTriggers" -> clearTriggers(args);
 
@@ -749,6 +750,63 @@ public final class AdminOps {
         if (at >= 0) rules.set(at, now);
     }
 
+
+    /**
+     * Removes one node from a rule, wherever it sits.
+     *
+     * <p>By id rather than by position: a condition inside the second group of
+     * a rule has no index anybody could name, and an index would move the
+     * moment something above it went.</p>
+     *
+     * <p>A rule left with nothing goes with it. An empty group is false and
+     * would sit there doing nothing while looking like a reason.</p>
+     */
+    private static Result removeCondition(JsonObject args) {
+        String name = requireTimer(args);
+        if (name == null) return Result.fail("No such timer");
+        com.mateof24.timer.Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
+        if (timer == null) return Result.fail("No such timer");
+
+        String nodeId = str(args, "conditionId");
+        if (nodeId == null || nodeId.isBlank()) return Result.fail("Which condition?");
+
+        com.mateof24.trigger.TriggerRule host = ruleHolding(timer, nodeId);
+        if (host == null) return Result.fail("No such condition");
+
+        if (host.condition().id().equals(nodeId)) {
+            timer.rules().remove(host);
+        } else {
+            com.mateof24.trigger.Condition pruned = without(host.condition(), nodeId);
+            if (pruned == null || pruned.leaves().isEmpty()) {
+                timer.rules().remove(host);
+            } else {
+                replace(timer, host, new com.mateof24.trigger.TriggerRule(
+                        host.id(), host.action(), pruned, host.delayTicks(), host.once()));
+            }
+        }
+        forget(name);
+        TimerManager.getInstance().saveTimer(timer);
+        return Result.ok();
+    }
+
+    /** A copy of the tree without that node, or null when it holds nothing else. */
+    private static com.mateof24.trigger.Condition without(
+            com.mateof24.trigger.Condition node, String nodeId) {
+        if (!(node instanceof com.mateof24.trigger.Condition.Group group)) return node;
+        java.util.List<com.mateof24.trigger.Condition> kept = new java.util.ArrayList<>();
+        for (com.mateof24.trigger.Condition child : group.children()) {
+            if (child.id().equals(nodeId)) continue;
+            com.mateof24.trigger.Condition pruned = without(child, nodeId);
+            // A group that lost its last condition goes too, rather than
+            // staying as an empty one that can never be true.
+            if (pruned instanceof com.mateof24.trigger.Condition.Group inner && inner.isEmpty()) continue;
+            kept.add(pruned);
+        }
+        if (kept.isEmpty()) return null;
+        return new com.mateof24.trigger.Condition.Group(group.id(), group.mode(),
+                group.count(), group.windowMillis(), kept);
+    }
+
     /** Removes by position in the timer's list, zero-based. */
     private static Result removeTrigger(JsonObject args) {
         String name = requireTimer(args);
@@ -995,7 +1053,8 @@ public final class AdminOps {
                 "timer.setTitle", "timer.setRepeat", "timer.setSequence",
                 "timer.setPosition", "timer.setScale", "timer.setSilent", "timer.setDisplay",
                 "timer.addCommand", "timer.removeCommand",
-                "timer.addTrigger", "timer.addGroup", "timer.removeTrigger", "timer.clearTriggers",
+                "timer.addTrigger", "timer.addGroup", "timer.removeCondition",
+                "timer.removeTrigger", "timer.clearTriggers",
                 "run.start", "run.pause", "run.resume", "run.stop", "run.reset", "run.stopAll",
                 "run.setAudience",
                 "config.set", "config.reset");

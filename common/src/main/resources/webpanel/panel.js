@@ -63,6 +63,10 @@
       "trg.s.audience": "the timer's audience", "trg.s.everyone": "anybody on the server",
       "trg.s.players": "these players", "trg.s.selector": "a selector",
       "trg.names": "Names, separated by commas", "trg.selector": "@a[team=red]",
+      "trg.addGroup": "Add a group", "trg.addCond": "Add a condition",
+      "trg.groupAll": "all of these hold", "trg.groupAny": "any of these holds",
+      "trg.groupAtLeast": "at least %s of these hold",
+      "trg.orGroup": "or", "trg.startsIt": "Starts it", "trg.endsIt": "Ends it",
       "group.server": "Server", "group.web": "Web", "group.reset": "Reset",
       "reset.what": "Every setting above, back to what the mod ships with",
       "reset.do": "Restore defaults", "reset.title": "Restore every default?",
@@ -123,6 +127,10 @@
       "trg.s.audience": "la audiencia del contador", "trg.s.everyone": "cualquiera del servidor",
       "trg.s.players": "estos jugadores", "trg.s.selector": "un selector",
       "trg.names": "Nombres, separados por comas", "trg.selector": "@a[team=red]",
+      "trg.addGroup": "Añadir un grupo", "trg.addCond": "Añadir una condición",
+      "trg.groupAll": "se cumplen todas", "trg.groupAny": "se cumple alguna",
+      "trg.groupAtLeast": "se cumplen al menos %s",
+      "trg.orGroup": "o", "trg.startsIt": "Lo arranca", "trg.endsIt": "Lo termina",
       "group.server": "Servidor", "group.web": "Web", "group.reset": "Restablecer",
       "reset.what": "Todos los ajustes de arriba, a los que trae el mod",
       "reset.do": "Restaurar valores", "reset.title": "¿Restaurar todos los valores?",
@@ -962,6 +970,67 @@
     return quantifier + " " + scope + (who.value ? ": " + who.value : "");
   }
 
+
+  /** The groups of a rule. A rule that is one plain condition counts as one. */
+  function groupsOf(rule) {
+    const root = rule.condition;
+    if (!root) return [];
+    if (root.node === "group" && root.mode === "any") return root.children || [];
+    return [root];
+  }
+
+  /** A group, its conditions, and the button that adds one more to it. */
+  function groupBlock(timer, rule, group) {
+    const box = document.createElement("div");
+    box.className = "trg-group";
+
+    const head = document.createElement("div");
+    head.className = "trg-group-head";
+    head.textContent = group.node !== "group" ? ""
+      : group.mode === "any" ? t("trg.groupAny")
+      : group.mode === "at_least" ? t("trg.groupAtLeast", group.count ?? 1)
+      : t("trg.groupAll");
+    if (head.textContent) box.append(head);
+
+    const conditions = group.node === "group" ? (group.children || []) : [group];
+    for (const condition of conditions) {
+      if (condition.node === "group") continue;
+      const row = document.createElement("div");
+      row.className = "cmd-row";
+      const text = document.createElement("span");
+      text.className = "cmd-text";
+      text.textContent = describeTrigger(condition);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "danger small";
+      remove.textContent = "\u00d7";
+      remove.onclick = () => act("timer.removeCondition",
+        { name: timer.name, conditionId: condition.id })
+        .then(ok => ok && reopen(timer.name));
+      row.append(text, remove);
+      box.append(row);
+    }
+
+    if (group.node === "group") {
+      const add = document.createElement("button");
+      add.type = "button";
+      add.className = "btn small";
+      add.textContent = t("trg.addCond");
+      add.onclick = () => { pendingGroup = group.id; };
+      box.append(add);
+    }
+    return box;
+  }
+
+  /** The group the add row will put its next condition into, if any. */
+  let pendingGroup = null;
+
+  /** Reopens the editor on fresh data, which is how every list here refreshes. */
+  function reopen(name) {
+    const fresh = state.timers.find(x => x.name === name);
+    if (fresh) editDialog(fresh);
+  }
+
   function editDialog(timer) {
     const display = timer.display || {};
     modal(t("dialog.edit", timer.name), body => {
@@ -1037,39 +1106,52 @@
       // never matched anything.
       group("triggers", s => {
         const list = document.createElement("div");
-        // The server sends rules; one with a single condition reads exactly
-        // as a trigger always did, which is all any editor writes today.
-        const rows = (timer.rules || [])
-          .filter(rule => rule.condition && rule.condition.node !== "group")
-          .map(rule => ({ ...rule.condition, action: rule.action }));
-        if (!rows.length) {
+        const rules = timer.rules || [];
+        if (!rules.length) {
           const p = document.createElement("p");
           p.className = "muted";
           p.textContent = t("trg.none");
           list.append(p);
         }
-        rows.forEach((trigger, index) => {
-          const row = document.createElement("div");
-          row.className = "cmd-row";
-          const at = document.createElement("span");
-          at.className = "cmd-at" + (trigger.action === "start" ? "" : " end");
-          at.textContent = t(trigger.action === "start" ? "startIt" : "finish");
-          const text = document.createElement("span");
-          text.className = "cmd-text";
-          text.textContent = describeTrigger(trigger);
-          const remove = document.createElement("button");
-          remove.type = "button";
-          remove.className = "danger small";
-          remove.textContent = "\u00d7";
-          remove.onclick = async () => {
-            if (await act("timer.removeTrigger", { name: timer.name, index })) {
-              const fresh = state.timers.find(x => x.name === timer.name);
-              if (fresh) editDialog(fresh);
+
+        // One block per rule: what it does, then the groups that make it true.
+        // A rule is true when any of its groups is, and a group when all of
+        // its conditions are -- two levels, which is every combination there
+        // is, because any boolean expression can be written as an or of ands.
+        for (const rule of rules) {
+          const block = document.createElement("div");
+          block.className = "trg-rule";
+
+          const head = document.createElement("div");
+          head.className = "trg-rule-head";
+          const what = document.createElement("span");
+          what.className = "cmd-at" + (rule.action === "start" ? "" : " end");
+          what.textContent = t(rule.action === "start" ? "trg.startsIt" : "trg.endsIt");
+          head.append(what);
+          block.append(head);
+
+          for (const [index, group] of groupsOf(rule).entries()) {
+            if (index > 0) {
+              const or = document.createElement("div");
+              or.className = "trg-or";
+              or.textContent = t("trg.orGroup");
+              block.append(or);
             }
-          };
-          row.append(at, text, remove);
-          list.append(row);
-        });
+            block.append(groupBlock(timer, rule, group));
+          }
+
+          const addGroup = document.createElement("button");
+          addGroup.type = "button";
+          addGroup.className = "btn small";
+          addGroup.textContent = t("trg.addGroup");
+          addGroup.onclick = () => act("timer.addGroup",
+            { name: timer.name, ruleId: rule.id, mode: "all", action: rule.action })
+            .then(ok => ok && reopen(timer.name));
+          block.append(addGroup);
+
+          list.append(block);
+        }
+
         s.append(list);
 
         const adder = document.createElement("div");
@@ -1154,9 +1236,12 @@
               args.subjectValue = subject.value.trim();
             }
           }
+          // Into the group whose "add a condition" was pressed last, or a
+          // rule of its own when none was.
+          if (pendingGroup) args.groupId = pendingGroup;
           if (await act("timer.addTrigger", args)) {
-            const fresh = state.timers.find(x => x.name === timer.name);
-            if (fresh) editDialog(fresh);
+            pendingGroup = null;
+            reopen(timer.name);
           }
         };
         adder.append(kind, value, score, quantifier, count, scope, subject, action, add);

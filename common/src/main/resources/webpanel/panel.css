@@ -735,3 +735,37 @@ dialog[open] { animation: pop .2s var(--ease); }
   }
 }
 
+
+/*
+ * Triggers, two levels deep and no deeper. A rule is true when any of its
+ * groups is, and a group when all of its conditions are — indentation is the
+ * whole of the notation, which is why there is no tree widget here.
+ */
+.trg-rule {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.trg-rule-head { margin-bottom: 8px; }
+
+.trg-group {
+  border-left: 2px solid var(--line);
+  padding: 4px 0 4px 10px;
+  margin-left: 4px;
+}
+.trg-group-head {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: .03em;
+  margin-bottom: 4px;
+}
+
+/* The seam between two groups, which is where the "or" lives. */
+.trg-or {
+  font-size: 11.5px;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  margin: 8px 0 8px 6px;
+}
