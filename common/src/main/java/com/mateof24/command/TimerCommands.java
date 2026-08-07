@@ -11,6 +11,7 @@ import com.mateof24.permission.PermissionNodes;
 import com.mateof24.storage.TimerStorage;
 import com.mateof24.timer.Timer;
 import com.mateof24.trigger.Trigger;
+import com.mateof24.trigger.Who;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
@@ -172,13 +173,7 @@ public class TimerCommands {
         return Commands.literal(literal)
                 .executes(ctx -> BehaviorCommands.addTrigger(ctx, Trigger.scoreboard(action,
                         StringArgumentType.getString(ctx, "objective"),
-                        IntegerArgumentType.getInteger(ctx, "score"), "*")))
-                .then(Commands.argument("target", StringArgumentType.greedyString())
-                        .suggests(TimerCommands::suggestScoreHolders)
-                        .executes(ctx -> BehaviorCommands.addTrigger(ctx, Trigger.scoreboard(action,
-                                StringArgumentType.getString(ctx, "objective"),
-                                IntegerArgumentType.getInteger(ctx, "score"),
-                                StringArgumentType.getString(ctx, "target")))));
+                        IntegerArgumentType.getInteger(ctx, "score"), Who.DEFAULT)));
     }
 
     /** The action comes before the expression, which eats the rest of the line. */

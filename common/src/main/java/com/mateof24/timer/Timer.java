@@ -170,7 +170,7 @@ public class Timer {
                             json.has("scoreConditionAction") ? json.get("scoreConditionAction").getAsString() : null),
                     objective,
                     json.has("conditionScore") ? json.get("conditionScore").getAsInt() : 0,
-                    json.has("conditionTarget") ? json.get("conditionTarget").getAsString() : "*"));
+                    oldHolder(json.has("conditionTarget") ? json.get("conditionTarget").getAsString() : null)));
         }
 
         String expression = json.has("conditionExpression") ? json.get("conditionExpression").getAsString() : "";
@@ -180,6 +180,16 @@ public class Timer {
                             json.has("conditionExpressionAction") ? json.get("conditionExpressionAction").getAsString() : null),
                     expression));
         }
+    }
+
+    /** The single scoreboard holder of the old form: "*" was everybody. */
+    private static com.mateof24.trigger.Who oldHolder(String target) {
+        if (target == null || target.isBlank() || "*".equals(target)) {
+            return new com.mateof24.trigger.Who(com.mateof24.trigger.Who.Scope.EVERYONE, "",
+                    com.mateof24.trigger.Who.Quantifier.ANY, 1);
+        }
+        return new com.mateof24.trigger.Who(com.mateof24.trigger.Who.Scope.PLAYERS, target,
+                com.mateof24.trigger.Who.Quantifier.ANY, 1);
     }
 
     /** {@code "dimension_change:minecraft:the_nether"} and friends, split once. */

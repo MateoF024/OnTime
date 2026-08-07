@@ -21,14 +21,19 @@ import java.util.Locale;
  * scoreboard check and a game event both ending it, which none of the three
  * could express.</p>
  *
+ * <p>Each also says <em>who</em> it watches and <em>how many</em> of them it
+ * takes — see {@link Who}. Before that, an event fired for whoever caused it
+ * and there was no way to ask for two named players, a team, or the whole
+ * server.</p>
+ *
  * @param kind      what is being watched
  * @param action    what happens to the timer when it fires
  * @param value     the id, expression or objective the kind needs; empty for
  *                  kinds that watch a bare event
  * @param threshold the score {@link Kind#SCOREBOARD} compares against
- * @param target    the scoreboard holder, {@code *} meaning any player
+ * @param who       whose behaviour counts, and how many of them it takes
  */
-public record Trigger(Kind kind, Action action, String value, int threshold, String target) {
+public record Trigger(Kind kind, Action action, String value, int threshold, Who who) {
 
     /** What a trigger does to its timer. */
     public enum Action {
@@ -91,38 +96,42 @@ public record Trigger(Kind kind, Action action, String value, int threshold, Str
         if (kind == null) throw new IllegalArgumentException("A trigger needs a kind");
         if (action == null) action = Action.FINISH;
         if (value == null) value = "";
-        if (target == null || target.isEmpty()) target = "*";
+        if (who == null) who = Who.DEFAULT;
     }
 
     /** A trigger watching a bare event, or an id-carrying one. */
     public static Trigger of(Kind kind, Action action, String value) {
-        return new Trigger(kind, action, value, 0, "*");
+        return new Trigger(kind, action, value, 0, Who.DEFAULT);
     }
 
-    public static Trigger scoreboard(Action action, String objective, int score, String target) {
-        return new Trigger(Kind.SCOREBOARD, action, objective, score, target);
+    public static Trigger of(Kind kind, Action action, String value, Who who) {
+        return new Trigger(kind, action, value, 0, who);
+    }
+
+    public static Trigger scoreboard(Action action, String objective, int score, Who who) {
+        return new Trigger(Kind.SCOREBOARD, action, objective, score, who);
     }
 
     public static Trigger expression(Action action, String expression) {
-        return new Trigger(Kind.EXPRESSION, action, expression, 0, "*");
+        return new Trigger(Kind.EXPRESSION, action, expression, 0, Who.DEFAULT);
     }
 
     /** Whether this trigger is complete enough to ever fire. */
     public boolean isValid() {
-        return !kind.needsValue() || !value.isBlank();
+        if (kind.needsValue() && value.isBlank()) return false;
+        return who.isValid();
     }
 
     /**
      * Identifies this trigger within its timer.
      *
      * <p>Used to key what has already fired. Two triggers that watch the same
-     * thing for the same outcome are the same trigger, so the kind, the value
-     * and the action are the whole identity — the threshold and target ride
-     * along because a scoreboard trigger is not the same trigger at a
-     * different score.</p>
+     * thing, for the same outcome, over the same players are the same trigger,
+     * so all of it counts: the same event over two different teams is two
+     * triggers and has to be remembered as two.</p>
      */
     public String key() {
-        return kind.lower() + ":" + value + ":" + threshold + ":" + target + ":" + action.lower();
+        return kind.lower() + ":" + value + ":" + threshold + ":" + action.lower() + ":" + who.key();
     }
 
     public JsonObject toJson() {
@@ -130,10 +139,8 @@ public record Trigger(Kind kind, Action action, String value, int threshold, Str
         json.addProperty("kind", kind.lower());
         json.addProperty("action", action.lower());
         if (!value.isEmpty()) json.addProperty("value", value);
-        if (kind == Kind.SCOREBOARD) {
-            json.addProperty("threshold", threshold);
-            json.addProperty("target", target);
-        }
+        if (kind == Kind.SCOREBOARD) json.addProperty("threshold", threshold);
+        json.add("who", who.toJson());
         return json;
     }
 
@@ -145,7 +152,18 @@ public record Trigger(Kind kind, Action action, String value, int threshold, Str
         Action action = Action.parse(json.has("action") ? json.get("action").getAsString() : null);
         String value = json.has("value") ? json.get("value").getAsString() : "";
         int threshold = json.has("threshold") ? json.get("threshold").getAsInt() : 0;
-        String target = json.has("target") ? json.get("target").getAsString() : "*";
-        return new Trigger(kind, action, value, threshold, target);
+        // A trigger saved before triggers could name anybody carried a single
+        // scoreboard holder. "*" was everybody; a name was that one player.
+        Who who = json.has("who")
+                ? Who.fromJson(json.getAsJsonObject("who"))
+                : fromOldTarget(json.has("target") ? json.get("target").getAsString() : null);
+        return new Trigger(kind, action, value, threshold, who);
+    }
+
+    private static Who fromOldTarget(String target) {
+        if (target == null || target.isBlank() || "*".equals(target)) {
+            return new Who(Who.Scope.EVERYONE, "", Who.Quantifier.ANY, 1);
+        }
+        return new Who(Who.Scope.PLAYERS, target, Who.Quantifier.ANY, 1);
     }
 }

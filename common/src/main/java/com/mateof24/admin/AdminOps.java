@@ -588,13 +588,24 @@ public final class AdminOps {
         if (value == null) value = "";
         if (kind.needsValue() && value.isBlank()) return Result.fail("That trigger needs a value");
 
-        String target = str(args, "target");
+        String subject = str(args, "subject");
+        com.mateof24.trigger.Who.Scope scope = com.mateof24.trigger.Who.Scope.parse(subject);
+        String subjectValue = str(args, "subjectValue");
+        if (subjectValue == null) subjectValue = "";
+        if (scope.needsValue() && subjectValue.isBlank()) {
+            return Result.fail("That subject needs to name somebody");
+        }
+        com.mateof24.trigger.Who who = new com.mateof24.trigger.Who(
+                scope, subjectValue.trim(),
+                com.mateof24.trigger.Who.Quantifier.parse(str(args, "quantifier")),
+                intOf(args, "count", 1));
+
         com.mateof24.trigger.Trigger trigger = new com.mateof24.trigger.Trigger(
                 kind,
                 com.mateof24.trigger.Trigger.Action.parse(str(args, "action")),
                 value.trim(),
                 intOf(args, "threshold", 0),
-                target == null || target.isBlank() ? "*" : target.trim());
+                who);
 
         if (!timer.addTrigger(trigger)) {
             return Result.fail("That trigger is already there, or this timer has too many");

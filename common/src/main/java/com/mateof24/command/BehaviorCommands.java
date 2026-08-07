@@ -389,10 +389,25 @@ final class BehaviorCommands {
         Component kind = Component.translatable("ontime.trigger.kind." + trigger.kind().lower());
         if (trigger.kind() == com.mateof24.trigger.Trigger.Kind.SCOREBOARD) {
             return Component.translatable("ontime.command.trigger.describe.scoreboard",
-                    kind, trigger.value(), trigger.threshold(), trigger.target());
+                    kind, trigger.value(), trigger.threshold(), describeWho(trigger.who()));
         }
-        if (trigger.value().isEmpty()) return kind;
-        return Component.translatable("ontime.command.trigger.describe.value", kind, trigger.value());
+        Component who = describeWho(trigger.who());
+        if (trigger.value().isEmpty()) {
+            return Component.translatable("ontime.command.trigger.describe.who", kind, who);
+        }
+        return Component.translatable("ontime.command.trigger.describe.value",
+                kind, trigger.value(), who);
+    }
+
+    /** "any of Bob, Ann" / "all of team red" / "at least 3 of anybody". */
+    static Component describeWho(com.mateof24.trigger.Who who) {
+        Component scope = who.scope().needsValue()
+                ? Component.translatable("ontime.who.scope." + who.scope().lower(), who.value())
+                : Component.translatable("ontime.who.scope." + who.scope().lower());
+        if (who.quantifier() == com.mateof24.trigger.Who.Quantifier.AT_LEAST) {
+            return Component.translatable("ontime.who.at_least", who.count(), scope);
+        }
+        return Component.translatable("ontime.who." + who.quantifier().lower(), scope);
     }
 
     static int addTrigger(CommandContext<CommandSourceStack> ctx, com.mateof24.trigger.Trigger trigger) {

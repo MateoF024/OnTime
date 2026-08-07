@@ -48,10 +48,27 @@ public final class TriggerEvaluator {
         };
     }
 
+    /**
+     * How many of the watched players meet the score, against how many it takes.
+     *
+     * <p>Asked per player rather than with a single holder, which is what the
+     * old single {@code target} field could express and nothing more: "all of
+     * team red have ten kills" is a count over a set, not a question about one
+     * name.</p>
+     */
     private static boolean scoreboard(MinecraftServer server, Timer timer, Trigger trigger) {
         try {
-            return Services.PLATFORM.checkScoreboardCondition(server,
-                    trigger.value(), trigger.threshold(), trigger.target());
+            java.util.List<net.minecraft.server.level.ServerPlayer> watched =
+                    WhoResolver.resolve(server, timer, trigger.who());
+            if (watched.isEmpty()) return false;
+            int met = 0;
+            for (net.minecraft.server.level.ServerPlayer player : watched) {
+                if (Services.PLATFORM.checkScoreboardCondition(server, trigger.value(),
+                        trigger.threshold(), player.getScoreboardName())) {
+                    met++;
+                }
+            }
+            return met >= WhoResolver.required(trigger.who(), watched.size());
         } catch (Exception e) {
             com.mateof24.OnTimeConstants.LOGGER.warn(
                     "Failed to evaluate the scoreboard trigger of timer '{}'", timer.getName(), e);
