@@ -35,6 +35,8 @@ public class AdminScreen extends Screen implements PanelHost {
     /** Lets {@link AdminClientState} open this screen without naming the class. */
     public static void register() {
         AdminClientState.setOpener(() -> Minecraft.getInstance().setScreen(new AdminScreen()));
+        AdminClientState.setPickerOpener((name, x, y, scale, save) ->
+                Minecraft.getInstance().setScreen(new PositionScreen(name, x, y, scale, save)));
     }
 
     @Override
@@ -149,6 +151,20 @@ public class AdminScreen extends Screen implements PanelHost {
         @Override
         public void flatText(String text, int x, int y, int argb) {
             graphics.drawString(font(), text, x, y, argb, false);
+        }
+
+        @Override
+        public void pushScale(float scale, int originX, int originY) {
+            var pose = graphics.pose();
+            pose.pushMatrix();
+            pose.translate(originX, originY);
+            pose.scale(scale, scale);
+            pose.translate(-originX, -originY);
+        }
+
+        @Override
+        public void popScale() {
+            graphics.pose().popMatrix();
         }
 
         @Override

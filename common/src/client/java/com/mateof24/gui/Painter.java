@@ -48,6 +48,23 @@ public interface Painter {
     /** Height of one line of text. */
     int lineHeight();
 
+    /**
+     * Scales everything drawn until {@link #popScale()}, about a fixed point.
+     *
+     * <p>The only call here that needs the pose stack, and the one place the
+     * eras genuinely differ: 1.21.1 has {@code PoseStack.pushPose} and takes
+     * three axes, the later ones have {@code pushMatrix} and take two. The
+     * position picker needs it because showing what a scale of three looks
+     * like means drawing at three, not drawing a bigger box around the same
+     * text.</p>
+     *
+     * @param originX the point that stays put, in unscaled screen pixels
+     */
+    default void pushScale(float scale, int originX, int originY) {}
+
+    /** Undoes the last {@link #pushScale}. */
+    default void popScale() {}
+
     /** One-pixel outline. Drawn as four rects because that is portable everywhere. */
     default void outline(int x, int y, int width, int height, int argb) {
         rect(x, y, width, 1, argb);

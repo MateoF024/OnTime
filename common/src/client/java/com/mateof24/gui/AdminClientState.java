@@ -47,6 +47,24 @@ public final class AdminClientState {
         opener = onOpen;
     }
 
+    /** Opens the placement screen for one timer. */
+    @FunctionalInterface
+    public interface PickerOpener {
+        void open(String timerName, int x, int y, float scale, PositionPicker.Save save);
+    }
+
+    private static PickerOpener pickerOpener;
+
+    /** Registered alongside {@link #setOpener}, and for the same reason. */
+    public static void setPickerOpener(PickerOpener opener) {
+        pickerOpener = opener;
+    }
+
+    /** Does nothing when no screen registered one, which is every non-client side. */
+    public static void openPicker(String timerName, int x, int y, float scale, PositionPicker.Save save) {
+        if (pickerOpener != null) pickerOpener.open(timerName, x, y, scale, save);
+    }
+
     /** Registered by the loader, which is the only place that knows how to send. */
     public static void setSender(java.util.function.Consumer<String> onSend) {
         sender = onSend;
