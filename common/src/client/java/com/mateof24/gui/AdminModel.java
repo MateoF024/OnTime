@@ -236,6 +236,23 @@ public final class AdminModel {
 
     public List<TimerRow> timers() { return timers; }
 
+    /**
+     * Drops a timer from the list without waiting for the next snapshot.
+     *
+     * <p>The server is the authority and will say the same thing a moment
+     * later, but a row that stays on screen after being deleted reads as a
+     * failed delete — and it stayed until something else forced a redraw, so
+     * changing tab or leaving and coming back "fixed" it, which is worse than
+     * a plain delay because it looks arbitrary.</p>
+     */
+    public void forgetTimer(String name) {
+        if (name == null) return;
+        List<TimerRow> kept = new ArrayList<>(timers.size());
+        for (TimerRow row : timers) if (!name.equals(row.name())) kept.add(row);
+        timers = kept;
+        if (name.equals(selectedTimer)) selectedTimer = null;
+    }
+
     /** The definition by name, or null when it has gone. */
     public TimerRow timer(String name) {
         if (name == null) return null;

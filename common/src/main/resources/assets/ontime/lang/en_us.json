@@ -429,5 +429,17 @@
   "ontime.gui.editor.trigger.value": "Id",
   "ontime.gui.editor.trigger.objective": "Objective",
   "ontime.gui.editor.trigger.score": "Score",
-  "ontime.gui.editor.trigger.target": "Holder, or *"
+  "ontime.gui.editor.trigger.target": "Holder, or *",
+  "ontime.gui.exit": "Exit",
+  "ontime.gui.timers.dialog.start.body": "Who sees this timer, and whether they share one clock",
+  "ontime.gui.timers.dialog.audience": "Audience: %s",
+  "ontime.gui.timers.dialog.mode": "Mode: %s",
+  "ontime.gui.timers.audience.everyone": "Everyone on the server",
+  "ontime.gui.timers.audience.chosen": "Only the players I name",
+  "ontime.gui.timers.audience.tip": "Everyone: anybody online, including whoever joins later. Only the players I name: exactly the ones you type below.",
+  "ontime.gui.settings.group.reset": "Reset",
+  "ontime.gui.settings.reset": "Restore defaults",
+  "ontime.gui.settings.reset.tip": "Puts every setting above back to what the mod ships with. Timers that already exist keep their own values.",
+  "ontime.gui.confirm.reset.title": "Restore every default?",
+  "ontime.gui.confirm.reset.body": "Applied at once, and it cannot be undone."
 }

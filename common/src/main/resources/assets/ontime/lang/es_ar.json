@@ -429,5 +429,17 @@
   "ontime.gui.editor.trigger.value": "Id",
   "ontime.gui.editor.trigger.objective": "Objetivo",
   "ontime.gui.editor.trigger.score": "Puntos",
-  "ontime.gui.editor.trigger.target": "Titular, o *"
+  "ontime.gui.editor.trigger.target": "Titular, o *",
+  "ontime.gui.exit": "Salir",
+  "ontime.gui.timers.dialog.start.body": "Quién ve este contador, y si comparten un mismo reloj",
+  "ontime.gui.timers.dialog.audience": "Audiencia: %s",
+  "ontime.gui.timers.dialog.mode": "Modo: %s",
+  "ontime.gui.timers.audience.everyone": "Todo el servidor",
+  "ontime.gui.timers.audience.chosen": "Solo los jugadores que indique",
+  "ontime.gui.timers.audience.tip": "Todo el servidor: cualquiera conectado, incluido quien entre después. Solo los que indique: exactamente los que escribas abajo.",
+  "ontime.gui.settings.group.reset": "Restablecer",
+  "ontime.gui.settings.reset": "Restaurar valores",
+  "ontime.gui.settings.reset.tip": "Devuelve todos los ajustes de arriba a los que trae el mod. Los contadores ya creados conservan los suyos.",
+  "ontime.gui.confirm.reset.title": "¿Restaurar todos los valores?",
+  "ontime.gui.confirm.reset.body": "Se aplica al momento y no se puede deshacer."
 }

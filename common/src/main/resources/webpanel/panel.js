@@ -58,7 +58,10 @@
       "trg.ftb_reward": "An FTB reward is claimed",
       "trg.scoreboard": "A score reaches a value",
       "trg.expression": "An expression is true",
-      "group.server": "Server", "group.web": "Web",
+      "group.server": "Server", "group.web": "Web", "group.reset": "Reset",
+      "reset.what": "Every setting above, back to what the mod ships with",
+      "reset.do": "Restore defaults", "reset.title": "Restore every default?",
+      "reset.body": "Applied at once, and it cannot be undone. Timers that already exist keep their own values.",
       "cmd.add": "Add", "cmd.none": "This timer runs no commands", "cmd.end": "At the end",
       "cmd.text": "Command, without the leading slash",
       on: "On", off: "Off", finish: "Finish it", startIt: "Start it", none: "Off",
@@ -110,7 +113,10 @@
       "trg.ftb_reward": "Se reclama una recompensa de FTB",
       "trg.scoreboard": "Una puntuación llega a un valor",
       "trg.expression": "Una expresión se cumple",
-      "group.server": "Servidor", "group.web": "Web",
+      "group.server": "Servidor", "group.web": "Web", "group.reset": "Restablecer",
+      "reset.what": "Todos los ajustes de arriba, a los que trae el mod",
+      "reset.do": "Restaurar valores", "reset.title": "¿Restaurar todos los valores?",
+      "reset.body": "Se aplica al momento y no se puede deshacer. Los contadores ya creados conservan los suyos.",
       "cmd.add": "Añadir", "cmd.none": "Este contador no ejecuta ningún comando",
       "cmd.end": "Al final", "cmd.text": "Comando, sin la barra inicial",
       on: "Sí", off: "No", finish: "Terminarlo", startIt: "Arrancarlo", none: "Nada",
@@ -715,7 +721,35 @@
       }
       return section;
     }));
+
+    // Last, on its own, and it asks first: it undoes every sheet above it.
+    const reset = sheet(t("group.reset"));
+    const row = document.createElement("div");
+    row.className = "field";
+    const label = document.createElement("label");
+    label.textContent = t("reset.what");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn danger";
+    button.textContent = t("reset.do");
+    button.onclick = () => confirmDialog(t("reset.title"), t("reset.body"), async () => {
+      if (await act("config.reset")) { forget(); await refresh(); }
+    });
+    row.append(label, button);
+    reset.body.append(row);
+    host.append(reset.section);
+
     markSettings();
+  }
+
+  /** Title, one line of consequence, and a red confirm. */
+  function confirmDialog(title, body, run) {
+    modal(title, host => {
+      const p = document.createElement("p");
+      p.className = "muted";
+      p.textContent = body;
+      host.append(p);
+    }, [[t("cancel"), "", null], [t("reset.do"), "danger", run]]);
   }
 
   function markSettings() {

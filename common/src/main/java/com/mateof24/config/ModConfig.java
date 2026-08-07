@@ -142,6 +142,37 @@ public class ModConfig {
      */
     private boolean dirty = false;
 
+    /**
+     * Every setting back to what the mod ships with.
+     *
+     * <p>Copied from a fresh instance rather than from a second list of
+     * literals: the field initialisers above are the only place a default is
+     * written down, so this cannot drift away from them the way a hand-written
+     * copy would. {@code dirty} and the instance itself are skipped — the
+     * first is bookkeeping and the second is not a setting.</p>
+     *
+     * <p>Timers already created keep what they have. They took their copy when
+     * they were made, which is the whole point of the defaults being defaults.
+     * </p>
+     */
+    public void restoreDefaults() {
+        ModConfig fresh = new ModConfig();
+        for (java.lang.reflect.Field field : ModConfig.class.getDeclaredFields()) {
+            int modifiers = field.getModifiers();
+            if (java.lang.reflect.Modifier.isStatic(modifiers)) continue;
+            if (java.lang.reflect.Modifier.isFinal(modifiers)) continue;
+            if ("dirty".equals(field.getName())) continue;
+            try {
+                field.setAccessible(true);
+                field.set(this, field.get(fresh));
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                com.mateof24.OnTimeConstants.LOGGER.warn(
+                        "Could not restore the default of '{}'", field.getName(), e);
+            }
+        }
+        dirty = true;
+    }
+
     /** Writes only if a setter actually changed something. */
     public void flush() {
         if (!dirty) return;

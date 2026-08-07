@@ -36,7 +36,9 @@ public final class SettingsForm {
         /** Cycled between on and off. */
         BOOL,
         /** Cycled through the position presets. */
-        PRESET
+        PRESET,
+        /** Not a value at all: a button that does something. */
+        ACTION
     }
 
     /**
@@ -48,6 +50,9 @@ public final class SettingsForm {
         static Row header(String header) { return new Row(header, null, null, null); }
 
         static Row of(String key, Kind kind) { return new Row(null, key, kind, null); }
+
+        /** A row that does something rather than holding a value. */
+        static Row action(String key) { return new Row(null, key, Kind.ACTION, null); }
 
         /**
          * A setting that also exists on a timer, and the name it goes by there.
@@ -62,6 +67,8 @@ public final class SettingsForm {
         }
 
         public boolean isHeader() { return header != null; }
+
+        public boolean isAction() { return kind == Kind.ACTION; }
 
         /** True when this setting can be given per timer as well. */
         public boolean perTimer() { return displayKey != null; }
@@ -99,7 +106,11 @@ public final class SettingsForm {
             Row.header("web"),
             Row.of("webSocketEnabled", Kind.BOOL),
             Row.of("webSocketPort", Kind.INT),
-            Row.of("webPanelPort", Kind.INT));
+            Row.of("webPanelPort", Kind.INT),
+
+            // Last, and on its own, because it undoes every row above it.
+            Row.header("reset"),
+            Row.action("resetDefaults"));
 
     public static List<Row> rows() { return ROWS; }
 
@@ -223,6 +234,8 @@ public final class SettingsForm {
             case COLOR -> String.format("#%06X", model.configInt(row.key(), 0xFFFFFF) & 0xFFFFFF);
             case BOOL -> String.valueOf(model.configBool(row.key(), false));
             case PRESET -> model.configString(row.key(), "BOSSBAR");
+            // Holds no value, so it can never differ from the server's.
+            case ACTION -> "";
         };
     }
 

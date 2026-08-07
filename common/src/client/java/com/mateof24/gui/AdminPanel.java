@@ -65,6 +65,8 @@ public final class AdminPanel {
     private static final int COLOR_DIALOG = 0xF0141418;
 
     private static final int COLOR_TEXT = 0xFFFFFFFF;
+    /** For the line under a dialog title: present, but not competing with it. */
+    private static final int COLOR_MUTED_TEXT = 0xFFA0A0A8;
 
     // The one thing colour is spent on.
     private static final int COLOR_RUNNING = 0xFF57C25F;
@@ -974,6 +976,20 @@ public final class AdminPanel {
             int y = top + i * SETTING_HEIGHT;
             String tooltipKey = "ontime.config." + snake(row.key()) + ".tooltip";
 
+            if (row.isAction()) {
+                // Asks first. Everything above this row goes back at once, and
+                // there is no undo.
+                host.addWidget(Button.builder(
+                                Component.translatable("ontime.gui.settings.reset")
+                                        .copy().withStyle(ChatFormatting.RED),
+                                b -> { confirmOp = "config.reset"; init(); })
+                        .bounds(controlX, y, controlWidth, 18)
+                        .tooltip(Tooltip.create(Component.translatable(
+                                "ontime.gui.settings.reset.tip")))
+                        .build());
+                continue;
+            }
+
             if (row.kind() == SettingsForm.Kind.BOOL || row.kind() == SettingsForm.Kind.PRESET) {
                 // A button that shows its value and advances on click. That is
                 // what CycleButton looks like, without CycleButton's drift:
@@ -1109,7 +1125,10 @@ public final class AdminPanel {
 
     private int dialogHeight() {
         return switch (confirmOp == null ? "" : confirmOp) {
-            case "start" -> 116;
+            // Grows by the row the players field takes. It was a fixed 116
+            // whether or not that field was there, so the mode button below it
+            // was drawn underneath Cancel and Start.
+            case "start" -> dialogGlobal ? 122 : 146;
             case "clone" -> 104;
             default -> DIALOG_HEIGHT;
         };
@@ -1127,19 +1146,30 @@ public final class AdminPanel {
                         "ontime.gui.timers.field.name", name == null ? "" : name + "2")));
             }
             case "start" -> {
-                host.addWidget(Button.builder(Component.translatable(dialogGlobal
-                                        ? "ontime.audience.global" : "ontime.gui.timers.field.players"),
+                // Both buttons name the setting and then its value. They used
+                // to show the value alone, so the first thing anybody saw was
+                // "everyone" and "each" with nothing saying what either was
+                // choosing.
+                y += 10;
+                host.addWidget(Button.builder(
+                                Component.translatable("ontime.gui.timers.dialog.audience",
+                                        Component.translatable(dialogGlobal
+                                                ? "ontime.gui.timers.audience.everyone"
+                                                : "ontime.gui.timers.audience.chosen")),
                                 b -> { dialogGlobal = !dialogGlobal; init(); })
                         .bounds(x, y, fieldWidth, 20)
+                        .tooltip(Tooltip.create(Component.translatable("ontime.gui.timers.audience.tip")))
                         .build());
                 y += 24;
                 if (!dialogGlobal) {
                     dialogFields.add(host.addWidget(field(x, y, fieldWidth,
                             "ontime.gui.timers.field.players", "")));
+                    y += 24;
                 }
-                y += dialogGlobal ? 0 : 24;
-                host.addWidget(Button.builder(Component.translatable("shared".equals(dialogMode)
-                                        ? "ontime.mode.shared" : "ontime.mode.each"),
+                host.addWidget(Button.builder(
+                                Component.translatable("ontime.gui.timers.dialog.mode",
+                                        Component.translatable("shared".equals(dialogMode)
+                                                ? "ontime.mode.shared" : "ontime.mode.each")),
                                 b -> {
                                     dialogMode = "shared".equals(dialogMode) ? "each" : "shared";
                                     init();
@@ -1211,9 +1241,12 @@ public final class AdminPanel {
                 args.addProperty("name", name);
                 confirmOp = null;
                 editor.close();
+                // Off the list now, not at whatever moment the next snapshot
+                // happens to arrive.
+                model.forgetTimer(name);
                 model.selectTimer(null);
-                init();
                 send("timer.delete", args);
+                init();
             }
             case "start" -> {
                 args.addProperty("name", name);
@@ -1353,7 +1386,7 @@ public final class AdminPanel {
     private void buildHeader() {
         int doneWidth = 54;
         int doneX = width - GUTTER - doneWidth;
-        host.addWidget(Button.builder(Component.translatable("gui.done"), b -> {
+        host.addWidget(Button.builder(Component.translatable("ontime.gui.exit"), b -> {
                     // Closing on top of unapplied edits throws them away in
                     // silence. Asking costs one click and is the only way the
                     // answer is the operator's rather than the panel's.
@@ -1852,18 +1885,27 @@ public final class AdminPanel {
                 centered(painter, Component.translatable("ontime.gui.timers.dialog.delete.body"),
                         x + DIALOG_WIDTH / 2, y + 34, COLOR_ERROR);
             }
+            if ("start".equals(confirmOp)) {
+                centered(painter, Component.translatable("ontime.gui.timers.dialog.start.body"),
+                        x + DIALOG_WIDTH / 2, y + 28, COLOR_MUTED_TEXT);
+            }
             return;
         }
 
         boolean exiting = CONFIRM_EXIT.equals(confirmOp);
-        centered(painter, Component.translatable(exiting
-                        ? "ontime.gui.confirm.exit.title" : "ontime.gui.confirm.stop_all.title"),
-                x + DIALOG_WIDTH / 2, y + 16, COLOR_TEXT);
-        centered(painter, exiting
-                        ? Component.translatable("ontime.gui.confirm.exit.body",
-                                settings.pendingCount() + editor.pendingCount())
-                        : Component.translatable("ontime.gui.confirm.stop_all.body", model.runs().size()),
-                x + DIALOG_WIDTH / 2, y + 34, COLOR_TEXT);
+        boolean resetting = "config.reset".equals(confirmOp);
+        String title = exiting ? "ontime.gui.confirm.exit.title"
+                : resetting ? "ontime.gui.confirm.reset.title"
+                : "ontime.gui.confirm.stop_all.title";
+        centered(painter, Component.translatable(title), x + DIALOG_WIDTH / 2, y + 16, COLOR_TEXT);
+
+        Component body = exiting
+                ? Component.translatable("ontime.gui.confirm.exit.body",
+                        settings.pendingCount() + editor.pendingCount())
+                : resetting
+                        ? Component.translatable("ontime.gui.confirm.reset.body")
+                        : Component.translatable("ontime.gui.confirm.stop_all.body", model.runs().size());
+        centered(painter, body, x + DIALOG_WIDTH / 2, y + 34, COLOR_TEXT);
     }
 
     private void centered(Painter painter, Component text, int centerX, int y, int argb) {

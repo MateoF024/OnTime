@@ -130,6 +130,7 @@ public final class AdminOps {
                 case "run.setAudience" -> setAudience(args);
 
                 case "config.set" -> setConfig(args);
+                case "config.reset" -> resetConfig();
 
                 default -> Result.fail("Unknown operation: " + op);
             };
@@ -718,6 +719,20 @@ public final class AdminOps {
      * the whole config back would silently undo a change another admin made
      * between the state it drew and the button that was pressed.
      */
+    /**
+     * Every server default back to what the mod ships with.
+     *
+     * <p>Takes no arguments on purpose: there is nothing to get wrong, and the
+     * confirmation belongs to whichever surface asked, not here.</p>
+     */
+    private static Result resetConfig() {
+        ModConfig config = ModConfig.getInstance();
+        config.restoreDefaults();
+        config.save();
+        com.mateof24.network.TimerState.markDirty();
+        return Result.ok();
+    }
+
     private static Result setConfig(JsonObject args) {
         String key = str(args, "key");
         if (key == null) return Result.fail("Missing key");
@@ -828,10 +843,14 @@ public final class AdminOps {
 
     /** Names of every operation {@link #apply} understands, for tests and docs. */
     public static List<String> operations() {
-        return List.of("timer.create", "timer.delete", "timer.clone", "timer.setTime", "timer.addTime",
+        return List.of(
+                "timer.create", "timer.delete", "timer.clone", "timer.setTime", "timer.addTime",
                 "timer.setTitle", "timer.setRepeat", "timer.setSequence",
-                "timer.setPosition", "timer.setScale", "timer.setSilent",
+                "timer.setPosition", "timer.setScale", "timer.setSilent", "timer.setDisplay",
+                "timer.addCommand", "timer.removeCommand",
+                "timer.addTrigger", "timer.removeTrigger", "timer.clearTriggers",
                 "run.start", "run.pause", "run.resume", "run.stop", "run.reset", "run.stopAll",
-                "run.setAudience", "config.set");
+                "run.setAudience",
+                "config.set", "config.reset");
     }
 }
