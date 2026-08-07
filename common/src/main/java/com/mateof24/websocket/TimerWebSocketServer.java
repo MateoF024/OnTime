@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.mateof24.OnTimeConstants;
 import com.mateof24.api.OnTimeAPI;
-import com.mateof24.api.TimerInfo;
 import com.mateof24.api.TimerRunInfo;
 import com.mateof24.config.ModConfig;
 import com.mateof24.event.TimerEventBus;
@@ -113,11 +112,11 @@ public class TimerWebSocketServer {
         executor.submit(this::acceptLoop);
 
         if (!listenersRegistered) {
-            TimerEventBus.registerOnStart(info -> broadcast(buildPayload("START", info)));
-            TimerEventBus.registerOnFinish(info -> broadcast(buildPayload("FINISH", info)));
-            TimerEventBus.registerOnPause(info -> broadcast(buildPayload("PAUSE", info)));
-            TimerEventBus.registerOnResume(info -> broadcast(buildPayload("RESUME", info)));
-            TimerEventBus.registerOnTick(info -> broadcast(buildPayload("TICK", info)));
+            TimerEventBus.registerOnRunStart(info -> broadcast(buildPayload("START", info)));
+            TimerEventBus.registerOnRunFinish(info -> broadcast(buildPayload("FINISH", info)));
+            TimerEventBus.registerOnRunPause(info -> broadcast(buildPayload("PAUSE", info)));
+            TimerEventBus.registerOnRunResume(info -> broadcast(buildPayload("RESUME", info)));
+            TimerEventBus.registerOnRunTick(info -> broadcast(buildPayload("TICK", info)));
             listenersRegistered = true;
         }
 
@@ -370,27 +369,25 @@ public class TimerWebSocketServer {
      * what 4.0.0 sent rather than replacing anything, so a consumer written
      * against the old shape reads the same fields it always did.</p>
      */
-    String buildPayload(String event, TimerInfo info) {
+    String buildPayload(String event, TimerRunInfo run) {
         JsonObject obj = new JsonObject();
         obj.addProperty("event", event);
-        obj.addProperty("name", info.name());
-        obj.addProperty("currentSeconds", info.getCurrentSeconds());
-        obj.addProperty("targetSeconds", info.getTargetSeconds());
-        obj.addProperty("formattedTime", info.getFormattedTime());
-        obj.addProperty("percentage", info.getPercentage());
-        obj.addProperty("countUp", info.countUp());
-        obj.addProperty("running", info.running());
+        obj.addProperty("name", run.timerName());
+        obj.addProperty("currentSeconds", run.currentSeconds());
+        obj.addProperty("targetSeconds", run.targetSeconds());
+        obj.addProperty("formattedTime", run.formattedTime());
+        obj.addProperty("percentage", run.percentage());
+        obj.addProperty("countUp", run.countUp());
+        obj.addProperty("running", run.running());
 
-        // The execution this event belongs to, when it can be told: an event
-        // carries a timer's name, and with several runs of one timer a name is
-        // no longer enough to say which one moved.
-        for (TimerRunInfo run : OnTimeAPI.getInstance().getRunsOf(info.name())) {
-            obj.addProperty("runId", run.runId().toString());
-            obj.addProperty("scope", run.audience() == null ? "GLOBAL" : run.audience().scope().name());
-            obj.addProperty("audienceSize", run.audience() == null || run.audience().isGlobal()
-                    ? -1 : run.audience().players().size());
-            break;
-        }
+        // The execution this event belongs to, said outright rather than
+        // guessed at. The events used to carry a timer name and the first run
+        // of that name was assumed to be the one that moved, which stopped
+        // being true the moment one timer could have several.
+        obj.addProperty("runId", run.runId().toString());
+        obj.addProperty("scope", run.audience() == null ? "GLOBAL" : run.audience().scope().name());
+        obj.addProperty("audienceSize", run.audience() == null || run.audience().isGlobal()
+                ? -1 : run.audience().players().size());
         return obj.toString();
     }
 

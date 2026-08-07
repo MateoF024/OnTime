@@ -115,10 +115,10 @@ public class TimerWebPanel {
                 // Any of them means the board moved; the panel asks for the
                 // whole state rather than trying to patch it from an event,
                 // which is one fewer thing that can drift out of step.
-                TimerEventBus.registerOnStart(info -> nudge("START"));
-                TimerEventBus.registerOnFinish(info -> nudge("FINISH"));
-                TimerEventBus.registerOnPause(info -> nudge("PAUSE"));
-                TimerEventBus.registerOnResume(info -> nudge("RESUME"));
+                TimerEventBus.registerOnRunStart(info -> nudge("START"));
+                TimerEventBus.registerOnRunFinish(info -> nudge("FINISH"));
+                TimerEventBus.registerOnRunPause(info -> nudge("PAUSE"));
+                TimerEventBus.registerOnRunResume(info -> nudge("RESUME"));
                 listenersRegistered = true;
             }
 

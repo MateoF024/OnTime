@@ -62,21 +62,6 @@ public final class ApiViews {
                 timer.display().scale());
     }
 
-    /**
-     * The legacy snapshot, kept for the deprecated events and renderer hook.
-     *
-     * <p>Built from an execution rather than from the definition's mirrored
-     * fields, so a listener on a second run at least sees that run's clock —
-     * which is as close as the old shape can get to the truth.</p>
-     */
-    @SuppressWarnings("deprecation")
-    public static TimerInfo legacyOf(TimerRun run) {
-        Timer timer = run.timer();
-        return new TimerInfo(run.timerName(), run.getCurrentTicks(), run.getTargetTicks(),
-                run.isCountUp(), run.isRunning(), timer.isSilent(),
-                timer.isRepeat(), timer.getRepeatCount(), run.getRepeatsDone());
-    }
-
     private static String emptyToNull(String value) {
         return value == null || value.trim().isEmpty() ? null : value;
     }

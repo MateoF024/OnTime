@@ -31,9 +31,9 @@ import java.util.function.Function;
  *
  * <p><b>Compatibility.</b> {@link #API_VERSION} is bumped whenever a signature
  * is removed or changes meaning; check it if you support more than one OnTime.
- * Members marked {@code @Deprecated} still work and will be removed no earlier
- * than the next major version. What changed in 5.0.0, and what to use instead,
- * is in {@code API-MIGRATION.md} in the repository.</p>
+ * Nothing here is deprecated: 5.0.0 is a fresh API rather than the old one
+ * with parts crossed out, and what it does differently is announced in the
+ * changelog.</p>
  */
 public class OnTimeAPI {
 
@@ -114,7 +114,7 @@ public class OnTimeAPI {
         return TimerManager.getInstance().addFinishCommand(name, command);
     }
 
-    /** Removes every scheduled and finish command (the legacy command is untouched). */
+    /** Removes every scheduled and finish command this timer has. */
     public boolean clearScheduledCommands(String name) {
         return TimerManager.getInstance().clearScheduledCommands(name);
     }
@@ -445,87 +445,4 @@ public class OnTimeAPI {
         return com.mateof24.websocket.TimerWebSocketServer.getInstance().isRunning();
     }
 
-    // ==================================================================
-    // Deprecated — 4.x shapes that still mean something
-    // ==================================================================
-
-    /**
-     * @deprecated use {@link #startGlobal(String)}, which returns the id you
-     *             need to control the execution afterwards. Same behaviour.
-     */
-    @Deprecated
-    public boolean startTimer(String name) {
-        return startGlobal(name).isPresent();
-    }
-
-    /**
-     * @deprecated use {@link #getDefinition(String)}. This returns a shape that
-     *             mixes the template with the primary execution's clock, which
-     *             is meaningless once a timer has more than one.
-     */
-    @Deprecated
-    public Optional<TimerInfo> getTimer(String name) {
-        return TimerManager.getInstance().getTimer(name)
-                .map(t -> new TimerInfo(t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
-                        t.isCountUp(), t.isRunning(), t.isSilent(),
-                        t.isRepeat(), t.getRepeatCount(), t.getRepeatsDone()));
-    }
-
-    /** @deprecated use {@link #getDefinitions()}. */
-    @Deprecated
-    public Map<String, TimerInfo> getAllTimers() {
-        Map<String, TimerInfo> out = new LinkedHashMap<>();
-        for (Timer timer : TimerManager.getInstance().timersView()) {
-            getTimer(timer.getName()).ifPresent(info -> out.put(timer.getName(), info));
-        }
-        return out;
-    }
-
-    /** @deprecated use {@link #getDefinition(String)} — it carries the titles. */
-    @Deprecated
-    public Map<String, String> getTimerTitles(String name) {
-        return getDefinition(name).map(TimerDefinition::titles).orElseGet(LinkedHashMap::new);
-    }
-
-    /** @deprecated use {@link #getDefinition(String)} — it carries the schedule. */
-    @Deprecated
-    public Map<Long, List<String>> getScheduledCommands(String name) {
-        return getDefinition(name).map(TimerDefinition::scheduledCommands).orElseGet(LinkedHashMap::new);
-    }
-
-    /** @deprecated use {@link #getDefinition(String)} — it carries the finish list. */
-    @Deprecated
-    public List<String> getFinishCommands(String name) {
-        return getDefinition(name).map(TimerDefinition::finishCommands).orElseGet(List::of);
-    }
-
-    /** @deprecated use {@link #onRunStart(Consumer)}, which says which execution started. */
-    @Deprecated
-    public void registerOnStart(Consumer<TimerInfo> listener) {
-        com.mateof24.event.TimerEventBus.registerOnStart(listener);
-    }
-
-    /** @deprecated use {@link #onRunFinish(Consumer)}. */
-    @Deprecated
-    public void registerOnFinish(Consumer<TimerInfo> listener) {
-        com.mateof24.event.TimerEventBus.registerOnFinish(listener);
-    }
-
-    /** @deprecated use {@link #onRunPause(Consumer)}. */
-    @Deprecated
-    public void registerOnPause(Consumer<TimerInfo> listener) {
-        com.mateof24.event.TimerEventBus.registerOnPause(listener);
-    }
-
-    /** @deprecated use {@link #onRunResume(Consumer)}. */
-    @Deprecated
-    public void registerOnResume(Consumer<TimerInfo> listener) {
-        com.mateof24.event.TimerEventBus.registerOnResume(listener);
-    }
-
-    /** @deprecated use {@link #onRunTick(Consumer)}. */
-    @Deprecated
-    public void registerOnTick(Consumer<TimerInfo> listener) {
-        com.mateof24.event.TimerEventBus.registerOnTick(listener);
-    }
 }

@@ -29,8 +29,9 @@
  *   <li>{@link com.mateof24.api.OnTimeAPI#API_VERSION} is bumped whenever a
  *       member is removed or changes meaning. Check it if you support more than
  *       one OnTime.</li>
- *   <li>Members marked {@code @Deprecated} keep working and will not be removed
- *       before the next major version.</li>
+ *   <li>Nothing here is deprecated. 5.0.0 is a fresh API rather than the
+ *       old one with parts crossed out, and what it does differently is
+ *       announced in the changelog.</li>
  *   <li>Anything outside this package is internal and may change in any
  *       release, including {@code com.mateof24.manager},
  *       {@code com.mateof24.timer} and {@code com.mateof24.event}. The one

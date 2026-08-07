@@ -8,7 +8,6 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
  *
  * <p>26.x variant: Minecraft 26.1 removed {@code GuiGraphics}; HUD drawing goes
  * through {@link GuiGraphicsExtractor}. Custom renderers targeting 26.x must be
- * compiled against this signature (see the 4.0.0 changelog).</p>
  *
  * <p>Called <b>once per execution</b> — a timer can be on screen several times
  * at once, for different audiences and at different times, so the renderer is
@@ -23,22 +22,13 @@ public interface ITimerRenderer {
     /**
      * Draws one execution at the position the mod resolved for it.
      *
+     * <p>One method. It used to be two, with this one defaulting to an older
+     * signature that took a formatted string and a percentage — everything a
+     * renderer could want was already on the execution, so the pair only meant
+     * two ways to say the same thing.</p>
+     *
      * @param run the execution being drawn: its clock, audience, mode and owner
      */
-    default void render(GuiGraphicsExtractor graphics, float partialTick, TimerRunInfo run,
-                        int x, int y, float scale) {
-        render(graphics, partialTick, run.formattedTime(), run.percentage(), x, y, scale);
-    }
-
-    /**
-     * @deprecated implement
-     *             {@link #render(GuiGraphicsExtractor, float, TimerRunInfo, int, int, float)}
-     *             instead; it says which execution is being drawn.
-     */
-    @Deprecated
-    default void render(GuiGraphicsExtractor graphics, float partialTick,
-                        String formattedTime, float percentage, int x, int y, float scale) {
-        throw new UnsupportedOperationException(
-                "ITimerRenderer: implement one of the two render methods");
-    }
+    void render(GuiGraphicsExtractor graphics, float partialTick, TimerRunInfo run,
+                int x, int y, float scale);
 }
