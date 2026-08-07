@@ -59,8 +59,9 @@ public final class AdminPanel {
 
     /** Sits under vanilla's dimming, so it only needs to be a hint. */
     private static final int COLOR_BAND = 0x50000000;
-    /** How many of the band's rows are spent fading it out. */
-    private static final int BAND_FADE = 4;
+    /** How many rows the band spends fading, and how far past itself it runs. */
+    private static final int BAND_FADE = 14;
+    private static final int BAND_OVERHANG = 8;
     /** Drawn over the world after the widgets, so it has to carry on its own. */
     private static final int COLOR_RULE = 0x70FFFFFF;
     private static final int COLOR_SCRIM = 0xC0000000;
@@ -988,12 +989,11 @@ public final class AdminPanel {
             if (line.row() == Row.SECTION || line.row() == Row.BRANCH) {
                 boolean branch = line.row() == Row.BRANCH;
                 host.addWidget(Button.builder(
-                                Component.translatable(branch
-                                        ? "ontime.gui.editor.trigger.addToBranch"
-                                        : "ontime.gui.editor.trigger.addBranch"),
+                                Component.translatable("ontime.gui.editor.trigger.add"),
                                 b -> openBuilder(line.startsIt(), line.groupId()))
-                        .bounds(right - (branch ? 118 : 96) - (branch ? 22 : 0), y,
-                                branch ? 118 : 96, 18)
+                        // The row it is on says where it adds. Saying it again
+                        // on the button only makes the button longer.
+                        .bounds(right - 44 - (branch ? 22 : 0), y, 44, 18)
                         .tooltip(Tooltip.create(Component.translatable(branch
                                 ? "ontime.gui.editor.trigger.addToBranch.tip"
                                 : "ontime.gui.editor.trigger.addBranch.tip")))
@@ -1046,12 +1046,10 @@ public final class AdminPanel {
                 int index = detailScroll + i;
                 Button option = Button.builder(
                                 Component.translatable(optionKey(options[index])),
-                                b -> {
-                                    chooseStep(index);
-                                    detailScroll = 0;
-                                    builderStep = stepAfter(builderStep, 1);
-                                    init();
-                                })
+                                // Answering does not move on. Changing your
+                                // mind a second later is the common case, and
+                                // it should not cost a trip backwards.
+                                b -> { chooseStep(index); init(); })
                         .bounds(editorFieldX, top + i * 20, right - editorFieldX - 2, 18)
                         .tooltip(Tooltip.create(
                                 Component.translatable(optionKey(options[index]) + ".help")))
@@ -1138,6 +1136,10 @@ public final class AdminPanel {
                     Math.max(80, right - editorFieldX - 2), 18,
                     Component.translatable(detailLabelKey(key)));
             box.setMaxLength("value".equals(key) ? 256 : 64);
+            // The example goes in the box, where an empty box needs it, rather
+            // than into the name, which then stops being a name.
+            String hint = detailHintKey(key);
+            if (hint != null) box.setHint(Component.translatable(hint));
             host.addWidget(box);
 
             switch (key) {
@@ -1169,6 +1171,21 @@ public final class AdminPanel {
                 }
             }
         }
+    }
+
+    /** The name of a field, as a label: it ends in a colon, like every label. */
+    private Component detailLabel(String key) {
+        return Component.translatable(detailLabelKey(key)).copy().append(":");
+    }
+
+    /** What an empty box shows, when an example says more than the name can. */
+    private String detailHintKey(String key) {
+        return switch (key) {
+            case "subject" -> "selector".equals(SCOPES[triggerScope])
+                    ? "ontime.gui.editor.trigger.selector.hint"
+                    : "ontime.gui.editor.trigger.names.hint";
+            default -> null;
+        };
     }
 
     private String detailLabelKey(String key) {
@@ -1275,7 +1292,7 @@ public final class AdminPanel {
         if (builderStep == STEP_DETAILS) {
             List<String> keys = detailKeys();
             for (int i = 0; i < keys.size(); i++) {
-                painter.text(Component.translatable(detailLabelKey(keys.get(i))),
+                painter.text(detailLabel(keys.get(i)),
                         editorFieldX, top + i * DETAIL_HEIGHT, COLOR_TEXT);
             }
             return;
@@ -2230,9 +2247,10 @@ public final class AdminPanel {
      * The band behind the title, fading out downwards.
      *
      * <p>It has no bottom border, so a flat fill ended in a hard line across
-     * the screen with nothing to explain it. The last few rows fade instead,
-     * and only the last few: the buttons have to sit in solid dark or they
-     * read as floating loose above the page.</p>
+     * the screen with nothing to explain it. Four rows of fade were no better:
+     * that is still an edge, only a blurry one. It fades over fourteen now,
+     * beginning above where the band ends and running on below it, and the
+     * buttons still sit in solid dark because the fade starts under them.</p>
      *
      * <p>Drawn as rows rather than as a gradient call: {@link Painter} has one
      * fill and adding a gradient to it would mean a version-specific
@@ -2240,15 +2258,16 @@ public final class AdminPanel {
      * arithmetic do here.</p>
      */
     private void drawHeaderBand(Painter painter) {
-        int solid = HEADER_HEIGHT - BAND_FADE;
+        int solid = HEADER_HEIGHT + BAND_OVERHANG - BAND_FADE;
         painter.rect(0, 0, width, solid, COLOR_BAND);
 
         int alpha = COLOR_BAND >>> 24;
         for (int row = 0; row < BAND_FADE; row++) {
-            // Squared, so it thins quickly at first and then trails off. A
-            // straight ramp still reads as an edge, only a softer one.
-            float left = 1f - (row + 1) / (float) BAND_FADE;
-            int faded = Math.round(alpha * left * left);
+            // Smoothstep: flat where it leaves the solid fill and flat again
+            // where it reaches nothing, so neither end of the fade is a line.
+            float at = (row + 1) / (float) BAND_FADE;
+            float eased = at * at * (3f - 2f * at);
+            int faded = Math.round(alpha * (1f - eased));
             painter.rect(0, solid + row, width, 1, (faded << 24) | (COLOR_BAND & 0xFFFFFF));
         }
     }
@@ -2505,7 +2524,8 @@ public final class AdminPanel {
 
         // Above the box, so a long name has the whole width to itself.
         if (commandDelayLabelY > 0) {
-            painter.text(Component.translatable("ontime.gui.editor.field.command_delay"),
+            painter.text(Component.translatable("ontime.gui.editor.field.command_delay")
+                            .copy().append(":"),
                     editorFieldX, commandDelayLabelY, COLOR_TEXT);
         }
     }
