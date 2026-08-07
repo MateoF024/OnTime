@@ -563,6 +563,8 @@ public final class AdminPanel {
 
         if (editor.section() == TimerEditor.Section.COMMANDS) {
             buildCommandRows(timer, contentBottom - 30);
+        } else if (editor.section() == TimerEditor.Section.TRIGGERS) {
+            buildTriggerRows(timer, contentBottom - 30);
         } else {
             buildFieldRows(timer, editor.section(), contentBottom - 4);
         }
@@ -679,6 +681,187 @@ public final class AdminPanel {
      * value: adding a command and then applying five other things would make
      * the order it happened in matter, and it does not.</p>
      */
+    /** The kinds the server accepts, in the order the cycler walks them. */
+    private static final String[] TRIGGER_KINDS = {
+            "player_join", "player_leave", "player_death", "player_respawn",
+            "dimension_change", "advancement", "ftb_quest", "ftb_reward",
+            "scoreboard", "expression"};
+
+    private int triggerKind = 0;
+    private boolean triggerStarts = false;
+    private EditBox triggerValue;
+    private EditBox triggerScore;
+    private EditBox triggerTarget;
+
+    private int triggerCount() {
+        AdminModel.TimerRow timer = model.timer(model.selectedTimer());
+        return timer == null ? 0 : timer.triggers().size();
+    }
+
+    /** True while the chosen kind needs no value at all. */
+    private boolean kindIsBare() {
+        return TRIGGER_KINDS[triggerKind].startsWith("player_");
+    }
+
+    private boolean kindIsScoreboard() {
+        return "scoreboard".equals(TRIGGER_KINDS[triggerKind]);
+    }
+
+    /**
+     * The trigger list, and the row that adds one.
+     *
+     * <p>Shaped like the commands page rather than like a form, because that
+     * is what it is now: a list of any length. It used to be three fixed
+     * blocks -- a scoreboard, an expression and a select of four game events --
+     * so half the kinds the server understood, advancements among them, could
+     * only be reached from a command.</p>
+     */
+    private void buildTriggerRows(AdminModel.TimerRow timer, int bottom) {
+        List<AdminModel.TimerRow.Trigger> entries = timer == null ? List.of() : timer.triggers();
+        editorRowsShown = Math.max(1, (bottom - editorFieldTop) / 20);
+        detailScroll = Math.max(0, Math.min(Math.max(0, entries.size() - editorRowsShown), detailScroll));
+
+        for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
+            final int index = detailScroll + i;
+            int y = editorFieldTop + i * 20;
+            host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.trigger.remove"),
+                            b -> {
+                                JsonObject args = new JsonObject();
+                                args.addProperty("name", timer.name());
+                                args.addProperty("index", index);
+                                send("timer.removeTrigger", args);
+                                awaitingApply = true;
+                            })
+                    .bounds(width - GUTTER - 20, y, 20, 18)
+                    .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.remove.tip")))
+                    .build());
+        }
+
+        int y = bottom + 6;
+        int right = width - GUTTER;
+
+        host.addWidget(Button.builder(
+                        Component.translatable("ontime.trigger.kind." + TRIGGER_KINDS[triggerKind]),
+                        b -> {
+                            triggerKind = (triggerKind + 1) % TRIGGER_KINDS.length;
+                            init();
+                        })
+                .bounds(editorFieldX, y, 118, 18)
+                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.kind.tip")))
+                .build());
+
+        int cursor = editorFieldX + 122;
+        int addX = right - 48;
+        int actionX = addX - 62;
+
+        if (kindIsScoreboard()) {
+            triggerValue = new EditBox(host.font(), cursor, y, 90, 18,
+                    Component.translatable("ontime.gui.editor.trigger.objective"));
+            triggerValue.setHint(Component.translatable("ontime.gui.editor.trigger.objective"));
+            triggerValue.setMaxLength(64);
+            host.addWidget(triggerValue);
+            assist.add(triggerValue, text -> true);
+
+            triggerScore = new EditBox(host.font(), cursor + 94, y, 44, 18,
+                    Component.translatable("ontime.gui.editor.trigger.score"));
+            triggerScore.setHint(Component.translatable("ontime.gui.editor.trigger.score"));
+            triggerScore.setMaxLength(9);
+            host.addWidget(triggerScore);
+            assist.add(triggerScore, FieldAssist.intBetween(-999999, 999999));
+
+            triggerTarget = new EditBox(host.font(), cursor + 142, y,
+                    Math.max(40, actionX - 4 - (cursor + 142)), 18,
+                    Component.translatable("ontime.gui.editor.trigger.target"));
+            triggerTarget.setHint(Component.translatable("ontime.gui.editor.trigger.target"));
+            triggerTarget.setMaxLength(64);
+            host.addWidget(triggerTarget);
+            assist.add(triggerTarget, text -> true);
+        } else if (!kindIsBare()) {
+            triggerScore = null;
+            triggerTarget = null;
+            triggerValue = new EditBox(host.font(), cursor, y, Math.max(60, actionX - 4 - cursor), 18,
+                    Component.translatable("ontime.gui.editor.trigger.value"));
+            triggerValue.setHint(Component.translatable("ontime.gui.editor.trigger.value"));
+            triggerValue.setMaxLength(256);
+            host.addWidget(triggerValue);
+            assist.add(triggerValue, text -> true);
+        } else {
+            triggerValue = null;
+            triggerScore = null;
+            triggerTarget = null;
+        }
+
+        host.addWidget(Button.builder(
+                        Component.translatable("ontime.trigger.action." + (triggerStarts ? "start" : "finish")),
+                        b -> {
+                            triggerStarts = !triggerStarts;
+                            init();
+                        })
+                .bounds(actionX, y, 58, 18)
+                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.action.tip")))
+                .build());
+
+        host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.trigger.add"), b -> {
+                    if (timer == null) return;
+                    String kind = TRIGGER_KINDS[triggerKind];
+                    JsonObject args = new JsonObject();
+                    args.addProperty("name", timer.name());
+                    args.addProperty("kind", kind);
+                    args.addProperty("action", triggerStarts ? "start" : "finish");
+                    if (!kindIsBare()) {
+                        if (triggerValue == null || triggerValue.getValue().isBlank()) return;
+                        args.addProperty("value", triggerValue.getValue().trim());
+                    }
+                    if (kindIsScoreboard()) {
+                        args.addProperty("threshold", parseIntOr(triggerScore, 0));
+                        String target = triggerTarget == null ? "" : triggerTarget.getValue().trim();
+                        args.addProperty("target", target.isEmpty() ? "*" : target);
+                    }
+                    send("timer.addTrigger", args);
+                    awaitingApply = true;
+                })
+                .bounds(addX, y, 48, 18)
+                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.add.tip")))
+                .build());
+    }
+
+    private static int parseIntOr(EditBox box, int fallback) {
+        if (box == null) return fallback;
+        try {
+            return Integer.parseInt(box.getValue().trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    /** One line per trigger: what it watches, and what it does to the timer. */
+    private void drawTriggerRows(Painter painter, AdminModel.TimerRow timer) {
+        List<AdminModel.TimerRow.Trigger> entries = timer == null ? List.of() : timer.triggers();
+        if (entries.isEmpty()) {
+            painter.text(Component.translatable("ontime.gui.editor.trigger.none"),
+                    editorFieldX, editorFieldTop, COLOR_TEXT);
+            return;
+        }
+        for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
+            AdminModel.TimerRow.Trigger trigger = entries.get(detailScroll + i);
+            int y = editorFieldTop + i * 20;
+            painter.text(Component.translatable(
+                            "ontime.trigger.action." + (trigger.startsIt() ? "start" : "finish")),
+                    editorFieldX, y, trigger.startsIt() ? COLOR_COOLDOWN : COLOR_PAUSED);
+            painter.text(describeTrigger(trigger), editorFieldX + 56, y, COLOR_TEXT);
+        }
+    }
+
+    private static Component describeTrigger(AdminModel.TimerRow.Trigger trigger) {
+        Component kind = Component.translatable("ontime.trigger.kind." + trigger.kind());
+        if ("scoreboard".equals(trigger.kind())) {
+            return Component.translatable("ontime.command.trigger.describe.scoreboard",
+                    kind, trigger.value(), trigger.threshold(), trigger.target());
+        }
+        if (trigger.value().isEmpty()) return kind;
+        return Component.translatable("ontime.command.trigger.describe.value", kind, trigger.value());
+    }
+
     private void buildCommandRows(AdminModel.TimerRow timer, int bottom) {
         List<AdminModel.Scheduled> entries = timer == null ? List.of() : timer.commandList();
         editorRowsShown = Math.max(1, (bottom - editorFieldTop) / 20);
@@ -1523,6 +1706,10 @@ public final class AdminPanel {
 
         if (editor.section() == TimerEditor.Section.COMMANDS) {
             drawCommandRows(painter, timer);
+            return;
+        }
+        if (editor.section() == TimerEditor.Section.TRIGGERS) {
+            drawTriggerRows(painter, timer);
             return;
         }
         drawFieldRows(painter, timer, editor.section(), editorFieldX,

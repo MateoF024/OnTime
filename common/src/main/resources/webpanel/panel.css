@@ -643,6 +643,21 @@ dialog[open] { animation: pop .2s var(--ease); }
 .cmd-add .units { display: flex; gap: 5px; }
 .cmd-add .units > input { width: 58px; text-align: center; }
 
+/*
+ * The trigger adder carries six controls, and which of them apply depends on
+ * the kind chosen, so it wraps rather than holding columns for boxes that are
+ * hidden half the time.
+ */
+.trg-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.trg-add > select { flex: 0 1 auto; min-width: 0; }
+.trg-add > input[type="text"] { flex: 1 1 190px; min-width: 0; }
+.trg-add > input[type="number"] { flex: 0 0 96px; }
+.trg-add > button { flex: 0 0 auto; margin-left: auto; }
+
 @media (max-width: 620px) {
   .cmd-add { grid-template-columns: 1fr; }
   .cmd-row { grid-template-columns: 70px 1fr auto; }

@@ -35,7 +35,7 @@ public final class TimerEditor {
      * The rest are the pages of the advanced editor, which holds everything
      * else a timer can do.</p>
      */
-    public enum Section { QUICK, TITLES, COMMANDS, REPEAT, CONDITIONS }
+    public enum Section { QUICK, TITLES, COMMANDS, REPEAT, TRIGGERS }
 
     /** How one field is edited. */
     public enum Kind {
@@ -112,16 +112,9 @@ public final class TimerEditor {
         out.add(new Field(Section.REPEAT, "sequence", "nextTimer", Kind.TEXT, "next_timer"));
         out.add(new Field(Section.REPEAT, "sequence", "sequenceCooldown", Kind.INT, "sequence_cooldown"));
 
-        out.add(new Field(Section.CONDITIONS, "score", "objective", Kind.TEXT, "objective"));
-        out.add(new Field(Section.CONDITIONS, "score", "score", Kind.INT, "score"));
-        out.add(new Field(Section.CONDITIONS, "score", "target", Kind.TEXT, "target"));
-        out.add(new Field(Section.CONDITIONS, "score", "scoreAction", Kind.ACTION, "score_action"));
-        out.add(new Field(Section.CONDITIONS, "expression", "expression", Kind.TEXT, "expression"));
-        out.add(new Field(Section.CONDITIONS, "expression", "expressionAction",
-                Kind.ACTION, "expression_action"));
-        out.add(new Field(Section.CONDITIONS, "trigger", "trigger", Kind.TRIGGER, "trigger"));
-        out.add(new Field(Section.CONDITIONS, "trigger", "triggerAction", Kind.ACTION, "trigger_action"));
-        return List.copyOf(out);
+        // Nothing for TRIGGERS: it is a list, not a form, so AdminPanel draws
+        // it the way it draws the command list.
+        return out;
     }
 
     /**
@@ -233,7 +226,7 @@ public final class TimerEditor {
 
     /** The pages the advanced editor offers: everything that is not QUICK. */
     public static List<Section> advancedSections() {
-        return List.of(Section.TITLES, Section.COMMANDS, Section.REPEAT, Section.CONDITIONS);
+        return List.of(Section.TITLES, Section.COMMANDS, Section.REPEAT, Section.TRIGGERS);
     }
 
     /** True while the advanced editor is the thing on screen. */
@@ -355,14 +348,6 @@ public final class TimerEditor {
             case "repeatCooldown" -> String.valueOf(timer.repeatCooldownTicks() / 20L);
             case "nextTimer" -> timer.nextTimer() == null ? "" : timer.nextTimer();
             case "sequenceCooldown" -> String.valueOf(timer.sequenceCooldownTicks() / 20L);
-            case "objective" -> orEmpty(timer.conditionObjective());
-            case "score" -> String.valueOf(timer.conditionScore());
-            case "target" -> orEmpty(timer.conditionTarget());
-            case "scoreAction" -> orDefault(timer.scoreAction(), "finish");
-            case "expression" -> orEmpty(timer.conditionExpression());
-            case "expressionAction" -> orDefault(timer.expressionAction(), "finish");
-            case "trigger" -> orEmpty(timer.triggerType());
-            case "triggerAction" -> orDefault(timer.triggerAction(), "finish");
             default -> "";
         };
     }
@@ -495,29 +480,9 @@ public final class TimerEditor {
             ops.add(new Op("timer.setSequence", args));
         }
 
-        boolean score = changed(timer, "objective") || changed(timer, "score")
-                || changed(timer, "target") || changed(timer, "scoreAction");
-        boolean expression = changed(timer, "expression") || changed(timer, "expressionAction");
-        if (score || expression) {
-            JsonObject args = named(name);
-            if (score) {
-                args.addProperty("objective", value(timer, "objective"));
-                args.addProperty("score", number(timer, "score"));
-                args.addProperty("target", value(timer, "target"));
-                args.addProperty("scoreAction", value(timer, "scoreAction"));
-            }
-            if (expression) {
-                args.addProperty("expression", value(timer, "expression"));
-                args.addProperty("expressionAction", value(timer, "expressionAction"));
-            }
-            ops.add(new Op("timer.setCondition", args));
-        }
-        if (changed(timer, "trigger") || changed(timer, "triggerAction")) {
-            JsonObject args = named(name);
-            args.addProperty("type", value(timer, "trigger"));
-            args.addProperty("action", value(timer, "triggerAction"));
-            ops.add(new Op("timer.setTrigger", args));
-        }
+        // Triggers are not sent from here. They are a list, added and removed
+        // as they are edited, exactly like the commands -- the two operations
+        // this replaced each overwrote whatever was there.
         return ops;
     }
 

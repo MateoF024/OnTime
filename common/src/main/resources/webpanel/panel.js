@@ -45,8 +45,19 @@
       "group.identity": "The timer", "group.display": "Where it draws",
       "group.colors": "Colours", "group.sound": "Sound", "group.titles": "Text around it",
       "group.repeat": "Repeating", "group.sequence": "Handing over",
-      "group.score": "Scoreboard", "group.expression": "Expression",
-      "group.trigger": "Game event", "group.commands": "Commands",
+      "group.triggers": "What starts or ends it", "group.commands": "Commands",
+      "trg.none": "Nothing starts or ends this timer early",
+      "trg.add": "Add", "trg.value": "Id", "trg.score": "Score",
+      "trg.target": "Score holder, or * for anyone",
+      "trg.expr": "Expression",
+      "trg.player_join": "A player joins", "trg.player_leave": "A player leaves",
+      "trg.player_death": "A player dies", "trg.player_respawn": "A player respawns",
+      "trg.dimension_change": "A player changes dimension",
+      "trg.advancement": "An advancement is earned",
+      "trg.ftb_quest": "An FTB quest is completed",
+      "trg.ftb_reward": "An FTB reward is claimed",
+      "trg.scoreboard": "A score reaches a value",
+      "trg.expression": "An expression is true",
       "group.server": "Server", "group.web": "Web",
       "cmd.add": "Add", "cmd.none": "This timer runs no commands", "cmd.end": "At the end",
       "cmd.text": "Command, without the leading slash",
@@ -86,8 +97,19 @@
       "group.identity": "El contador", "group.display": "Dónde se dibuja",
       "group.colors": "Colores", "group.sound": "Sonido", "group.titles": "Texto alrededor",
       "group.repeat": "Repetición", "group.sequence": "Cesión del turno",
-      "group.score": "Marcador", "group.expression": "Expresión",
-      "group.trigger": "Evento del juego", "group.commands": "Comandos",
+      "group.triggers": "Qué lo arranca o lo termina", "group.commands": "Comandos",
+      "trg.none": "Nada arranca ni termina este contador antes de tiempo",
+      "trg.add": "Añadir", "trg.value": "Id", "trg.score": "Puntuación",
+      "trg.target": "Titular de la puntuación, o * para cualquiera",
+      "trg.expr": "Expresión",
+      "trg.player_join": "Entra un jugador", "trg.player_leave": "Sale un jugador",
+      "trg.player_death": "Muere un jugador", "trg.player_respawn": "Reaparece un jugador",
+      "trg.dimension_change": "Un jugador cambia de dimensión",
+      "trg.advancement": "Se consigue un logro",
+      "trg.ftb_quest": "Se completa una misión de FTB",
+      "trg.ftb_reward": "Se reclama una recompensa de FTB",
+      "trg.scoreboard": "Una puntuación llega a un valor",
+      "trg.expression": "Una expresión se cumple",
       "group.server": "Servidor", "group.web": "Web",
       "cmd.add": "Añadir", "cmd.none": "Este contador no ejecuta ningún comando",
       "cmd.end": "Al final", "cmd.text": "Comando, sin la barra inicial",
@@ -861,6 +883,22 @@
    * AdminOps: length, silence, the twelve display settings, the four titles,
    * repeating, handing over, conditions, triggers and the command list.</p>
    */
+
+  /** The kinds the server accepts, in the order the editor offers them. */
+  const TRIGGER_KINDS = ["player_join", "player_leave", "player_death", "player_respawn",
+    "dimension_change", "advancement", "ftb_quest", "ftb_reward", "scoreboard", "expression"];
+
+  /** One trigger in words, the same shape the commands use. */
+  function describeTrigger(trigger) {
+    const kind = t("trg." + trigger.kind);
+    if (trigger.kind === "scoreboard") {
+      return kind + " (" + (trigger.value || "") + " \u2265 " + (trigger.threshold ?? 0)
+        + ", " + (trigger.target || "*") + ")";
+    }
+    if (!trigger.value) return kind;
+    return kind + " (" + trigger.value + ")";
+  }
+
   function editDialog(timer) {
     const display = timer.display || {};
     modal(t("dialog.edit", timer.name), body => {
@@ -929,41 +967,101 @@
         s.append(field("sequenceCooldown", "int", Math.floor((timer.sequenceCooldownTicks || 0) / 20)));
       });
 
-      group("score", s => {
-        const objective = field("objective", "text", timer.conditionObjective || "");
-        $("input", objective).dataset.optional = "1";
-        s.append(objective);
-        s.append(field("score", "int", timer.conditionScore ?? 0));
-        s.append(field("target", "text", timer.conditionTarget || "*"));
-        const action = field("scoreAction", "bool", timer.conditionAction || "finish");
-        $("select", action).replaceChildren(new Option(t("finish"), "finish"),
-          new Option(t("startIt"), "start"));
-        $("select", action).value = timer.conditionAction || "finish";
-        s.append(action);
-      });
+      // One list, the way the commands sheet works. There were three fixed
+      // forms here -- a scoreboard block, an expression block and a select of
+      // four game events -- so a timer could hold one of each and no more, and
+      // the select wrote "death" where the server stores "player_death", which
+      // never matched anything.
+      group("triggers", s => {
+        const list = document.createElement("div");
+        const rows = timer.triggers || [];
+        if (!rows.length) {
+          const p = document.createElement("p");
+          p.className = "muted";
+          p.textContent = t("trg.none");
+          list.append(p);
+        }
+        rows.forEach((trigger, index) => {
+          const row = document.createElement("div");
+          row.className = "cmd-row";
+          const at = document.createElement("span");
+          at.className = "cmd-at" + (trigger.action === "start" ? "" : " end");
+          at.textContent = t(trigger.action === "start" ? "startIt" : "finish");
+          const text = document.createElement("span");
+          text.className = "cmd-text";
+          text.textContent = describeTrigger(trigger);
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.className = "danger small";
+          remove.textContent = "\u00d7";
+          remove.onclick = async () => {
+            if (await act("timer.removeTrigger", { name: timer.name, index })) {
+              const fresh = state.timers.find(x => x.name === timer.name);
+              if (fresh) editDialog(fresh);
+            }
+          };
+          row.append(at, text, remove);
+          list.append(row);
+        });
+        s.append(list);
 
-      group("expression", s => {
-        const expr = field("expression", "text", timer.conditionExpression || "");
-        $("input", expr).dataset.optional = "1";
-        s.append(expr);
-        const action = field("expressionAction", "bool", timer.conditionExpressionAction || "finish");
-        $("select", action).replaceChildren(new Option(t("finish"), "finish"),
-          new Option(t("startIt"), "start"));
-        $("select", action).value = timer.conditionExpressionAction || "finish";
-        s.append(action);
-      });
+        const adder = document.createElement("div");
+        adder.className = "cmd-add trg-add";
 
-      group("trigger", s => {
-        const type = field("trigger", "bool", timer.triggerType || "");
-        $("select", type).replaceChildren(new Option(t("none"), ""),
-          ...["join", "leave", "death", "respawn"].map(x => new Option(t("trigger." + x), x)));
-        $("select", type).value = timer.triggerType || "";
-        s.append(type);
-        const action = field("triggerAction", "bool", timer.triggerAction || "finish");
-        $("select", action).replaceChildren(new Option(t("finish"), "finish"),
-          new Option(t("startIt"), "start"));
-        $("select", action).value = timer.triggerAction || "finish";
-        s.append(action);
+        const kind = document.createElement("select");
+        for (const name of TRIGGER_KINDS) kind.append(new Option(t("trg." + name), name));
+
+        const value = document.createElement("input");
+        value.type = "text";
+
+        const score = document.createElement("input");
+        score.type = "number";
+        score.value = "0";
+
+        const target = document.createElement("input");
+        target.type = "text";
+        target.placeholder = t("trg.target");
+
+        const action = document.createElement("select");
+        action.append(new Option(t("finish"), "finish"), new Option(t("startIt"), "start"));
+
+        // Only the boxes the chosen kind actually uses. A bare event needs
+        // nothing, a scoreboard needs three.
+        const shape = () => {
+          const picked = kind.value;
+          const scoreboard = picked === "scoreboard";
+          const bare = picked.startsWith("player_");
+          value.hidden = bare;
+          score.hidden = !scoreboard;
+          target.hidden = !scoreboard;
+          value.placeholder = picked === "expression" ? t("trg.expr")
+            : scoreboard ? t("trg.score") : t("trg.value");
+        };
+        kind.onchange = shape;
+        shape();
+
+        const add = document.createElement("button");
+        add.type = "button";
+        add.className = "primary small";
+        add.textContent = t("trg.add");
+        add.onclick = async () => {
+          const picked = kind.value;
+          const args = { name: timer.name, kind: picked, action: action.value };
+          if (!picked.startsWith("player_")) {
+            if (!value.value.trim()) return;
+            args.value = value.value.trim();
+          }
+          if (picked === "scoreboard") {
+            args.threshold = parseInt(score.value, 10) || 0;
+            args.target = target.value.trim() || "*";
+          }
+          if (await act("timer.addTrigger", args)) {
+            const fresh = state.timers.find(x => x.name === timer.name);
+            if (fresh) editDialog(fresh);
+          }
+        };
+        adder.append(kind, value, score, target, action, add);
+        s.append(adder);
       });
 
       group("commands", s => {
@@ -1074,15 +1172,6 @@
           name: timer.name, next: get("nextTimer").value.trim(),
           cooldownSeconds: num("sequenceCooldown")
         });
-        await act("timer.setCondition", {
-          name: timer.name, objective: get("objective").value.trim(), score: num("score"),
-          target: get("target").value.trim(), scoreAction: get("scoreAction").value,
-          expression: get("expression").value.trim(),
-          expressionAction: get("expressionAction").value
-        });
-        await act("timer.setTrigger", {
-          name: timer.name, type: get("trigger").value, action: get("triggerAction").value
-        });
       }]
     ]);
   }
@@ -1163,13 +1252,11 @@
         [t("group.sequence"), timer.nextTimer || t("none")]
       ]);
 
-      facts(t("group.trigger"), [
-        [t("group.score"), timer.conditionObjective
-          ? `${timer.conditionObjective} \u2265 ${timer.conditionScore} (${timer.conditionTarget})`
-          : t("none")],
-        [t("group.expression"), timer.conditionExpression || t("none")],
-        [t("group.trigger"), timer.triggerType ? t("trigger." + timer.triggerType) : t("none")]
-      ]);
+      facts(t("group.triggers"), (timer.triggers || []).length
+        ? (timer.triggers || []).map(trigger => [
+            t(trigger.action === "start" ? "startIt" : "finish"),
+            describeTrigger(trigger), true])
+        : [[t("trg.none"), "", true]]);
 
       const commands = timer.commandList || [];
       {

@@ -90,7 +90,29 @@ public final class AdminModel {
 
         public long sequenceCooldownTicks() { return num(raw, "sequenceCooldownTicks"); }
 
-        public String conditionObjective() { return str(raw, "conditionObjective", ""); }
+        /** One reason this timer starts or ends, as the server describes it. */
+    public record Trigger(String kind, String action, String value, int threshold, String target) {
+        public boolean startsIt() { return "start".equals(action); }
+    }
+
+    /** Every trigger of this timer, in the order the server keeps them. */
+    public List<Trigger> triggers() {
+        List<Trigger> out = new ArrayList<>();
+        if (raw == null || !raw.has("triggers") || !raw.get("triggers").isJsonArray()) return out;
+        for (JsonElement element : raw.getAsJsonArray("triggers")) {
+            if (!element.isJsonObject()) continue;
+            JsonObject json = element.getAsJsonObject();
+            out.add(new Trigger(
+                    str(json, "kind", ""),
+                    str(json, "action", "finish"),
+                    str(json, "value", ""),
+                    (int) num(json, "threshold"),
+                    str(json, "target", "*")));
+        }
+        return out;
+    }
+
+    public String conditionObjective() { return str(raw, "conditionObjective", ""); }
 
         public int conditionScore() { return (int) num(raw, "conditionScore"); }
 
