@@ -181,12 +181,11 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "position",
                 "ontime.help.position.desc",
-                "/timer position <default|timer> <preset|clear> [x] [y]",
-                "/timer position default bossbar",
+                "/timer position <timer> [preset|reset] [x] [y]",
+                "/timer position speedrun",
                 "/timer position speedrun top_left",
                 "/timer position speedrun custom 40 80",
-                "/timer position speedrun clear",
-                "/timer position bossbar"
+                "/timer position speedrun reset"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
@@ -210,11 +209,10 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "scale",
                 "ontime.help.scale.desc",
-                "/timer scale <default|timer> <value|clear>",
-                "/timer scale default 1.0",
+                "/timer scale <timer> [value|reset]",
+                "/timer scale speedrun",
                 "/timer scale speedrun 1.5",
-                "/timer scale speedrun clear",
-                "/timer scale 0.8"
+                "/timer scale speedrun reset"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(

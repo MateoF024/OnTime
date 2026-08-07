@@ -90,7 +90,9 @@ public class TimerCommands {
             SelectionCommand selective) {
         return Commands.literal(verb)
                 .requires(source -> PermissionHelper.hasPermission(source, permission, 4))
-                .executes(bare)
+                // "all" is spelled out. The bare verb used to mean the 4.0.0
+                // toggle, so /timer pause could resume something.
+                .then(Commands.literal("all").executes(bare))
                 .then(Commands.argument("name", StringArgumentType.word())
                         .suggests(TIMER_SUGGESTIONS)
                         .executes(ctx -> selective.run(ctx, StringArgumentType.getString(ctx, "name"), null))
@@ -114,42 +116,21 @@ public class TimerCommands {
 
     private static final TimerNameSuggestionProvider TIMER_SUGGESTIONS = new TimerNameSuggestionProvider();
 
-    /** First argument of /timer position: a preset (legacy form), "default", or a timer. */
-    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestPresetsAndTimers(
+    /**
+     * The presets, and "reset" to hand the timer back to the server default.
+     *
+     * <p>One list of one kind of thing. The two providers this replaces each
+     * poured presets, values, timer names and "default" into the same
+     * completion, because the argument underneath them had to accept all of
+     * it.</p>
+     */
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestPresets(
             CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
         String remaining = builder.getRemaining().toLowerCase();
-        if ("default".startsWith(remaining)) builder.suggest("default");
+        if ("reset".startsWith(remaining)) builder.suggest("reset");
         for (TimerPositionPreset preset : TimerPositionPreset.values()) {
             String name = preset.name().toLowerCase();
             if (name.startsWith(remaining)) builder.suggest(name);
-        }
-        for (Timer timer : TimerManager.getInstance().timersView()) {
-            if (timer.getName().toLowerCase().startsWith(remaining)) builder.suggest(timer.getName());
-        }
-        return builder.buildFuture();
-    }
-
-    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestPresetsAndClear(
-            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
-        String remaining = builder.getRemaining().toLowerCase();
-        if ("clear".startsWith(remaining)) builder.suggest("clear");
-        for (TimerPositionPreset preset : TimerPositionPreset.values()) {
-            String name = preset.name().toLowerCase();
-            if (name.startsWith(remaining)) builder.suggest(name);
-        }
-        return builder.buildFuture();
-    }
-
-    /** First argument of /timer scale: a number (legacy form), "default", or a timer. */
-    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestScaleAndTimers(
-            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
-        String remaining = builder.getRemaining().toLowerCase();
-        if ("default".startsWith(remaining)) builder.suggest("default");
-        for (String value : new String[]{"0.5", "1.0", "1.5", "2.0"}) {
-            if (value.startsWith(remaining)) builder.suggest(value);
-        }
-        for (Timer timer : TimerManager.getInstance().timersView()) {
-            if (timer.getName().toLowerCase().startsWith(remaining)) builder.suggest(timer.getName());
         }
         return builder.buildFuture();
     }
@@ -230,9 +211,7 @@ public class TimerCommands {
                         )
                 )
                 .then(selection("pause", PermissionNodes.TIMER_PAUSE,
-                        // Bare: the 4.0.0 toggle, so existing command blocks
-                        // behave the same. Any argument is explicit and pauses.
-                        ctx -> RunCommands.setRunning(ctx, null, null, null),
+                        ctx -> RunCommands.setRunning(ctx, Boolean.FALSE, null, null),
                         (ctx, name, targets) -> RunCommands.setRunning(ctx, Boolean.FALSE, name, targets)))
                 .then(selection("resume", PermissionNodes.TIMER_PAUSE,
                         ctx -> RunCommands.setRunning(ctx, Boolean.TRUE, null, null),
@@ -370,20 +349,20 @@ public class TimerCommands {
                                 })
                         )
                 )
-                // position and scale both take "<default|timer> <value>" plus
-                // the 4.0.0 one-argument form that means the global default.
-                // The tree cannot separate them — a preset name and a timer
-                // name are both words — so both shapes share one argument and
-                // the handler decides. That is what keeps every existing
-                // /timer position bossbar parsing.
+                // position and scale read the timer first and nothing else.
+                // They used to accept a preset or a value in that same slot to
+                // mean "the global default", which is why one argument had to
+                // serve two shapes and why the suggestions offered names and
+                // values mixed together. Server defaults are set from the
+                // panel, not by overloading a per-timer command.
                 .then(Commands.literal("position")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_POSITION, 4))
-                        .then(Commands.argument("first", StringArgumentType.word())
-                                .suggests(TimerCommands::suggestPresetsAndTimers)
-                                .executes(DisplayCommands::position)
-                                .then(Commands.argument("second", StringArgumentType.word())
-                                        .suggests(TimerCommands::suggestPresetsAndClear)
-                                        .executes(DisplayCommands::position2)
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(DisplayCommands::positionView)
+                                .then(Commands.argument("preset", StringArgumentType.word())
+                                        .suggests(TimerCommands::suggestPresets)
+                                        .executes(DisplayCommands::positionSet)
                                         .then(Commands.argument("x", IntegerArgumentType.integer())
                                                 .then(Commands.argument("y", IntegerArgumentType.integer(0))
                                                         .executes(ctx -> DisplayCommands.positionCustom(ctx,
@@ -416,17 +395,17 @@ public class TimerCommands {
                 )
                 .then(Commands.literal("scale")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SCALE, 4))
-                        .then(Commands.argument("first", StringArgumentType.word())
-                                .suggests(TimerCommands::suggestScaleAndTimers)
-                                .executes(DisplayCommands::scale)
-                                .then(Commands.argument("second", StringArgumentType.word())
-                                        .suggests((ctx, builder) -> {
-                                            for (String option : new String[]{"clear", "0.5", "1.0", "1.5", "2.0"}) {
-                                                if (option.startsWith(builder.getRemaining())) builder.suggest(option);
-                                            }
-                                            return builder.buildFuture();
-                                        })
-                                        .executes(DisplayCommands::scale2)
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(DisplayCommands::scaleView)
+                                // A float argument, not a word the handler
+                                // reparses: the range is enforced by the parser
+                                // and a bad value is refused before it runs.
+                                .then(Commands.argument("value", FloatArgumentType.floatArg(0.1f, 5.0f))
+                                        .executes(DisplayCommands::scaleSet)
+                                )
+                                .then(Commands.literal("reset")
+                                        .executes(DisplayCommands::scaleReset)
                                 )
                         )
                 )
