@@ -27,6 +27,9 @@ public final class PositionPicker {
 
     private static final String SAMPLE_TIME = "00:00:00";
 
+    /** Space between the counter and a title beside it. */
+    private static final int TITLE_GAP = 4;
+
     /** Whole steps, and round: the point is to see the size, not to tune it. */
     private static final float MIN_SCALE = 1.0f;
     private static final float MAX_SCALE = 5.0f;
@@ -35,8 +38,8 @@ public final class PositionPicker {
     private static final int ACTION_BAR_FROM_BOTTOM = 68;
 
     private static final long HINT_FADE_IN_MS = 400L;
-    private static final long HINT_HOLD_MS = 3200L;
-    private static final long HINT_FADE_OUT_MS = 700L;
+    private static final long HINT_HOLD_MS = 6000L;
+    private static final long HINT_FADE_OUT_MS = 900L;
 
     private static final int WHITE = 0xFFFFFF;
     private static final int BOUNDS_RED = 0xFFFF4040;
@@ -61,10 +64,6 @@ public final class PositionPicker {
 
     /** While true the placement is frozen and the three choices are on screen. */
     private boolean asking;
-    private final int[] choiceX = new int[3];
-    private final int[] choiceW = new int[3];
-    private int choiceY;
-    private int choiceH;
 
     public PositionPicker(String timerName, int x, int y, float scale, Save save) {
         this.timerName = timerName;
@@ -85,39 +84,53 @@ public final class PositionPicker {
 
     // ---- what the counter takes up ----
 
-    private int textWidth(Painter painter) {
-        return (int) (painter.textWidth(Component.literal(SAMPLE_TIME)) * previewScale);
-    }
+    /**
+     * The overlay in unscaled pixels, relative to the counter's top-left.
+     *
+     * <p>{@code {left, top, width, height}}. Everything — the red box, the
+     * titles, the hit test — is derived from this one rectangle and then run
+     * through the same scale, which is what keeps them agreeing. Computing the
+     * box separately from the drawing is what let it drift by a pixel at the
+     * bottom and by a whole title at scale three.</p>
+     */
+    private int[] localBox(Painter painter) {
+        int line = painter.lineHeight();
+        int glyphs = glyphHeight(painter);
+        int width = painter.textWidth(Component.literal(SAMPLE_TIME));
+        int left = 0;
+        int top = 0;
+        int right = width;
+        int bottom = glyphs;
 
-    private int textHeight(Painter painter) {
-        return (int) (painter.lineHeight() * previewScale);
+        if (showTitles) {
+            int side = painter.textWidth(sampleTitle());
+            top -= line;
+            bottom += line;
+            left -= side + TITLE_GAP;
+            right += side + TITLE_GAP;
+        }
+        return new int[]{left, top, right - left, bottom - top};
     }
 
     /**
-     * The whole overlay, titles included when they are showing.
+     * The ink, not the line box.
      *
-     * <p>Adaptive on purpose: a counter with text above and below is a
-     * different shape from a bare one, and placing it against the bottom of
-     * the screen with the titles hidden is how you find out afterwards that
-     * the lower title was off-screen all along.</p>
+     * <p>A font line is taller than the glyphs in it: the descender row is
+     * empty for digits, so measuring the box with the line height left one
+     * blank pixel along the bottom and nowhere else.</p>
      */
-    private int[] bounds(Painter painter) {
-        int w = textWidth(painter);
-        int h = textHeight(painter);
-        int left = x;
-        int top = y;
-        int right = x + w;
-        int bottom = y + h;
+    private static int glyphHeight(Painter painter) {
+        return painter.lineHeight() - 1;
+    }
 
-        if (showTitles) {
-            int line = (int) (painter.lineHeight() * previewScale);
-            int side = (int) (painter.textWidth(sampleTitle()) * previewScale);
-            top -= line + 2;
-            bottom += line + 2;
-            left -= side + 4;
-            right += side + 4;
-        }
-        return new int[]{left, top, right - left, bottom - top};
+    /** The box on screen, which is the local one scaled about the counter. */
+    private int[] bounds(Painter painter) {
+        int[] local = localBox(painter);
+        return new int[]{
+                x + Math.round(local[0] * previewScale),
+                y + Math.round(local[1] * previewScale),
+                Math.round(local[2] * previewScale),
+                Math.round(local[3] * previewScale)};
     }
 
     private static Component sampleTitle() {
@@ -128,11 +141,10 @@ public final class PositionPicker {
 
     /** True when the click was taken, so the screen leaves it alone. */
     public boolean mouseDown(Painter painter, double mouseX, double mouseY, int screenW, int screenH) {
-        if (asking) {
-            Choice hit = choiceAt(mouseX, mouseY);
-            if (hit != null) answer(hit);
-            return true;
-        }
+        // The three buttons are widgets and vanilla routes to them first;
+        // swallowing the rest keeps a click beside the dialog from grabbing
+        // the counter hidden behind it.
+        if (asking) return true;
         int[] box = bounds(painter);
         if (mouseX < box[0] || mouseX > box[0] + box[2]
                 || mouseY < box[1] || mouseY > box[1] + box[3]) {
@@ -174,14 +186,6 @@ public final class PositionPicker {
         return false;
     }
 
-    private Choice choiceAt(double mouseX, double mouseY) {
-        if (mouseY < choiceY || mouseY > choiceY + choiceH) return null;
-        for (int i = 0; i < 3; i++) {
-            if (mouseX >= choiceX[i] && mouseX <= choiceX[i] + choiceW[i]) return Choice.values()[i];
-        }
-        return null;
-    }
-
     /** Applied by the screen, which is the only thing that can close itself. */
     private Choice answered;
 
@@ -207,16 +211,22 @@ public final class PositionPicker {
     }
 
     private void drawCounter(Painter painter) {
+        int[] local = localBox(painter);
+        int width = painter.textWidth(Component.literal(SAMPLE_TIME));
+        int line = painter.lineHeight();
+
         painter.pushScale(previewScale, x, y);
         painter.text(Component.literal(SAMPLE_TIME), x, y, TEXT);
         if (showTitles) {
-            int line = painter.lineHeight();
-            int width = painter.textWidth(Component.literal(SAMPLE_TIME));
-            int side = painter.textWidth(sampleTitle());
-            painter.text(sampleTitle(), x, y - line - 2, TEXT);
-            painter.text(sampleTitle(), x, y + line + 2, TEXT);
-            painter.text(sampleTitle(), x - side - 4, y, TEXT);
-            painter.text(sampleTitle(), x + width + 4, y, TEXT);
+            Component title = sampleTitle();
+            int titleWidth = painter.textWidth(title);
+            // Centred over the whole overlay, not over the counter: with a
+            // title on each side the two are not the same rectangle.
+            int centre = x + local[0] + local[2] / 2;
+            painter.text(title, centre - titleWidth / 2, y - line, TEXT);
+            painter.text(title, centre - titleWidth / 2, y + line, TEXT);
+            painter.text(title, x - titleWidth - TITLE_GAP, y, TEXT);
+            painter.text(title, x + width + TITLE_GAP, y, TEXT);
         }
         painter.popScale();
     }
@@ -257,6 +267,11 @@ public final class PositionPicker {
                 screenH - ACTION_BAR_FROM_BOTTOM, (a << 24) | WHITE);
     }
 
+    /**
+     * Title and body only. The three buttons are vanilla widgets the screen
+     * adds, like every other dialog in this interface — hand-drawn lookalikes
+     * were the one place that did not match.
+     */
     private void drawDialog(Painter painter, int screenW, int screenH) {
         int width = 300;
         int height = 92;
@@ -267,28 +282,18 @@ public final class PositionPicker {
         painter.outline(left, top, width, height, DIALOG_LINE);
 
         Component title = Component.translatable("ontime.gui.picker.exit.title");
-        painter.text(title, left + (width - painter.textWidth(title)) / 2, top + 12, TEXT);
+        painter.text(title, left + (width - painter.textWidth(title)) / 2, top + 14, TEXT);
         Component body = Component.translatable("ontime.gui.picker.exit.body", timerName);
-        painter.text(body, left + (width - painter.textWidth(body)) / 2, top + 28, TEXT_DIM);
-
-        Component[] labels = {
-                Component.translatable("gui.cancel"),
-                Component.translatable("ontime.gui.picker.exit.discard"),
-                Component.translatable("ontime.gui.picker.exit.save")
-        };
-        int[] colours = {TEXT, TEXT_DANGER, TEXT};
-
-        choiceY = top + height - 30;
-        choiceH = 20;
-        int gap = 8;
-        int each = (width - 24 - 2 * gap) / 3;
-        for (int i = 0; i < 3; i++) {
-            choiceX[i] = left + 12 + i * (each + gap);
-            choiceW[i] = each;
-            painter.rect(choiceX[i], choiceY, each, choiceH, 0x40FFFFFF);
-            painter.outline(choiceX[i], choiceY, each, choiceH, DIALOG_LINE);
-            painter.text(labels[i], choiceX[i] + (each - painter.textWidth(labels[i])) / 2,
-                    choiceY + 6, colours[i]);
-        }
+        painter.text(body, left + (width - painter.textWidth(body)) / 2, top + 32, TEXT_DIM);
     }
+
+    /** Where the screen puts the three buttons, so both agree on one rectangle. */
+    public int dialogLeft(int screenW) { return (screenW - 300) / 2; }
+
+    public int dialogWidth() { return 300; }
+
+    public int dialogButtonsY(int screenH) { return (screenH - 92) / 2 + 92 - 30; }
+
+    /** Called by the buttons. */
+    public void choose(Choice choice) { answer(choice); }
 }

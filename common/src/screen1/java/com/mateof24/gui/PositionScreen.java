@@ -42,7 +42,7 @@ public class PositionScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (picker.keyPressed(keyCode)) return true;
+        if (picker.keyPressed(keyCode)) { rebuildWidgets(); return true; }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -62,6 +62,54 @@ public class PositionScreen extends Screen {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         picker.mouseUp();
         return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    /**
+     * No background at all: no blur, no dark wash, nothing.
+     *
+     * <p>Overriding render was not enough. The game does not call it directly —
+     * it calls a final wrapper (renderWithTooltip) which paints the
+     * background first, and the background is what blurs. Suppressing it means
+     * overriding this, which is the method that wrapper reaches.</p>
+     */
+    @Override
+    public void renderBackground(net.minecraft.client.gui.GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    }
+
+    /**
+     * The three choices, as vanilla buttons.
+     *
+     * <p>Built only while ESC is asking, so the placement itself stays clear of
+     * widgets. They are real {@code Button}s rather than drawn lookalikes for
+     * the same reason every other dialog in this interface uses them: they are
+     * what the rest of the game looks like, and they come with focus, keyboard
+     * navigation and the sounds for free.</p>
+     */
+    @Override
+    protected void init() {
+        clearWidgets();
+        if (!picker.asking()) return;
+
+        int left = picker.dialogLeft(this.width);
+        int width = picker.dialogWidth();
+        int y = picker.dialogButtonsY(this.height);
+        int gap = 8;
+        int each = (width - 24 - 2 * gap) / 3;
+
+        addRenderableWidget(net.minecraft.client.gui.components.Button.builder(
+                        net.minecraft.network.chat.Component.translatable("gui.cancel"),
+                        b -> { picker.choose(PositionPicker.Choice.CANCEL); rebuildWidgets(); })
+                .bounds(left + 12, y, each, 20).build());
+
+        addRenderableWidget(net.minecraft.client.gui.components.Button.builder(
+                        net.minecraft.network.chat.Component.translatable("ontime.gui.picker.exit.discard"),
+                        b -> picker.choose(PositionPicker.Choice.DISCARD))
+                .bounds(left + 12 + each + gap, y, each, 20).build());
+
+        addRenderableWidget(net.minecraft.client.gui.components.Button.builder(
+                        net.minecraft.network.chat.Component.translatable("ontime.gui.picker.exit.save"),
+                        b -> picker.choose(PositionPicker.Choice.SAVE))
+                .bounds(left + 12 + 2 * (each + gap), y, each, 20).build());
     }
 
     /** ESC is handled by the picker, so vanilla never gets to close this. */
