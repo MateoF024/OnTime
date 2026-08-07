@@ -436,7 +436,6 @@
   "ontime.gui.confirm.reset.body": "Se aplica al momento y no se puede deshacer.",
   "ontime.gui.picker.title": "Colocar el contador",
   "ontime.gui.picker.hint": "Arrastra el contador. T muestra los títulos, S cambia el tamaño, ESC sale.",
-  "ontime.gui.picker.title.sample": "Título",
   "ontime.gui.picker.exit.title": "¿Salir de la pantalla de colocación?",
   "ontime.gui.picker.exit.body": "Dónde queda todavía no se ha guardado.",
   "ontime.gui.picker.exit.discard": "Salir",
@@ -446,5 +445,7 @@
   "ontime.config.custom_position": "Posición personalizada",
   "ontime.config.custom_position.tooltip": "Dónde queda el contador cuando el preset es CUSTOM.",
   "ontime.gui.editor.field.config.custom_position": "Posición personalizada",
-  "ontime.gui.editor.field.config.custom_position.tip": "Abre el juego con este contador de muestra para arrastrarlo donde quieras. Solo se aplica cuando el preset es CUSTOM."
+  "ontime.gui.editor.field.config.custom_position.tip": "Abre el juego con este contador de muestra para arrastrarlo donde quieras. Solo se aplica cuando el preset es CUSTOM.",
+  "ontime.config.reset_defaults": "Restaurar todo",
+  "ontime.config.reset_defaults.tooltip": "Devuelve todos los ajustes de arriba a los que trae el mod."
 }

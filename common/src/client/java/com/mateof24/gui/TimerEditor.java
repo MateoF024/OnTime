@@ -128,7 +128,7 @@ public final class TimerEditor {
      * getting out of step.</p>
      */
     public static List<Entry> laidOut(Section section) {
-        return laidOut(section, false);
+        return laidOut(section, false, false);
     }
 
     /**
@@ -139,12 +139,15 @@ public final class TimerEditor {
      * page is where that list is kept. Asking here saves the one thing you
      * always know at creation from needing a second visit.</p>
      */
-    public static List<Entry> laidOut(Section section, boolean creating) {
+    public static List<Entry> laidOut(Section section, boolean creating, boolean custom) {
         List<Entry> out = new ArrayList<>();
         String heading = null;
         for (Field field : FIELDS) {
             if (field.section() != section) continue;
             if (!creating && "finishCommand".equals(field.key())) continue;
+            // Dropped from the list, not skipped while drawing: skipping left
+            // the row's slot and its label behind.
+            if (!custom && "display.customPosition".equals(field.key())) continue;
             if (!field.group().equals(heading)) {
                 heading = field.group();
                 out.add(new Entry(heading, null));

@@ -50,7 +50,13 @@ public final class PositionPicker {
     private static final int TEXT_DANGER = 0xFFE06A6A;
 
     private final String timerName;
+    private final String preset;
+    private final String timeText;
+    /** above, below, left, right. A blank entry is a title this timer does not have. */
+    private final String[] titles;
     private final Save save;
+    /** Until the first draw the screen size is unknown, so a preset cannot be resolved. */
+    private boolean placed;
     private final long openedAt = System.currentTimeMillis();
 
     private int x;
@@ -65,12 +71,62 @@ public final class PositionPicker {
     /** While true the placement is frozen and the three choices are on screen. */
     private boolean asking;
 
-    public PositionPicker(String timerName, int x, int y, float scale, Save save) {
+    public PositionPicker(String timerName, String preset, int x, int y, float scale,
+                          String timeText, String[] titles, Save save) {
         this.timerName = timerName;
+        this.preset = preset == null ? "CUSTOM" : preset;
         this.x = x;
         this.y = y;
         this.previewScale = clampScale(scale);
+        this.timeText = timeText == null || timeText.isEmpty() ? "00:00:00" : timeText;
+        this.titles = titles == null ? new String[4] : titles;
         this.save = save;
+        this.placed = "CUSTOM".equalsIgnoreCase(this.preset);
+    }
+
+    /**
+     * Starts where the counter is now, not in the corner.
+     *
+     * <p>Only CUSTOM keeps coordinates of its own; every other preset works
+     * its anchor out from the screen. Opening on the stored x and y meant
+     * opening on {@code -1, 4} — the corner — for anybody who had never used
+     * CUSTOM, which is everybody the first time.</p>
+     */
+    private void placeFromPreset(Painter painter, int screenW, int screenH) {
+        if (placed) return;
+        placed = true;
+        int[] local = localBox(painter);
+        int w = Math.round(local[2] * previewScale);
+        int h = Math.round(local[3] * previewScale);
+
+        com.mateof24.config.TimerPositionPreset resolved;
+        try {
+            resolved = com.mateof24.config.TimerPositionPreset.valueOf(
+                    preset.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return;
+        }
+        int px = resolved.calculateX(screenW, w, x);
+        int py = resolved.calculateY(screenH, h, y);
+        // -1 is the enum's way of saying "centred", which only the caller can work out.
+        x = px == -1 ? (screenW - w) / 2 : px;
+        y = py == -1 ? (screenH - h) / 2 : py;
+        // The box is measured from the counter, so undo the titles' overhang.
+        x -= Math.round(local[0] * previewScale);
+        y -= Math.round(local[1] * previewScale);
+    }
+
+    private boolean hasTitle(int slot) {
+        return titles.length > slot && titles[slot] != null && !titles[slot].isEmpty();
+    }
+
+    private Component titleAt(int slot) {
+        return Component.literal(titles[slot]);
+    }
+
+    private boolean anyTitle() {
+        for (int i = 0; i < 4; i++) if (hasTitle(i)) return true;
+        return false;
     }
 
     private static float clampScale(float value) {
@@ -96,18 +152,17 @@ public final class PositionPicker {
     private int[] localBox(Painter painter) {
         int line = painter.lineHeight();
         int glyphs = glyphHeight(painter);
-        int width = painter.textWidth(Component.literal(SAMPLE_TIME));
+        int width = painter.textWidth(Component.literal(timeText));
         int left = 0;
         int top = 0;
         int right = width;
         int bottom = glyphs;
 
         if (showTitles) {
-            int side = painter.textWidth(sampleTitle());
-            top -= line;
-            bottom += line;
-            left -= side + TITLE_GAP;
-            right += side + TITLE_GAP;
+            if (hasTitle(0)) top -= line;
+            if (hasTitle(1)) bottom += line;
+            if (hasTitle(2)) left -= painter.textWidth(titleAt(2)) + TITLE_GAP;
+            if (hasTitle(3)) right += painter.textWidth(titleAt(3)) + TITLE_GAP;
         }
         return new int[]{left, top, right - left, bottom - top};
     }
@@ -131,10 +186,6 @@ public final class PositionPicker {
                 y + Math.round(local[1] * previewScale),
                 Math.round(local[2] * previewScale),
                 Math.round(local[3] * previewScale)};
-    }
-
-    private static Component sampleTitle() {
-        return Component.translatable("ontime.gui.picker.title.sample");
     }
 
     // ---- input ----
@@ -176,6 +227,9 @@ public final class PositionPicker {
         }
         if (asking) return false;
         if (keyCode == 84) { // T
+            // Nothing to toggle when this timer has no titles: showing four
+            // samples would be showing something that is not there.
+            if (!anyTitle()) return true;
             showTitles = !showTitles;
             return true;
         }
@@ -204,6 +258,7 @@ public final class PositionPicker {
     // ---- drawing ----
 
     public void draw(Painter painter, int screenW, int screenH) {
+        placeFromPreset(painter, screenW, screenH);
         drawCounter(painter);
         drawBounds(painter);
         drawHint(painter, screenW, screenH);
@@ -212,21 +267,25 @@ public final class PositionPicker {
 
     private void drawCounter(Painter painter) {
         int[] local = localBox(painter);
-        int width = painter.textWidth(Component.literal(SAMPLE_TIME));
+        int width = painter.textWidth(Component.literal(timeText));
         int line = painter.lineHeight();
 
         painter.pushScale(previewScale, x, y);
-        painter.text(Component.literal(SAMPLE_TIME), x, y, TEXT);
+        painter.text(Component.literal(timeText), x, y, TEXT);
         if (showTitles) {
-            Component title = sampleTitle();
-            int titleWidth = painter.textWidth(title);
             // Centred over the whole overlay, not over the counter: with a
-            // title on each side the two are not the same rectangle.
+            // title on one side only, the two are not the same rectangle.
             int centre = x + local[0] + local[2] / 2;
-            painter.text(title, centre - titleWidth / 2, y - line, TEXT);
-            painter.text(title, centre - titleWidth / 2, y + line, TEXT);
-            painter.text(title, x - titleWidth - TITLE_GAP, y, TEXT);
-            painter.text(title, x + width + TITLE_GAP, y, TEXT);
+            if (hasTitle(0)) {
+                painter.text(titleAt(0), centre - painter.textWidth(titleAt(0)) / 2, y - line, TEXT);
+            }
+            if (hasTitle(1)) {
+                painter.text(titleAt(1), centre - painter.textWidth(titleAt(1)) / 2, y + line, TEXT);
+            }
+            if (hasTitle(2)) {
+                painter.text(titleAt(2), x - painter.textWidth(titleAt(2)) - TITLE_GAP, y, TEXT);
+            }
+            if (hasTitle(3)) painter.text(titleAt(3), x + width + TITLE_GAP, y, TEXT);
         }
         painter.popScale();
     }

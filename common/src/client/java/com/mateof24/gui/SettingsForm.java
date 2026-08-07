@@ -122,6 +122,23 @@ public final class SettingsForm {
 
     public static List<Row> rows() { return ROWS; }
 
+    /**
+     * The rows to show, given what the position preset is set to.
+     *
+     * <p>Custom Position is dropped from the list rather than skipped while
+     * drawing it: skipping left the row's slot and its label behind, so the
+     * form kept a labelled gap where the button used to be.</p>
+     */
+    public static List<Row> rows(boolean custom) {
+        if (custom) return ROWS;
+        List<Row> out = new ArrayList<>(ROWS.size());
+        for (Row row : ROWS) {
+            if (row.isAction() && "customPosition".equals(row.key())) continue;
+            out.add(row);
+        }
+        return out;
+    }
+
     /** The subset a timer owns a copy of, headers included. */
     public static List<Row> displayRows() { return DISPLAY_ROWS; }
 

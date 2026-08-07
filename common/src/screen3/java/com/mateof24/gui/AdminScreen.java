@@ -38,8 +38,8 @@ public class AdminScreen extends Screen implements PanelHost {
      * 26.1 also has — so both 26.x versions use the newer name.</p> */
     public static void register() {
         AdminClientState.setOpener(() -> Minecraft.getInstance().setScreenAndShow(new AdminScreen()));
-        AdminClientState.setPickerOpener((name, x, y, scale, save) ->
-                Minecraft.getInstance().setScreenAndShow(new PositionScreen(name, x, y, scale, save)));
+        AdminClientState.setPickerOpener((name, preset, x, y, scale, time, titles, save) ->
+                Minecraft.getInstance().setScreenAndShow(new PositionScreen(name, preset, x, y, scale, time, titles, save)));
     }
 
     @Override

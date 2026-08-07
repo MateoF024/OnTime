@@ -75,6 +75,9 @@ public final class AdminPanel {
     private static final int COLOR_ERROR = 0xFFE06A6A;
     private static final int COLOR_OK = 0xFF57C25F;
 
+    /** What the defaults page shows in place of a timer's own titles. */
+    private static final String[] SAMPLE_TITLES = {"Title", "Title", "Title", "Title"};
+
     private static final int GUTTER = 12;
     private static final int HEADER_HEIGHT = 30;
     private static final int TAB_HEIGHT = 20;
@@ -580,7 +583,7 @@ public final class AdminPanel {
      * </p>
      */
     private void buildFieldRows(AdminModel.TimerRow timer, TimerEditor.Section section, int bottom) {
-        List<TimerEditor.Entry> entries = TimerEditor.laidOut(section, editor.isCreating());
+        List<TimerEditor.Entry> entries = TimerEditor.laidOut(section, editor.isCreating(), timerIsCustom(timer));
         // A row needs its control's height, not a whole slot: the last one fits
         // whenever there is room for the box itself.
         int room = bottom - editorFieldTop;
@@ -597,23 +600,20 @@ public final class AdminPanel {
                     "ontime.gui.editor.field." + field.label() + ".tip"));
 
             if (field.kind() == TimerEditor.Kind.PICKER) {
-                // Only means anything for CUSTOM, exactly as in the settings
-                // tab: every other preset works its anchor out from the screen.
-                if (!"CUSTOM".equalsIgnoreCase(editor.displayed(timer,
-                        TimerEditor.fieldOf("display.preset")))) {
-                    continue;
-                }
                 host.addWidget(Button.builder(
                                 Component.translatable("ontime.gui.settings.custom_position.edit"),
                                 b -> {
                                     if (timer == null) return;
-                                    AdminClientState.openPicker(timer.name(),
-                                            numberOr(editor.displayed(timer,
-                                                    TimerEditor.fieldOf("display.x")), -1),
-                                            numberOr(editor.displayed(timer,
-                                                    TimerEditor.fieldOf("display.y")), 4),
-                                            (float) decimalOr(editor.displayed(timer,
-                                                    TimerEditor.fieldOf("display.scale")), 1.0),
+                                    // Read off the timer, not off editor fields:
+                                    // display.x and display.y stopped being
+                                    // fields when Custom X and Custom Y went,
+                                    // so looking them up returned nothing and
+                                    // the button did nothing.
+                                    AdminClientState.openPicker(timer.name(), "CUSTOM",
+                                            displayInt(timer, "x", -1),
+                                            displayInt(timer, "y", 4),
+                                            displayFloat(timer, "scale", 1f),
+                                            startingTime(timer), timerTitles(timer),
                                             (px, py) -> {
                                                 editor.put("display.x", String.valueOf(px));
                                                 editor.put("display.y", String.valueOf(py));
@@ -911,6 +911,53 @@ public final class AdminPanel {
         }
     }
 
+
+    /** True when the server default is CUSTOM, which is the only time the row applies. */
+    private boolean defaultsAreCustom() {
+        return "CUSTOM".equalsIgnoreCase(
+                settings.displayed(model, SettingsForm.rowOf("positionPreset")));
+    }
+
+    /** The same question for one timer's own copy. */
+    private boolean timerIsCustom(AdminModel.TimerRow timer) {
+        if (timer == null) return false;
+        return "CUSTOM".equalsIgnoreCase(
+                editor.displayed(timer, TimerEditor.fieldOf("display.preset")));
+    }
+
+    /** A number out of a timer's display block, or the fallback while it is unset. */
+    private static int displayInt(AdminModel.TimerRow timer, String key, int fallback) {
+        if (timer == null || timer.display() == null || !timer.display().has(key)) return fallback;
+        try {
+            return timer.display().get(key).getAsInt();
+        } catch (RuntimeException e) {
+            return fallback;
+        }
+    }
+
+    private static float displayFloat(AdminModel.TimerRow timer, String key, float fallback) {
+        if (timer == null || timer.display() == null || !timer.display().has(key)) return fallback;
+        try {
+            return timer.display().get(key).getAsFloat();
+        } catch (RuntimeException e) {
+            return fallback;
+        }
+    }
+
+    /** {@code hh:mm:ss} of what this timer starts at, which is what it shows before it runs. */
+    private static String startingTime(AdminModel.TimerRow timer) {
+        if (timer == null) return "00:00:00";
+        long total = timer.targetTicks() / 20L;
+        return String.format("%02d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60);
+    }
+
+    /** above, below, left, right -- blank for a slot this timer does not use. */
+    private static String[] timerTitles(AdminModel.TimerRow timer) {
+        if (timer == null) return new String[4];
+        return new String[]{timer.title("above"), timer.title("below"),
+                timer.title("left"), timer.title("right")};
+    }
+
     private void buildCommandRows(AdminModel.TimerRow timer, int bottom) {
         List<AdminModel.Scheduled> entries = timer == null ? List.of() : timer.commandList();
         editorRowsShown = Math.max(1, (bottom - editorFieldTop) / 20);
@@ -1011,7 +1058,7 @@ public final class AdminPanel {
     private void buildSettings() {
         int top = settingsTop();
         settingsRows = Math.max(1, (contentBottom - top) / SETTING_HEIGHT);
-        List<SettingsForm.Row> rows = SettingsForm.rows();
+        List<SettingsForm.Row> rows = SettingsForm.rows(defaultsAreCustom());
         scroll = Math.max(0, Math.min(Math.max(0, rows.size() - settingsRows), scroll));
 
         int controlWidth = Math.min(140, (width - 2 * GUTTER) / 2);
@@ -1025,18 +1072,16 @@ public final class AdminPanel {
 
             if (row.isAction()) {
                 if ("customPosition".equals(row.key())) {
-                    // Only means anything for CUSTOM: every other preset works
-                    // its own anchor out from the screen size.
-                    if (!"CUSTOM".equalsIgnoreCase(settings.displayed(model,
-                            SettingsForm.rowOf("positionPreset")))) {
-                        continue;
-                    }
                     host.addWidget(Button.builder(
                                     Component.translatable("ontime.gui.settings.custom_position.edit"),
-                                    b -> AdminClientState.openPicker(null,
+                                    // The defaults, so a sample counter and the
+                                    // four sample titles: there is no one timer
+                                    // here to show the real state of.
+                                    b -> AdminClientState.openPicker(null, "CUSTOM",
                                             model.configInt("timerX", -1),
                                             model.configInt("timerY", 4),
                                             model.configFloat("timerScale", 1f),
+                                            "00:00:00", SAMPLE_TITLES,
                                             (px, py) -> {
                                                 settings.put("timerX", String.valueOf(px));
                                                 settings.put("timerY", String.valueOf(py));
@@ -1828,7 +1873,7 @@ public final class AdminPanel {
      */
     private void drawFieldRows(Painter painter, AdminModel.TimerRow timer,
                                TimerEditor.Section section, int x, int columnWidth) {
-        List<TimerEditor.Entry> entries = TimerEditor.laidOut(section, editor.isCreating());
+        List<TimerEditor.Entry> entries = TimerEditor.laidOut(section, editor.isCreating(), timerIsCustom(timer));
         for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
             TimerEditor.Entry entry = entries.get(detailScroll + i);
             int y = editorFieldTop + i * SETTING_HEIGHT;
@@ -2370,7 +2415,8 @@ public final class AdminPanel {
         } else if (model.tab() == AdminModel.Tab.TIMERS) {
             if (editor.advanced()) {
                 int rows = editor.section() == TimerEditor.Section.COMMANDS
-                        ? commandCount() : TimerEditor.laidOut(editor.section(), editor.isCreating()).size();
+                        ? commandCount() : TimerEditor.laidOut(editor.section(), editor.isCreating(),
+                        timerIsCustom(model.timer(editor.timerName()))).size();
                 if (rows <= editorRowsShown) return false;
                 int before = detailScroll;
                 detailScroll = Math.max(0, Math.min(rows - editorRowsShown,
@@ -2382,7 +2428,8 @@ public final class AdminPanel {
             // Two columns again, so the wheel goes to whichever the pointer
             // is over. Anything else guesses, and guesses wrong.
             if (twoColumn && pointerX >= detailX - GUTTER / 2 && model.selectedTimer() != null) {
-                int rows = TimerEditor.laidOut(TimerEditor.Section.QUICK, editor.isCreating()).size();
+                int rows = TimerEditor.laidOut(TimerEditor.Section.QUICK, editor.isCreating(),
+                timerIsCustom(model.timer(model.selectedTimer()))).size();
                 if (rows <= editorRowsShown) return false;
                 int before = detailScroll;
                 detailScroll = Math.max(0, Math.min(rows - editorRowsShown,

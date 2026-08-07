@@ -16,9 +16,10 @@ import net.minecraft.network.chat.Component;
 public class PositionScreen extends Screen {
 
     private final PositionPicker picker;
-    public PositionScreen(String timerName, int x, int y, float scale, PositionPicker.Save save) {
+    public PositionScreen(String timerName, String preset, int x, int y, float scale,
+                          String timeText, String[] titles, PositionPicker.Save save) {
         super(Component.translatable("ontime.gui.picker.title"));
-        this.picker = new PositionPicker(timerName, x, y, scale, save);
+        this.picker = new PositionPicker(timerName, preset, x, y, scale, timeText, titles, save);
     }
 
     /**

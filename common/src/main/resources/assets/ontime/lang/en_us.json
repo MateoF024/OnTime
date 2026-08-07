@@ -436,7 +436,6 @@
   "ontime.gui.confirm.reset.body": "Applied at once, and it cannot be undone.",
   "ontime.gui.picker.title": "Place the counter",
   "ontime.gui.picker.hint": "Drag the counter. T shows the titles, S changes the size, ESC leaves.",
-  "ontime.gui.picker.title.sample": "Title",
   "ontime.gui.picker.exit.title": "Leave the placement screen?",
   "ontime.gui.picker.exit.body": "Where it sits has not been saved yet.",
   "ontime.gui.picker.exit.discard": "Leave",
@@ -446,5 +445,7 @@
   "ontime.config.custom_position": "Custom position",
   "ontime.config.custom_position.tooltip": "Where the counter sits when the preset is CUSTOM.",
   "ontime.gui.editor.field.config.custom_position": "Custom position",
-  "ontime.gui.editor.field.config.custom_position.tip": "Opens the game with this timer as a sample you can drag where you want it. Only applies when the preset is CUSTOM."
+  "ontime.gui.editor.field.config.custom_position.tip": "Opens the game with this timer as a sample you can drag where you want it. Only applies when the preset is CUSTOM.",
+  "ontime.config.reset_defaults": "Restore everything",
+  "ontime.config.reset_defaults.tooltip": "Puts every setting above back to what the mod ships with."
 }

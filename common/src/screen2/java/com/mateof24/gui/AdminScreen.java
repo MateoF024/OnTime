@@ -35,8 +35,8 @@ public class AdminScreen extends Screen implements PanelHost {
     /** Lets {@link AdminClientState} open this screen without naming the class. */
     public static void register() {
         AdminClientState.setOpener(() -> Minecraft.getInstance().setScreen(new AdminScreen()));
-        AdminClientState.setPickerOpener((name, x, y, scale, save) ->
-                Minecraft.getInstance().setScreen(new PositionScreen(name, x, y, scale, save)));
+        AdminClientState.setPickerOpener((name, preset, x, y, scale, time, titles, save) ->
+                Minecraft.getInstance().setScreen(new PositionScreen(name, preset, x, y, scale, time, titles, save)));
     }
 
     @Override
