@@ -39,22 +39,15 @@ public record TimerDefinition(
         String nextTimer,
         long sequenceCooldownTicks,
 
-        /** Scoreboard condition; null objective means none. */
-        String conditionObjective,
-        int conditionScore,
-        String conditionTarget,
-        /** "start" or "finish". */
-        String conditionAction,
-
-        /** Expression condition, or null. */
-        String conditionExpression,
-        /** "start" or "finish". */
-        String conditionExpressionAction,
-
-        /** Trigger spec, or null. */
-        String triggerType,
-        /** "start" or "finish". */
-        String triggerAction,
+        /**
+         * Every reason this timer starts or ends other than its own clock.
+         *
+         * <p>Replaces the three single-valued systems this record used to
+         * expose separately — a game event, a scoreboard comparison and an
+         * expression, each with its own action field. They are one kind of
+         * thing and a timer may now hold any number of them.</p>
+         */
+        List<com.mateof24.trigger.Trigger> triggers,
 
         /**
          * Where this timer draws and how big. Always set: a timer copies the

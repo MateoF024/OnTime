@@ -10,6 +10,7 @@ import com.mateof24.permission.PermissionHelper;
 import com.mateof24.permission.PermissionNodes;
 import com.mateof24.storage.TimerStorage;
 import com.mateof24.timer.Timer;
+import com.mateof24.trigger.Trigger;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
@@ -121,6 +122,122 @@ public class TimerCommands {
     }
 
     private static final TimerNameSuggestionProvider TIMER_SUGGESTIONS = new TimerNameSuggestionProvider();
+
+    // ---- /timer trigger <name> add ... ----
+    //
+    // Every kind ends in the same two literals. The action used to be a
+    // separate argument on some kinds, a literal baked into the node name on
+    // others (if / if_start), and absent on the scoreboard branch, which could
+    // only ever end a timer.
+
+    private static LiteralArgumentBuilder<CommandSourceStack> bareTrigger(String literal, Trigger.Kind kind) {
+        return Commands.literal(literal)
+                .then(Commands.literal("start").executes(ctx ->
+                        BehaviorCommands.addTrigger(ctx, Trigger.of(kind, Trigger.Action.START, ""))))
+                .then(Commands.literal("finish").executes(ctx ->
+                        BehaviorCommands.addTrigger(ctx, Trigger.of(kind, Trigger.Action.FINISH, ""))));
+    }
+
+    /** A kind narrowed by a resource id, with completion for it. */
+    private static LiteralArgumentBuilder<CommandSourceStack> idTrigger(
+            String literal, Trigger.Kind kind,
+            com.mojang.brigadier.suggestion.SuggestionProvider<CommandSourceStack> suggestions) {
+        return Commands.literal(literal)
+                .then(Commands.argument("id", VanillaCompat.idArgument())
+                        .suggests(suggestions)
+                        .then(Commands.literal("start").executes(ctx -> BehaviorCommands.addTrigger(ctx,
+                                Trigger.of(kind, Trigger.Action.START, VanillaCompat.getIdArgument(ctx, "id")))))
+                        .then(Commands.literal("finish").executes(ctx -> BehaviorCommands.addTrigger(ctx,
+                                Trigger.of(kind, Trigger.Action.FINISH, VanillaCompat.getIdArgument(ctx, "id"))))));
+    }
+
+    /** FTB ids are opaque hex strings, so there is nothing to complete. */
+    private static LiteralArgumentBuilder<CommandSourceStack> wordTrigger(String literal, Trigger.Kind kind) {
+        return Commands.literal(literal)
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.literal("start").executes(ctx -> BehaviorCommands.addTrigger(ctx,
+                                Trigger.of(kind, Trigger.Action.START, StringArgumentType.getString(ctx, "id")))))
+                        .then(Commands.literal("finish").executes(ctx -> BehaviorCommands.addTrigger(ctx,
+                                Trigger.of(kind, Trigger.Action.FINISH, StringArgumentType.getString(ctx, "id"))))));
+    }
+
+    /**
+     * The score holder is greedy and last.
+     *
+     * <p>It was a word, and a word rejects an asterisk -- which is exactly what
+     * its own suggestion offered, so the completion proposed a value the parser
+     * refused. Greedy also accepts a selector with brackets in it.</p>
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> scoreboardAction(String literal, Trigger.Action action) {
+        return Commands.literal(literal)
+                .executes(ctx -> BehaviorCommands.addTrigger(ctx, Trigger.scoreboard(action,
+                        StringArgumentType.getString(ctx, "objective"),
+                        IntegerArgumentType.getInteger(ctx, "score"), "*")))
+                .then(Commands.argument("target", StringArgumentType.greedyString())
+                        .suggests(TimerCommands::suggestScoreHolders)
+                        .executes(ctx -> BehaviorCommands.addTrigger(ctx, Trigger.scoreboard(action,
+                                StringArgumentType.getString(ctx, "objective"),
+                                IntegerArgumentType.getInteger(ctx, "score"),
+                                StringArgumentType.getString(ctx, "target")))));
+    }
+
+    /** The action comes before the expression, which eats the rest of the line. */
+    private static LiteralArgumentBuilder<CommandSourceStack> expressionAction(String literal, Trigger.Action action) {
+        return Commands.literal(literal)
+                .then(Commands.argument("expression", StringArgumentType.greedyString())
+                        .executes(ctx -> BehaviorCommands.addTrigger(ctx,
+                                Trigger.expression(action, StringArgumentType.getString(ctx, "expression")))));
+    }
+
+    /**
+     * Every advancement the server knows.
+     *
+     * <p>There were none: the id argument was left bare, so the one trigger
+     * kind whose value nobody can guess was the one you had to type blind.</p>
+     */
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestAdvancements(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        net.minecraft.server.MinecraftServer server = ctx.getSource().getServer();
+        if (server == null) return builder.buildFuture();
+        String remaining = builder.getRemaining().toLowerCase();
+        java.util.List<String> contains = new java.util.ArrayList<>();
+        for (net.minecraft.advancements.AdvancementHolder holder : server.getAdvancements().getAllAdvancements()) {
+            String id = holder.id().toString();
+            String lower = id.toLowerCase();
+            if (lower.startsWith(remaining)) builder.suggest(id);
+            else if (!remaining.isEmpty() && lower.contains(remaining)) contains.add(id);
+        }
+        contains.forEach(builder::suggest);
+        return builder.buildFuture();
+    }
+
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestObjectives(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        net.minecraft.server.MinecraftServer server = ctx.getSource().getServer();
+        if (server == null) return builder.buildFuture();
+        String remaining = builder.getRemaining().toLowerCase();
+        server.getScoreboard().getObjectives().forEach(objective -> {
+            if (objective.getName().toLowerCase().startsWith(remaining)) builder.suggest(objective.getName());
+        });
+        return builder.buildFuture();
+    }
+
+    /** Any holder, plus whoever is online. */
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestScoreHolders(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        String remaining = builder.getRemaining().toLowerCase();
+        if (remaining.isEmpty() || "*".startsWith(remaining)) builder.suggest("*");
+        net.minecraft.server.MinecraftServer server = ctx.getSource().getServer();
+        if (server == null) return builder.buildFuture();
+        for (net.minecraft.server.level.ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (player.getScoreboardName().toLowerCase().startsWith(remaining)) {
+                builder.suggest(player.getScoreboardName());
+            }
+        }
+        return builder.buildFuture();
+    }
+
+
 
     /**
      * The presets, and "reset" to hand the timer back to the server default.
@@ -529,60 +646,6 @@ public class TimerCommands {
                                 )
                         )
                 )
-                .then(Commands.literal("condition")
-                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_CONDITION, 4))
-                        .then(Commands.argument("name", StringArgumentType.word())
-                                .suggests(TIMER_SUGGESTIONS)
-                                .executes(BehaviorCommands::viewCondition)
-                                .then(Commands.literal("clear")
-                                        .executes(BehaviorCommands::clearCondition)
-                                )
-                                .then(Commands.literal("if")
-                                        .then(Commands.argument("expression", StringArgumentType.greedyString())
-                                                .executes(ctx -> BehaviorCommands.setConditionExpression(ctx,
-                                                        StringArgumentType.getString(ctx, "expression"), "finish"))
-                                        )
-                                )
-                                .then(Commands.literal("if_start")
-                                        .then(Commands.argument("expression", StringArgumentType.greedyString())
-                                                .executes(ctx -> BehaviorCommands.setConditionExpression(ctx,
-                                                        StringArgumentType.getString(ctx, "expression"), "start"))
-                                        )
-                                )
-                                .then(Commands.argument("objective", StringArgumentType.word())
-                                        .suggests((ctx, builder) -> {
-                                            ctx.getSource().getServer().getScoreboard().getObjectives()
-                                                    .forEach(obj -> {
-                                                        if (obj.getName().toLowerCase().startsWith(builder.getRemaining().toLowerCase()))
-                                                            builder.suggest(obj.getName());
-                                                    });
-                                            return builder.buildFuture();
-                                        })
-                                        .then(Commands.argument("score", IntegerArgumentType.integer(0))
-                                                .executes(ctx -> BehaviorCommands.setCondition(ctx,
-                                                        StringArgumentType.getString(ctx, "objective"),
-                                                        IntegerArgumentType.getInteger(ctx, "score"),
-                                                        "*"))
-                                                .then(Commands.argument("target", StringArgumentType.word())
-                                                        .suggests((ctx, builder) -> {
-                                                            String remaining = builder.getRemaining().toLowerCase();
-                                                            if ("*".startsWith(remaining)) builder.suggest("*");
-                                                            ctx.getSource().getServer().getPlayerList().getPlayers()
-                                                                    .forEach(p -> {
-                                                                        if (p.getScoreboardName().toLowerCase().startsWith(remaining))
-                                                                            builder.suggest(p.getScoreboardName());
-                                                                    });
-                                                            return builder.buildFuture();
-                                                        })
-                                                        .executes(ctx -> BehaviorCommands.setCondition(ctx,
-                                                                StringArgumentType.getString(ctx, "objective"),
-                                                                IntegerArgumentType.getInteger(ctx, "score"),
-                                                                StringArgumentType.getString(ctx, "target")))
-                                                )
-                                        )
-                                )
-                        )
-                )
                 .then(Commands.literal("export")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_EXPORT, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
@@ -633,70 +696,47 @@ public class TimerCommands {
                                 .executes(WebPanelCommands::webPanelInfo)
                         )
                 )
+                // One subtree for every reason a timer starts or ends.
+                // /timer condition used to hold the scoreboard and expression
+                // halves under a different grammar, where the action was a
+                // literal in the node name (if / if_start) and the scoreboard
+                // branch offered no action at all.
                 .then(Commands.literal("trigger")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_TRIGGER, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
-                                .executes(BehaviorCommands::viewTrigger)
+                                .executes(BehaviorCommands::listTriggers)
+                                .then(Commands.literal("list")
+                                        .executes(BehaviorCommands::listTriggers))
                                 .then(Commands.literal("clear")
-                                        .executes(BehaviorCommands::clearTrigger)
-                                )
-                                .then(Commands.literal("player_death")
-                                        .executes(ctx -> BehaviorCommands.setTrigger(ctx, "player_death", "finish"))
-                                        .then(Commands.argument("action", StringArgumentType.word())
-                                                .suggests((c, b) -> { b.suggest("finish"); b.suggest("start"); return b.buildFuture(); })
-                                                .executes(ctx -> BehaviorCommands.setTrigger(ctx, "player_death",
-                                                        StringArgumentType.getString(ctx, "action")))
-                                        )
-                                )
-                                .then(Commands.literal("dimension_change")
-                                        .executes(ctx -> BehaviorCommands.setTrigger(ctx, "dimension_change", "finish"))
-                                        .then(Commands.argument("dimension", VanillaCompat.idArgument())
-                                                .suggests(TimerCommands::suggestDimensions)
-                                                .executes(ctx -> BehaviorCommands.setTrigger(ctx, "dimension_change:" +
-                                                        VanillaCompat.getIdArgument(ctx, "dimension"), "finish"))
-                                                .then(Commands.argument("action", StringArgumentType.word())
-                                                        .suggests((c, b) -> { b.suggest("finish"); b.suggest("start"); return b.buildFuture(); })
-                                                        .executes(ctx -> BehaviorCommands.setTrigger(ctx, "dimension_change:" +
-                                                                        VanillaCompat.getIdArgument(ctx, "dimension"),
-                                                                StringArgumentType.getString(ctx, "action")))
+                                        .executes(BehaviorCommands::clearTriggers))
+                                .then(Commands.literal("remove")
+                                        .then(Commands.argument("index", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> BehaviorCommands.removeTrigger(ctx,
+                                                        IntegerArgumentType.getInteger(ctx, "index")))))
+                                .then(Commands.literal("add")
+                                        .then(bareTrigger("player_join", Trigger.Kind.PLAYER_JOIN))
+                                        .then(bareTrigger("player_leave", Trigger.Kind.PLAYER_LEAVE))
+                                        .then(bareTrigger("player_death", Trigger.Kind.PLAYER_DEATH))
+                                        .then(bareTrigger("player_respawn", Trigger.Kind.PLAYER_RESPAWN))
+                                        .then(idTrigger("dimension_change", Trigger.Kind.DIMENSION_CHANGE,
+                                                TimerCommands::suggestDimensions))
+                                        .then(idTrigger("advancement", Trigger.Kind.ADVANCEMENT,
+                                                TimerCommands::suggestAdvancements))
+                                        .then(wordTrigger("ftb_quest", Trigger.Kind.FTB_QUEST))
+                                        .then(wordTrigger("ftb_reward", Trigger.Kind.FTB_REWARD))
+                                        .then(Commands.literal("scoreboard")
+                                                .then(Commands.argument("objective", StringArgumentType.word())
+                                                        .suggests(TimerCommands::suggestObjectives)
+                                                        .then(Commands.argument("score", IntegerArgumentType.integer())
+                                                                .then(scoreboardAction("start", Trigger.Action.START))
+                                                                .then(scoreboardAction("finish", Trigger.Action.FINISH))
+                                                        )
                                                 )
                                         )
-                                )
-                                .then(Commands.literal("advancement")
-                                        .then(Commands.argument("advancement_id", VanillaCompat.idArgument())
-                                                .executes(ctx -> BehaviorCommands.setTrigger(ctx, "advancement:" +
-                                                        VanillaCompat.getIdArgument(ctx, "advancement_id"), "finish"))
-                                                .then(Commands.argument("action", StringArgumentType.word())
-                                                        .suggests((c, b) -> { b.suggest("finish"); b.suggest("start"); return b.buildFuture(); })
-                                                        .executes(ctx -> BehaviorCommands.setTrigger(ctx, "advancement:" +
-                                                                        VanillaCompat.getIdArgument(ctx, "advancement_id"),
-                                                                StringArgumentType.getString(ctx, "action")))
-                                                )
-                                        )
-                                )
-                                .then(Commands.literal("ftb_quest")
-                                        .then(Commands.argument("quest_id", StringArgumentType.word())
-                                                .executes(ctx -> BehaviorCommands.setTrigger(ctx, "ftb_quest:quest:" +
-                                                        StringArgumentType.getString(ctx, "quest_id"), "finish"))
-                                                .then(Commands.argument("action", StringArgumentType.word())
-                                                        .suggests((c, b) -> { b.suggest("finish"); b.suggest("start"); return b.buildFuture(); })
-                                                        .executes(ctx -> BehaviorCommands.setTrigger(ctx, "ftb_quest:quest:" +
-                                                                        StringArgumentType.getString(ctx, "quest_id"),
-                                                                StringArgumentType.getString(ctx, "action")))
-                                                )
-                                        )
-                                )
-                                .then(Commands.literal("ftb_reward")
-                                        .then(Commands.argument("reward_id", StringArgumentType.word())
-                                                .executes(ctx -> BehaviorCommands.setTrigger(ctx, "ftb_quest:reward:" +
-                                                        StringArgumentType.getString(ctx, "reward_id"), "finish"))
-                                                .then(Commands.argument("action", StringArgumentType.word())
-                                                        .suggests((c, b) -> { b.suggest("finish"); b.suggest("start"); return b.buildFuture(); })
-                                                        .executes(ctx -> BehaviorCommands.setTrigger(ctx, "ftb_quest:reward:" +
-                                                                        StringArgumentType.getString(ctx, "reward_id"),
-                                                                StringArgumentType.getString(ctx, "action")))
-                                                )
+                                        .then(Commands.literal("expression")
+                                                .then(expressionAction("start", Trigger.Action.START))
+                                                .then(expressionAction("finish", Trigger.Action.FINISH))
                                         )
                                 )
                         )

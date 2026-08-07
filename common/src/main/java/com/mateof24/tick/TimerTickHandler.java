@@ -143,21 +143,12 @@ public class TimerTickHandler {
         boolean finished = run.tick();
         mirror(run);
 
-        if (!finished && timer.getTriggerType() != null
-                && "finish".equals(timer.getTriggerAction())) {
-            if (com.mateof24.trigger.TriggerRegistry.consumeFor(timer.getName())) finished = true;
-        }
-
-        if (!finished && timer.hasCondition() && "finish".equals(timer.getScoreConditionAction())) {
-            finished = checkScoreboardCondition(server, timer);
-        }
-
-        if (!finished && timer.getConditionExpression() != null
-                && "finish".equals(timer.getConditionExpressionAction())) {
-            finished = com.mateof24.command.ConditionEvaluator
-                    .evaluate(timer.getConditionExpression(), server, timer)
-                    .orElse(false);
-        }
+        // One question for every reason this timer could end early, asked even
+        // when the clock already ended it: a pending event trigger has to be
+        // consumed either way, or it survives to fire at the next run.
+        boolean triggered = com.mateof24.trigger.TriggerEvaluator
+                .fires(server, timer, com.mateof24.trigger.Trigger.Action.FINISH);
+        if (triggered) finished = true;
 
         if (!finished && com.mateof24.event.TimerConditionRegistry.hasCondition(timer.getName())) {
             finished = com.mateof24.event.TimerConditionRegistry.evaluate(timer.getName());
@@ -294,20 +285,8 @@ public class TimerTickHandler {
         for (Timer t : manager.timersView()) {
             if (t.isRunning() || manager.hasRunOf(t.getName())) continue;
 
-            boolean shouldStart = false;
-            if (t.getTriggerType() != null && "start".equals(t.getTriggerAction())) {
-                if (com.mateof24.trigger.TriggerRegistry.consumeFor(t.getName())) shouldStart = true;
-            }
-            if (!shouldStart && t.hasCondition() && "start".equals(t.getScoreConditionAction())) {
-                shouldStart = checkScoreboardCondition(server, t);
-            }
-            if (!shouldStart && t.getConditionExpression() != null
-                    && "start".equals(t.getConditionExpressionAction())) {
-                shouldStart = com.mateof24.command.ConditionEvaluator
-                        .evaluate(t.getConditionExpression(), server, t)
-                        .orElse(false);
-            }
-            if (shouldStart) {
+            if (com.mateof24.trigger.TriggerEvaluator
+                    .fires(server, t, com.mateof24.trigger.Trigger.Action.START)) {
                 manager.startTimer(t.getName());
                 com.mateof24.network.TimerState.markDirty();
             }
@@ -401,14 +380,5 @@ public class TimerTickHandler {
         }
     }
 
-    private static boolean checkScoreboardCondition(MinecraftServer server, Timer timer) {
-        try {
-            return Services.PLATFORM.checkScoreboardCondition(server,
-                    timer.getConditionObjective(), timer.getConditionScore(), timer.getConditionTarget());
-        } catch (Exception e) {
-            com.mateof24.OnTimeConstants.LOGGER.warn("Failed to evaluate scoreboard condition for timer '{}'", timer.getName(), e);
-            return false;
-        }
-    }
 
 }

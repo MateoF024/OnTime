@@ -14,6 +14,9 @@ public class Timer {
     public static final int MAX_SCHEDULED_ENTRIES = 64;
     public static final int MAX_COMMANDS_PER_POINT = 16;
 
+    /** Sanity cap on how many reasons one timer may have to start or end. */
+    public static final int MAX_TRIGGERS = 32;
+
     /** Commands fired when the displayed time crosses {@code atSeconds} (4.0.0). */
     public static final class CommandEvent {
         private final long atSeconds;
@@ -43,18 +46,18 @@ public class Timer {
     private int repeatCount = -1;
     private int repeatsDone = 0;
     private String nextTimer = null;
-    private String conditionObjective = null;
-    private int conditionScore = 0;
-    private String conditionTarget = "*";
     private long repeatCooldownTicks = 0L;
     private long sequenceCooldownTicks = 0L;
-    private String conditionExpression = null;
-    private String triggerType = null;
-    private String conditionExpressionAction = "finish";
-    private String scoreConditionAction = "finish";
-    private String triggerAction = "finish";
-    // Scheduled commands (4.0.0). commandEvents is kept sorted by atSeconds
-    // ascending; the legacy single 'command' field is untouched by these.
+
+    /**
+     * Every reason this timer starts or ends other than its own clock.
+     *
+     * <p>One list where there were three single-valued systems, each with its
+     * own action field. A timer can now hold several, including several of the
+     * same kind.</p>
+     */
+    private final List<com.mateof24.trigger.Trigger> triggers = new ArrayList<>();
+    // commandEvents is kept sorted by atSeconds ascending.
     private final List<CommandEvent> commandEvents = new ArrayList<>();
     private final List<String> finishCommands = new ArrayList<>();
     // Decorative titles around the counter (4.0.0), stored as the RAW string
@@ -134,6 +137,78 @@ public class Timer {
         }
     }
 
+    /**
+     * The trigger list, or the three older systems folded into it.
+     *
+     * <p>A timer saved before the three became one keeps what it had: the game
+     * event, the scoreboard comparison and the expression each become a
+     * trigger carrying the action they were saved with. Read once at load and
+     * never written back — the old keys do not survive the next save.</p>
+     */
+    private static void readTriggers(Timer timer, JsonObject json) {
+        if (json.has("triggers") && json.get("triggers").isJsonArray()) {
+            for (JsonElement element : json.getAsJsonArray("triggers")) {
+                if (!element.isJsonObject()) continue;
+                com.mateof24.trigger.Trigger trigger =
+                        com.mateof24.trigger.Trigger.fromJson(element.getAsJsonObject());
+                if (trigger != null) timer.addTrigger(trigger);
+            }
+            return;
+        }
+
+        String type = json.has("triggerType") ? json.get("triggerType").getAsString() : "";
+        if (!type.isEmpty()) {
+            com.mateof24.trigger.Trigger.Action action = com.mateof24.trigger.Trigger.Action.parse(
+                    json.has("triggerAction") ? json.get("triggerAction").getAsString() : null);
+            timer.addTrigger(fromOldTriggerString(type, action));
+        }
+
+        String objective = json.has("conditionObjective") ? json.get("conditionObjective").getAsString() : "";
+        if (!objective.isEmpty()) {
+            timer.addTrigger(com.mateof24.trigger.Trigger.scoreboard(
+                    com.mateof24.trigger.Trigger.Action.parse(
+                            json.has("scoreConditionAction") ? json.get("scoreConditionAction").getAsString() : null),
+                    objective,
+                    json.has("conditionScore") ? json.get("conditionScore").getAsInt() : 0,
+                    json.has("conditionTarget") ? json.get("conditionTarget").getAsString() : "*"));
+        }
+
+        String expression = json.has("conditionExpression") ? json.get("conditionExpression").getAsString() : "";
+        if (!expression.isEmpty()) {
+            timer.addTrigger(com.mateof24.trigger.Trigger.expression(
+                    com.mateof24.trigger.Trigger.Action.parse(
+                            json.has("conditionExpressionAction") ? json.get("conditionExpressionAction").getAsString() : null),
+                    expression));
+        }
+    }
+
+    /** {@code "dimension_change:minecraft:the_nether"} and friends, split once. */
+    private static com.mateof24.trigger.Trigger fromOldTriggerString(
+            String saved, com.mateof24.trigger.Trigger.Action action) {
+        String kindPart = saved;
+        String value = "";
+        int cut = saved.indexOf(':');
+        if (cut > 0) {
+            kindPart = saved.substring(0, cut);
+            value = saved.substring(cut + 1);
+        }
+        // "ftb_quest:quest:<id>" and "ftb_quest:reward:<id>" named the kind
+        // across two segments; everything else used one.
+        if ("ftb_quest".equals(kindPart)) {
+            if (value.startsWith("quest:")) {
+                return com.mateof24.trigger.Trigger.of(com.mateof24.trigger.Trigger.Kind.FTB_QUEST,
+                        action, value.substring("quest:".length()));
+            }
+            if (value.startsWith("reward:")) {
+                return com.mateof24.trigger.Trigger.of(com.mateof24.trigger.Trigger.Kind.FTB_REWARD,
+                        action, value.substring("reward:".length()));
+            }
+        }
+        com.mateof24.trigger.Trigger.Kind kind = com.mateof24.trigger.Trigger.Kind.parse(kindPart);
+        if (kind == null) return null;
+        return com.mateof24.trigger.Trigger.of(kind, action, value);
+    }
+
     public JsonObject toJson() {
         JsonObject json = new JsonObject();
         json.addProperty("name", name);
@@ -147,16 +222,11 @@ public class Timer {
         json.addProperty("repeatCount", repeatCount);
         json.addProperty("repeatsDone", repeatsDone);
         json.addProperty("nextTimer", nextTimer != null ? nextTimer : "");
-        json.addProperty("conditionObjective", conditionObjective != null ? conditionObjective : "");
-        json.addProperty("conditionScore", conditionScore);
-        json.addProperty("conditionTarget", conditionTarget != null ? conditionTarget : "*");
         json.addProperty("repeatCooldownTicks", repeatCooldownTicks);
         json.addProperty("sequenceCooldownTicks", sequenceCooldownTicks);
-        json.addProperty("conditionExpression", conditionExpression != null ? conditionExpression : "");
-        json.addProperty("triggerType", triggerType != null ? triggerType : "");
-        json.addProperty("conditionExpressionAction", conditionExpressionAction);
-        json.addProperty("scoreConditionAction", scoreConditionAction);
-        json.addProperty("triggerAction", triggerAction);
+        JsonArray triggerArray = new JsonArray();
+        for (com.mateof24.trigger.Trigger trigger : triggers) triggerArray.add(trigger.toJson());
+        json.add("triggers", triggerArray);
         JsonArray events = new JsonArray();
         for (CommandEvent event : commandEvents) {
             JsonObject e = new JsonObject();
@@ -206,19 +276,9 @@ public class Timer {
         timer.repeatsDone = json.has("repeatsDone") ? json.get("repeatsDone").getAsInt() : 0;
         timer.nextTimer = json.has("nextTimer") ? json.get("nextTimer").getAsString() : "";
         if (timer.nextTimer.isEmpty()) timer.nextTimer = null;
-        String condObj = json.has("conditionObjective") ? json.get("conditionObjective").getAsString() : "";
-        timer.conditionObjective = condObj.isEmpty() ? null : condObj;
-        timer.conditionScore = json.has("conditionScore") ? json.get("conditionScore").getAsInt() : 0;
-        timer.conditionTarget = json.has("conditionTarget") ? json.get("conditionTarget").getAsString() : "*";
         timer.repeatCooldownTicks = json.has("repeatCooldownTicks") ? json.get("repeatCooldownTicks").getAsLong() : 0L;
         timer.sequenceCooldownTicks = json.has("sequenceCooldownTicks") ? json.get("sequenceCooldownTicks").getAsLong() : 0L;
-        String condExpr = json.has("conditionExpression") ? json.get("conditionExpression").getAsString() : "";
-        timer.conditionExpression = condExpr.isEmpty() ? null : condExpr;
-        String trig = json.has("triggerType") ? json.get("triggerType").getAsString() : "";
-        timer.triggerType = trig.isEmpty() ? null : trig;
-        timer.conditionExpressionAction = json.has("conditionExpressionAction") ? json.get("conditionExpressionAction").getAsString() : "finish";
-        timer.scoreConditionAction = json.has("scoreConditionAction") ? json.get("scoreConditionAction").getAsString() : "finish";
-        timer.triggerAction = json.has("triggerAction") ? json.get("triggerAction").getAsString() : "finish";
+        readTriggers(timer, json);
 
         // Scheduled commands (absent in pre-4.0.0 files = empty). Malformed
         // entries are skipped instead of failing the whole timer.
@@ -322,28 +382,34 @@ public class Timer {
     public void setNextTimer(String nextTimer) {
         this.nextTimer = (nextTimer == null || nextTimer.isEmpty()) ? null : nextTimer;
     }
-    public String getConditionObjective() { return conditionObjective; }
-    public int getConditionScore() { return conditionScore; }
-    public String getConditionTarget() { return conditionTarget; }
-    public boolean hasCondition() { return conditionObjective != null && !conditionObjective.isEmpty(); }
-    public void setCondition(String objective, int score, String target) {
-        this.conditionObjective = objective;
-        this.conditionScore = score;
-        this.conditionTarget = (target == null || target.isEmpty()) ? "*" : target;
+    /** Live list, insertion order. Server thread only. */
+    public List<com.mateof24.trigger.Trigger> triggers() { return triggers; }
+
+    public boolean hasTriggers() { return !triggers.isEmpty(); }
+
+    /** Refuses a duplicate: the same watch for the same outcome twice does nothing. */
+    public boolean addTrigger(com.mateof24.trigger.Trigger trigger) {
+        if (trigger == null || !trigger.isValid()) return false;
+        if (triggers.size() >= MAX_TRIGGERS) return false;
+        for (com.mateof24.trigger.Trigger existing : triggers) {
+            if (existing.key().equals(trigger.key())) return false;
+        }
+        triggers.add(trigger);
+        return true;
     }
-    public void clearCondition() {
-        this.conditionObjective = null;
-        this.conditionScore = 0;
-        this.conditionTarget = "*";
+
+    /** Removes by position in {@link #triggers()}, zero-based. */
+    public boolean removeTrigger(int index) {
+        if (index < 0 || index >= triggers.size()) return false;
+        triggers.remove(index);
+        return true;
     }
+
+    public void clearTriggers() { triggers.clear(); }
     public long getRepeatCooldownTicks() { return repeatCooldownTicks; }
     public void setRepeatCooldownTicks(long ticks) { this.repeatCooldownTicks = Math.max(0, ticks); }
     public long getSequenceCooldownTicks() { return sequenceCooldownTicks; }
     public void setSequenceCooldownTicks(long ticks) { this.sequenceCooldownTicks = Math.max(0, ticks); }
-    public String getConditionExpression() { return conditionExpression; }
-    public void setConditionExpression(String expr) { this.conditionExpression = (expr == null || expr.isEmpty()) ? null : expr; }
-    public String getTriggerType() { return triggerType; }
-    public void setTriggerType(String type) { this.triggerType = (type == null || type.isEmpty()) ? null : type; }
 
     /** Live list, sorted by atSeconds ascending. Server thread only. */
     public List<CommandEvent> getCommandEvents() { return commandEvents; }
@@ -470,12 +536,5 @@ public class Timer {
 
     /** How this timer looks and sounds. Never null, and never the defaults themselves. */
     public TimerDisplay display() { return display; }
-
-    public String getConditionExpressionAction() { return conditionExpressionAction; }
-    public void setConditionExpressionAction(String a) { this.conditionExpressionAction = "start".equals(a) ? "start" : "finish"; }
-    public String getScoreConditionAction() { return scoreConditionAction; }
-    public void setScoreConditionAction(String a) { this.scoreConditionAction = "start".equals(a) ? "start" : "finish"; }
-    public String getTriggerAction() { return triggerAction; }
-    public void setTriggerAction(String a) { this.triggerAction = "start".equals(a) ? "start" : "finish"; }
 
 }

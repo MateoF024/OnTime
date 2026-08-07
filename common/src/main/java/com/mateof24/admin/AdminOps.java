@@ -117,8 +117,9 @@ public final class AdminOps {
                 case "timer.setDisplay" -> setDisplay(args);
                 case "timer.addCommand" -> addCommand(args);
                 case "timer.removeCommand" -> removeCommand(args);
-                case "timer.setCondition" -> setCondition(args);
-                case "timer.setTrigger" -> setTrigger(args);
+                case "timer.addTrigger" -> addTrigger(args);
+                case "timer.removeTrigger" -> removeTrigger(args);
+                case "timer.clearTriggers" -> clearTriggers(args);
 
                 case "run.start" -> startRun(server, args);
                 case "run.pause" -> runAction(args, OnTimeAPI.getInstance()::pauseRun, "It is already paused");
@@ -193,14 +194,9 @@ public final class AdminOps {
         json.addProperty("repeatCooldownTicks", def.repeatCooldownTicks());
         json.addProperty("nextTimer", def.nextTimer());
         json.addProperty("sequenceCooldownTicks", def.sequenceCooldownTicks());
-        json.addProperty("conditionObjective", def.conditionObjective());
-        json.addProperty("conditionScore", def.conditionScore());
-        json.addProperty("conditionTarget", def.conditionTarget());
-        json.addProperty("conditionAction", def.conditionAction());
-        json.addProperty("conditionExpression", def.conditionExpression());
-        json.addProperty("conditionExpressionAction", def.conditionExpressionAction());
-        json.addProperty("triggerType", def.triggerType());
-        json.addProperty("triggerAction", def.triggerAction());
+        JsonArray triggers = new JsonArray();
+        for (com.mateof24.trigger.Trigger trigger : def.triggers()) triggers.add(trigger.toJson());
+        json.add("triggers", triggers);
         json.addProperty("position", def.position());
         json.addProperty("customX", def.customX());
         json.addProperty("customY", def.customY());
@@ -569,47 +565,79 @@ public final class AdminOps {
         return Result.ok();
     }
 
-    /** The scoreboard condition and the expression, which share one screen. */
-    private static Result setCondition(JsonObject args) {
+    /**
+     * Adds one reason for a timer to start or end.
+     *
+     * <p>One operation for what used to be two — {@code timer.setCondition},
+     * which set a scoreboard comparison and an expression at once, and
+     * {@code timer.setTrigger} for game events. Both replaced whatever was
+     * there; a timer can hold several now, so this adds.</p>
+     */
+    private static Result addTrigger(JsonObject args) {
         String name = requireTimer(args);
         if (name == null) return Result.fail("No such timer");
         com.mateof24.timer.Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
         if (timer == null) return Result.fail("No such timer");
 
-        if (args.has("objective")) {
-            String objective = str(args, "objective");
-            if (objective == null || objective.isBlank()) {
-                timer.setCondition(null, 0, "*");
-            } else {
-                String target = str(args, "target");
-                timer.setCondition(objective, intOf(args, "score", 0),
-                        target == null || target.isBlank() ? "*" : target);
-            }
-            timer.setScoreConditionAction(str(args, "scoreAction"));
-        }
-        if (args.has("expression")) {
-            String expression = str(args, "expression");
-            timer.setConditionExpression(expression == null || expression.isBlank() ? null : expression);
-            timer.setConditionExpressionAction(str(args, "expressionAction"));
-        }
+        com.mateof24.trigger.Trigger.Kind kind =
+                com.mateof24.trigger.Trigger.Kind.parse(str(args, "kind"));
+        if (kind == null) return Result.fail("Unknown trigger kind");
 
+        String value = str(args, "value");
+        if (value == null) value = "";
+        if (kind.needsValue() && value.isBlank()) return Result.fail("That trigger needs a value");
+
+        String target = str(args, "target");
+        com.mateof24.trigger.Trigger trigger = new com.mateof24.trigger.Trigger(
+                kind,
+                com.mateof24.trigger.Trigger.Action.parse(str(args, "action")),
+                value.trim(),
+                intOf(args, "threshold", 0),
+                target == null || target.isBlank() ? "*" : target.trim());
+
+        if (!timer.addTrigger(trigger)) {
+            return Result.fail("That trigger is already there, or this timer has too many");
+        }
+        forget(name);
         TimerManager.getInstance().saveTimer(timer);
         return Result.ok();
     }
 
-    private static Result setTrigger(JsonObject args) {
+    /** Removes by position in the timer's list, zero-based. */
+    private static Result removeTrigger(JsonObject args) {
         String name = requireTimer(args);
         if (name == null) return Result.fail("No such timer");
         com.mateof24.timer.Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
         if (timer == null) return Result.fail("No such timer");
-
-        String type = str(args, "type");
-        timer.setTriggerType(type == null || type.isBlank() ? null : type);
-        timer.setTriggerAction(str(args, "action"));
-
+        if (!timer.removeTrigger(intOf(args, "index", -1))) return Result.fail("No such trigger");
+        forget(name);
         TimerManager.getInstance().saveTimer(timer);
         return Result.ok();
     }
+
+    private static Result clearTriggers(JsonObject args) {
+        String name = requireTimer(args);
+        if (name == null) return Result.fail("No such timer");
+        com.mateof24.timer.Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
+        if (timer == null) return Result.fail("No such timer");
+        timer.clearTriggers();
+        forget(name);
+        TimerManager.getInstance().saveTimer(timer);
+        return Result.ok();
+    }
+
+    /**
+     * Drops what this timer has already fired.
+     *
+     * <p>Changing the triggers has to clear both memories, or a quest that was
+     * already completed keeps a brand new trigger from ever firing, and a fire
+     * raised for a trigger that no longer exists sits pending forever.</p>
+     */
+    private static void forget(String name) {
+        com.mateof24.trigger.TriggerRegistry.resetFor(name);
+        com.mateof24.trigger.FTBQuestsPoller.resetFor(name);
+    }
+
 
     private static Result setSilent(JsonObject args) {
         String name = requireTimer(args);

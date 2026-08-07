@@ -354,146 +354,121 @@ final class BehaviorCommands {
         return 1;
     }
 
-    static int viewCondition(CommandContext<CommandSourceStack> ctx) {
+    // ---- /timer trigger <name> ... ----
+
+    /**
+     * Prints the list, numbered from one, which is how removal addresses it.
+     */
+    static int listTriggers(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
         if (timerOpt.isEmpty()) {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
-        Timer timer = timerOpt.get();
-        if (!timer.hasCondition()) {
+        java.util.List<com.mateof24.trigger.Trigger> triggers = timerOpt.get().triggers();
+        if (triggers.isEmpty()) {
             ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.condition.none", name), false);
-        } else {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.condition.current",
-                            name, timer.getConditionObjective(),
-                            timer.getConditionScore(), timer.getConditionTarget()), false);
+                    Component.translatable("ontime.command.trigger.list.empty", name), false);
+            return 1;
+        }
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.trigger.list.header", name), false);
+        int index = 1;
+        for (com.mateof24.trigger.Trigger trigger : triggers) {
+            final int shown = index++;
+            ctx.getSource().sendSuccess(() -> Component.translatable(
+                    "ontime.command.trigger.list.row", shown, describe(trigger),
+                    Component.translatable("ontime.trigger.action." + trigger.action().lower())), false);
         }
         return 1;
     }
 
-    static int setCondition(CommandContext<CommandSourceStack> ctx,
-                            String objective, int score, String target) {
+    /** {@code <kind> <value>}, or just the kind when it watches a bare event. */
+    static Component describe(com.mateof24.trigger.Trigger trigger) {
+        Component kind = Component.translatable("ontime.trigger.kind." + trigger.kind().lower());
+        if (trigger.kind() == com.mateof24.trigger.Trigger.Kind.SCOREBOARD) {
+            return Component.translatable("ontime.command.trigger.describe.scoreboard",
+                    kind, trigger.value(), trigger.threshold(), trigger.target());
+        }
+        if (trigger.value().isEmpty()) return kind;
+        return Component.translatable("ontime.command.trigger.describe.value", kind, trigger.value());
+    }
+
+    static int addTrigger(CommandContext<CommandSourceStack> ctx, com.mateof24.trigger.Trigger trigger) {
         String name = StringArgumentType.getString(ctx, "name");
         Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
         if (timerOpt.isEmpty()) {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
-        timerOpt.get().setCondition(objective, score, target);
+        if (!timerOpt.get().addTrigger(trigger)) {
+            ctx.getSource().sendFailure(Component.translatable(
+                    "ontime.command.trigger.rejected", name, Timer.MAX_TRIGGERS));
+            return 0;
+        }
+        forget(name);
         TimerManager.getInstance().saveTimers();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.condition.set",
-                        name, objective, score, target), true);
-        return 1;
-    }
+        ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.trigger.added",
+                name, describe(trigger),
+                Component.translatable("ontime.trigger.action." + trigger.action().lower())), true);
 
-    static int setCondition(CommandContext<CommandSourceStack> ctx,
-                            String objective, int score, String target, String action) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        timerOpt.get().setCondition(objective, score, target);
-        timerOpt.get().setScoreConditionAction(action);
-        TimerManager.getInstance().saveTimers();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.condition.set", name, objective, score, target), true);
-        return 1;
-    }
-
-    static int clearCondition(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        timerOpt.get().clearCondition();
-        TimerManager.getInstance().saveTimers();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.condition.cleared", name), true);
-        return 1;
-    }
-
-    static int setConditionExpression(CommandContext<CommandSourceStack> ctx, String expression, String action) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        Optional<Boolean> test = com.mateof24.command.ConditionEvaluator
-                .evaluate(expression, ctx.getSource().getServer(), timerOpt.get());
-        if (test.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.expr.invalid", expression));
-            return 0;
-        }
-        timerOpt.get().setConditionExpression(expression);
-        timerOpt.get().setConditionExpressionAction(action);
-        TimerManager.getInstance().saveTimers();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.condition.expr.set", name, expression, action), true);
-        return 1;
-    }
-
-    static int viewTrigger(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        String trigger = timerOpt.get().getTriggerType();
-        String action  = timerOpt.get().getTriggerAction();
-        ctx.getSource().sendSuccess(() ->
-                trigger != null
-                        ? Component.translatable("ontime.command.trigger.current", name, trigger, action)
-                        : Component.translatable("ontime.command.trigger.none", name), false);
-        return 1;
-    }
-
-    static int setTrigger(CommandContext<CommandSourceStack> ctx, String type, String action) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        timerOpt.get().setTriggerType(type);
-        timerOpt.get().setTriggerAction(action);
-        TimerManager.getInstance().saveTimers();
-        com.mateof24.trigger.FTBQuestsPoller.resetFor(name);
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.trigger.set", name, type, action), true);
-
-        // The trigger is stored either way — the pack may install FTB Quests
-        // later — but a trigger that silently never fires is the kind of thing
-        // people spend an evening on before checking their mod list.
-        if (type.startsWith("ftb_quest:")
-                && !com.mateof24.platform.Services.PLATFORM.isModLoaded("ftbquests")) {
+        // Stored either way — the pack may install FTB Quests later — but a
+        // trigger that silently never fires is the kind of thing people spend
+        // an evening on before checking their mod list.
+        boolean ftb = trigger.kind() == com.mateof24.trigger.Trigger.Kind.FTB_QUEST
+                || trigger.kind() == com.mateof24.trigger.Trigger.Kind.FTB_REWARD;
+        if (ftb && !com.mateof24.platform.Services.PLATFORM.isModLoaded("ftbquests")) {
             ctx.getSource().sendSuccess(() ->
                     Component.translatable("ontime.command.trigger.ftb_missing"), false);
         }
         return 1;
     }
 
-    static int clearTrigger(CommandContext<CommandSourceStack> ctx) {
+    /** The index is the one {@code list} printed, so it is one-based here. */
+    static int removeTrigger(CommandContext<CommandSourceStack> ctx, int index) {
         String name = StringArgumentType.getString(ctx, "name");
         Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
         if (timerOpt.isEmpty()) {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
             return 0;
         }
-        timerOpt.get().setTriggerType(null);
+        if (!timerOpt.get().removeTrigger(index - 1)) {
+            ctx.getSource().sendFailure(Component.translatable(
+                    "ontime.command.trigger.invalid_index", index, name));
+            return 0;
+        }
+        forget(name);
         TimerManager.getInstance().saveTimers();
-        com.mateof24.trigger.FTBQuestsPoller.resetFor(name);
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.trigger.removed", index, name), true);
+        return 1;
+    }
+
+    static int clearTriggers(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        timerOpt.get().clearTriggers();
+        forget(name);
+        TimerManager.getInstance().saveTimers();
         ctx.getSource().sendSuccess(() ->
                 Component.translatable("ontime.command.trigger.cleared", name), true);
         return 1;
+    }
+
+    /**
+     * Drops what this timer has already fired.
+     *
+     * <p>Both memories, always. A quest already completed would otherwise keep
+     * a brand new trigger from ever firing, and a fire raised for a trigger
+     * that no longer exists would sit pending forever.</p>
+     */
+    private static void forget(String name) {
+        com.mateof24.trigger.TriggerRegistry.resetFor(name);
+        com.mateof24.trigger.FTBQuestsPoller.resetFor(name);
     }
 }

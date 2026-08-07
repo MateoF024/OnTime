@@ -28,6 +28,6 @@ public abstract class PlayerAdvancementsMixin {
         if (ontime$wasDoneBeforeAward) return;
         PlayerAdvancements self = (PlayerAdvancements) (Object) this;
         if (!self.getOrStartProgress(advancement).isDone()) return;
-        TriggerDispatcher.dispatch("advancement", advancement.id().toString());
+        TriggerDispatcher.dispatch(com.mateof24.trigger.Trigger.Kind.ADVANCEMENT, advancement.id().toString());
     }
 }

@@ -113,23 +113,13 @@ final class InfoCommands {
                             timer.getNextTimer(), timer.getSequenceCooldownTicks() / 20L)));
         }
 
-        if (timer.hasCondition()) {
-            lines.add(CommandFormat.row("ontime.status.label.condition",
-                    Component.translatable("ontime.command.status.condition",
-                            timer.getConditionObjective(), timer.getConditionScore(),
-                            timer.getConditionTarget(), timer.getScoreConditionAction())));
-        }
-
-        if (timer.getConditionExpression() != null) {
-            lines.add(CommandFormat.row("ontime.status.label.expression",
-                    Component.translatable("ontime.command.status.expression",
-                            timer.getConditionExpression(), timer.getConditionExpressionAction())));
-        }
-
-        if (timer.getTriggerType() != null) {
+        // One row per trigger, where there were three separate rows for the
+        // three systems and no way to show more than one of each.
+        for (com.mateof24.trigger.Trigger trigger : timer.triggers()) {
             lines.add(CommandFormat.row("ontime.status.label.trigger",
                     Component.translatable("ontime.command.status.trigger",
-                            timer.getTriggerType(), timer.getTriggerAction())));
+                            BehaviorCommands.describe(trigger),
+                            Component.translatable("ontime.trigger.action." + trigger.action().lower()))));
         }
 
         List<TimerRun> runs = TimerManager.getInstance().findRuns(name, null);

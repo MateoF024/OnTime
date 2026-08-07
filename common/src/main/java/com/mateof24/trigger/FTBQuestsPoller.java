@@ -9,12 +9,20 @@ import net.minecraft.server.level.ServerPlayer;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Watches FTB Quests, which has no event we can subscribe to.
+ *
+ * <p>Completion is asked for rather than pushed, so this turns the answer into
+ * a one-shot fire: a completed quest stays completed, and without the memory
+ * below the trigger would fire on every poll for as long as the quest stayed
+ * done.</p>
+ */
 public final class FTBQuestsPoller {
 
     private static final int POLL_INTERVAL_TICKS = 20;
     private static int counter = 0;
 
-    /** Keys ("timerName|triggerType") that have already fired once. Cleared on trigger change/reset. */
+    /** Trigger keys that have already fired. Cleared when the timer's triggers change. */
     private static final Set<String> firedOnce = ConcurrentHashMap.newKeySet();
 
     private FTBQuestsPoller() {}
@@ -29,42 +37,45 @@ public final class FTBQuestsPoller {
         FTBQuestsIntegration.tryInit();
         if (!FTBQuestsIntegration.isReady()) return;
 
-        for (Timer t : TimerManager.getInstance().timersView()) {
-            String trigger = t.getTriggerType();
-            if (trigger == null) continue;
+        for (Timer timer : TimerManager.getInstance().timersView()) {
+            for (Trigger trigger : timer.triggers()) {
+                if (trigger.kind() != Trigger.Kind.FTB_QUEST
+                        && trigger.kind() != Trigger.Kind.FTB_REWARD) continue;
+                if (!trigger.isValid()) continue;
 
-            boolean isQuest  = trigger.startsWith("ftb_quest:quest:");
-            boolean isReward = trigger.startsWith("ftb_quest:reward:");
-            if (!isQuest && !isReward) continue;
+                // The action gate first: a start trigger on a running timer has
+                // nothing to do, and firing it would leave the fire pending
+                // until the timer stopped, long after the quest was completed.
+                if (trigger.action() == Trigger.Action.FINISH && !timer.isRunning()) continue;
+                if (trigger.action() == Trigger.Action.START && timer.isRunning()) continue;
 
-            String key = t.getName() + "|" + trigger;
-            if (firedOnce.contains(key)) continue;
+                String key = timer.getName() + " " + trigger.key();
+                if (firedOnce.contains(key)) continue;
 
-            String hexId = trigger.substring(isQuest ? "ftb_quest:quest:".length() : "ftb_quest:reward:".length());
-            if (hexId.isEmpty()) continue;
-
-            for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-                boolean detected = isQuest
-                        ? FTBQuestsIntegration.hasPlayerCompletedQuest(p, hexId)
-                        : FTBQuestsIntegration.hasPlayerClaimedReward(p, hexId);
-                if (detected) {
-                    String action = t.getTriggerAction();
-                    boolean valid = ("finish".equals(action) && t.isRunning())
-                            || ("start".equals(action) && !t.isRunning());
-                    if (valid) {
-                        TriggerRegistry.fireFor(t.getName());
-                        firedOnce.add(key);
-                    }
-                    break;
+                if (anyPlayerHas(server, trigger)) {
+                    TriggerRegistry.fireFor(timer.getName(), trigger);
+                    firedOnce.add(key);
                 }
             }
         }
     }
 
-    /** Clear the run-once state for a timer (call when trigger config changes / clears). */
+    private static boolean anyPlayerHas(MinecraftServer server, Trigger trigger) {
+        boolean quest = trigger.kind() == Trigger.Kind.FTB_QUEST;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            boolean has = quest
+                    ? FTBQuestsIntegration.hasPlayerCompletedQuest(player, trigger.value())
+                    : FTBQuestsIntegration.hasPlayerClaimedReward(player, trigger.value());
+            if (has) return true;
+        }
+        return false;
+    }
+
+    /** Forgets what a timer has already fired. Call when its triggers change. */
     public static void resetFor(String timerName) {
         if (timerName == null || timerName.isEmpty()) return;
-        firedOnce.removeIf(k -> k.startsWith(timerName + "|"));
+        String prefix = timerName + " ";
+        firedOnce.removeIf(key -> key.startsWith(prefix));
     }
 
     public static void resetAll() {

@@ -265,21 +265,16 @@ public class HelpSystem {
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
-                "condition",
-                "ontime.help.condition.desc",
-                "/timer condition <name> <objective> <score> [target|clear]",
-                "/timer condition event kills 10",
-                "/timer condition event kills 10 PlayerName",
-                "/timer condition event clear"
-        ));
-
-        HELP_ENTRIES.add(new HelpEntry(
                 "trigger",
                 "ontime.help.trigger.desc",
-                "/timer trigger <name> <event> [action|clear]",
-                "/timer trigger event player_death",
-                "/timer trigger event dimension_change minecraft:the_nether start",
-                "/timer trigger event clear"
+                "/timer trigger <name> [list|add|remove|clear]",
+                "/timer trigger event",
+                "/timer trigger event add player_death finish",
+                "/timer trigger event add dimension_change minecraft:the_nether start",
+                "/timer trigger event add advancement minecraft:story/mine_stone finish",
+                "/timer trigger event add scoreboard kills 10 finish PlayerName",
+                "/timer trigger event add expression finish players_online > 4",
+                "/timer trigger event remove 1"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
