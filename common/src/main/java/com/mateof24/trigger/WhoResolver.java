@@ -26,7 +26,6 @@ public final class WhoResolver {
         return switch (who.scope()) {
             case EVERYONE -> new ArrayList<>(online);
             case PLAYERS -> byName(online, who.value());
-            case TEAM -> byTeam(online, who.value());
             case SELECTOR -> bySelector(server, who.value(), online);
             case AUDIENCE -> audienceOf(timer, online);
         };
@@ -40,15 +39,6 @@ public final class WhoResolver {
             for (ServerPlayer player : online) {
                 if (player.getScoreboardName().equalsIgnoreCase(wanted)) out.add(player);
             }
-        }
-        return out;
-    }
-
-    private static List<ServerPlayer> byTeam(List<ServerPlayer> online, String team) {
-        List<ServerPlayer> out = new ArrayList<>();
-        for (ServerPlayer player : online) {
-            var current = player.getTeam();
-            if (current != null && current.getName().equalsIgnoreCase(team.trim())) out.add(player);
         }
         return out;
     }

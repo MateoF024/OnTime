@@ -10,8 +10,8 @@ import java.util.Locale;
  * <p>Two independent questions, kept apart on purpose. A trigger used to
  * answer neither: a game event fired for whoever caused it, and the scoreboard
  * kind carried a single holder that meant "this player, or {@code *} for
- * anybody" — so "when both of them change dimension" and "when the whole team
- * does" could not be said at all.</p>
+ * anybody" — so "when both of them change dimension" and "when everybody in
+ * the raid does" could not be said at all.</p>
  *
  * <p>Separating them is what removes the ambiguity. {@code PLAYERS} with
  * {@link Quantifier#ANY} is "either of them"; the same subject with
@@ -19,8 +19,8 @@ import java.util.Locale;
  * context.</p>
  *
  * @param scope     whose behaviour counts
- * @param value     the names, team or selector {@link #scope} needs; empty for
- *                  the two that need none
+ * @param value     the names or selector {@link #scope} needs; empty for the
+ *                  two that need none
  * @param quantifier how many of them have to satisfy the trigger
  * @param count     the number {@link Quantifier#AT_LEAST} compares against
  */
@@ -32,22 +32,29 @@ public record Who(Scope scope, String value, Quantifier quantifier, int count) {
          * The timer's own audience.
          *
          * <p>The default, and what every trigger did implicitly before there
-         * was a choice. A timer running for one team is usually only
-         * interested in that team.</p>
+         * was a choice. A timer running for one group of players is usually
+         * only interested in that group.</p>
          */
         AUDIENCE(false),
         /** Everybody on the server, whether or not they can see the timer. */
         EVERYONE(false),
-        /** A list of names, separated by commas. */
+        /**
+         * A list of names, separated by commas.
+         *
+         * <p>Kept because a selector cannot say it: {@code name=} takes one
+         * name, so "Bob and Ann" is not one selector.</p>
+         */
         PLAYERS(true),
-        /** One scoreboard team, by name. */
-        TEAM(true),
         /**
          * A vanilla selector.
          *
          * <p>The escape hatch, and the reason this list does not need to grow
-         * every time somebody wants a group we did not think of: tags,
-         * distance, game mode and the rest are already a selector's job.</p>
+         * every time somebody wants a group we did not think of: teams, tags,
+         * distance, game mode and the rest are already a selector's job. A
+         * scope of its own for teams was drafted and dropped for exactly that
+         * reason — {@code @a[team=red]} is how audiences are written in this
+         * mod already, and a second way to say it would be a second set of
+         * rules to keep in step with the game's.</p>
          */
         SELECTOR(true);
 

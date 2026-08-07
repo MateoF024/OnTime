@@ -405,8 +405,8 @@
   "ontime.command.trigger.list.empty": "'%s' has nothing that starts or ends it early",
   "ontime.command.trigger.list.header": "What starts or ends '%s':",
   "ontime.command.trigger.list.row": "  %s. %s - %s",
-  "ontime.command.trigger.describe.value": "%s (%s)",
-  "ontime.command.trigger.describe.scoreboard": "%s (%s reaches %s for %s)",
+  "ontime.command.trigger.describe.value": "%s (%s) - %s",
+  "ontime.command.trigger.describe.scoreboard": "%s (%s reaches %s) - %s",
   "ontime.command.trigger.added": "'%s' now has: %s - %s",
   "ontime.command.trigger.removed": "Removed trigger %s from '%s'",
   "ontime.command.trigger.rejected": "'%s' already has that trigger, or has reached the limit of %s",
@@ -447,5 +447,13 @@
   "ontime.gui.editor.field.config.custom_position": "Custom position",
   "ontime.gui.editor.field.config.custom_position.tip": "Opens the game with this timer as a sample you can drag where you want it. Only applies when the preset is CUSTOM.",
   "ontime.config.reset_defaults": "Restore everything",
-  "ontime.config.reset_defaults.tooltip": "Puts every setting above back to what the mod ships with."
+  "ontime.config.reset_defaults.tooltip": "Puts every setting above back to what the mod ships with.",
+  "ontime.who.scope.audience": "the timer's audience",
+  "ontime.who.scope.everyone": "anybody on the server",
+  "ontime.who.scope.players": "%s",
+  "ontime.who.scope.selector": "%s",
+  "ontime.who.any": "any of %s",
+  "ontime.who.all": "all of %s",
+  "ontime.who.at_least": "at least %s of %s",
+  "ontime.command.trigger.describe.who": "%s - %s"
 }
