@@ -26,20 +26,9 @@ final class DisplayCommands {
 
     private DisplayCommands() {}
 
-    /** Reserved first tokens: they win over a timer that happens to share the name. */
+    /** Hands a timer's setting back to whatever the server default is now. */
     private static final String RESET = "reset";
 
-    /**
-     * {@code /timer position <first>} — either the legacy global form
-     * ({@code /timer position bossbar}) or a request to see a timer's current
-     * one.
-     *
-     * <p>The tree cannot tell those apart, so the handler does, exactly as
-     * planned: an existing timer name wins, otherwise a valid preset name means
-     * the legacy global form. Nothing that parsed in 4.0.0 stops parsing —
-     * which matters, because {@code /timer position bossbar} is in command
-     * blocks that were placed months ago.</p>
-     */
     /** {@code /timer position <timer>}. */
     static int positionView(CommandContext<CommandSourceStack> ctx) {
         String first = StringArgumentType.getString(ctx, "name");
@@ -92,7 +81,7 @@ final class DisplayCommands {
     }
 
     /**
-     * {@code /timer position <default|name> custom <x> <y>} — the coordinates
+     * {@code /timer position <timer> custom <x> <y>} — the coordinates
      * that make CUSTOM mean anything per timer. Without it a timer set to
      * CUSTOM would inherit the global coordinates and land on top of every
      * other CUSTOM timer, which is the one arrangement the slot rule allows.
@@ -187,31 +176,57 @@ final class DisplayCommands {
                 free.isEmpty() ? "-" : String.join(", ", free)));
     }
 
-    static int setSoundDefault(CommandContext<CommandSourceStack> ctx, String soundId) {
-        return setSound(ctx, soundId, 0.75f, 2.0f);
-    }
-
-    static int setSoundWithVolume(CommandContext<CommandSourceStack> ctx, String soundId, float volume) {
-        return setSound(ctx, soundId, volume, 2.0f);
-    }
-
-    static int setSoundFull(CommandContext<CommandSourceStack> ctx, String soundId, float volume, float pitch) {
-        return setSound(ctx, soundId, volume, pitch);
-    }
-
-    private static int setSound(CommandContext<CommandSourceStack> ctx, String soundId, float volume, float pitch) {
-        ModConfig.getInstance().setTimerSound(soundId, volume, pitch);
-
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.sound.success", soundId, volume, pitch), true);
+    /** {@code /timer sound <timer>}. */
+    static int soundView(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
+        if (timer == null) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.sound.view",
+                name, timer.display().soundId(),
+                timer.display().soundVolume(), timer.display().soundPitch()), false);
         return 1;
     }
 
-    /**
-     * {@code /timer scale <first>} — the legacy global form when the token is a
-     * number, a timer's current scale when it names one. Same handler-side
-     * disambiguation as {@link #position}, and for the same reason.
-     */
+    /** {@code /timer sound <timer> <soundId> [volume] [pitch]}. */
+    static int setSound(CommandContext<CommandSourceStack> ctx, String soundId, float volume, float pitch) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
+        if (timer == null) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        timer.display().setSoundId(soundId);
+        timer.display().setSoundVolume(volume);
+        timer.display().setSoundPitch(pitch);
+        TimerManager.getInstance().saveTimer(timer);
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.sound.timer", name, soundId, volume, pitch), true);
+        com.mateof24.network.TimerState.markDirty();
+        return 1;
+    }
+
+    /** {@code /timer sound <timer> reset} — back to the server default. */
+    static int soundReset(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
+        if (timer == null) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        ModConfig config = ModConfig.getInstance();
+        timer.display().setSoundId(config.getTimerSoundId());
+        timer.display().setSoundVolume(config.getTimerSoundVolume());
+        timer.display().setSoundPitch(config.getTimerSoundPitch());
+        TimerManager.getInstance().saveTimer(timer);
+        ctx.getSource().sendSuccess(() ->
+                Component.translatable("ontime.command.sound.reset", name), true);
+        com.mateof24.network.TimerState.markDirty();
+        return 1;
+    }
+
     /** {@code /timer scale <timer>}. */
     static int scaleView(CommandContext<CommandSourceStack> ctx) {
         String first = StringArgumentType.getString(ctx, "name");
@@ -259,34 +274,6 @@ final class DisplayCommands {
         return 1;
     }
 
-    static int toggleSilentSelf(CommandContext<CommandSourceStack> ctx) {
-        if (!(ctx.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.players_only"));
-            return 0;
-        }
-
-        UUID playerUUID = player.getUUID();
-        boolean currentSilent = PlayerPreferences.getTimerSilent(playerUUID);
-        boolean newSilent = !currentSilent;
-
-        PlayerPreferences.setTimerSilent(playerUUID, newSilent);
-        Services.PLATFORM.sendSilentPacket(player, newSilent);
-
-        String targetKey = "ontime.command.silent.self";
-
-        if (newSilent) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.silent.disabled_for",
-                            Component.translatable(targetKey)), false);
-        } else {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.silent.enabled_for",
-                            Component.translatable(targetKey)), false);
-        }
-
-        return 1;
-    }
-
     /**
      * Applies the tick-sound preference to the selected players.
      *
@@ -319,34 +306,6 @@ final class DisplayCommands {
             ctx.getSource().sendFailure(Component.translatable("ontime.command.invalid_selector"));
             return 0;
         }
-    }
-
-    static int toggleHideSelf(CommandContext<CommandSourceStack> ctx) {
-        if (!(ctx.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.players_only"));
-            return 0;
-        }
-
-        UUID playerUUID = player.getUUID();
-        boolean currentVisibility = PlayerPreferences.getTimerVisibility(playerUUID);
-        boolean newVisibility = !currentVisibility;
-
-        PlayerPreferences.setTimerVisibility(playerUUID, newVisibility);
-        Services.PLATFORM.sendVisibilityPacket(player, newVisibility);
-
-        String targetKey = "ontime.command.hide.self";
-
-        if (newVisibility) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.hide.enabled",
-                            Component.translatable(targetKey)), false);
-        } else {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.hide.disabled",
-                            Component.translatable(targetKey)), false);
-        }
-
-        return 1;
     }
 
     /**

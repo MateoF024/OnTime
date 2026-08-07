@@ -44,6 +44,13 @@ public class HelpSystem {
      */
     private static final List<HelpEntry> HELP_ENTRIES = new ArrayList<>();
 
+    /** The subcommand names help can talk about, for the tree to suggest. */
+    public static List<String> topics() {
+        List<String> names = new ArrayList<>(HELP_ENTRIES.size());
+        for (HelpEntry entry : HELP_ENTRIES) names.add(entry.command);
+        return names;
+    }
+
     static {
         // Comandos básicos
         HELP_ENTRIES.add(new HelpEntry(
@@ -141,8 +148,8 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "hide",
                 "ontime.help.hide.desc",
-                "/timer hide [targets] [show|hide|toggle]",
-                "/timer hide",
+                "/timer hide <targets> <show|hide|toggle>",
+                "/timer hide @s toggle",
                 "/timer hide @a hide",
                 "/timer hide PlayerName show"
         ));
@@ -150,8 +157,8 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "silent",
                 "ontime.help.silent.desc",
-                "/timer silent [targets] [mute|unmute|toggle]",
-                "/timer silent",
+                "/timer silent <targets> <mute|unmute|toggle>",
+                "/timer silent @s toggle",
                 "/timer silent @a mute",
                 "/timer silent PlayerName unmute"
         ));
@@ -200,10 +207,11 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "sound",
                 "ontime.help.sound.desc",
-                "/timer sound <soundId> [volume] [pitch]",
-                "/timer sound block.note_block.hat",
-                "/timer sound entity.experience_orb.pickup 0.5",
-                "/timer sound ui.button.click 0.8 1.5"
+                "/timer sound <timer> [soundId|reset] [volume] [pitch]",
+                "/timer sound speedrun",
+                "/timer sound speedrun block.note_block.hat",
+                "/timer sound speedrun ui.button.click 0.8 1.5",
+                "/timer sound speedrun reset"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(

@@ -304,11 +304,14 @@ public class TimerCommands {
                                 .executes(InfoCommands::status)
                         )
                 )
+                // Both are player preferences, so they take players and never a
+                // timer. Say who and say what: the bare form toggled whoever
+                // typed it and the targets-only form toggled them, so the same
+                // line could mute or unmute depending on the state it found.
+                // A command block cannot reason about that.
                 .then(Commands.literal("silent")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SILENT, 4))
-                        .executes(DisplayCommands::toggleSilentSelf)
                         .then(Commands.argument("targets", EntityArgument.players())
-                                .executes(ctx -> DisplayCommands.applySilentTargets(ctx, null))
                                 .then(Commands.literal("mute")
                                         .executes(ctx -> DisplayCommands.applySilentTargets(ctx, Boolean.TRUE)))
                                 .then(Commands.literal("unmute")
@@ -319,9 +322,7 @@ public class TimerCommands {
                 )
                 .then(Commands.literal("hide")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_HIDE, 4))
-                        .executes(DisplayCommands::toggleHideSelf)
-                        .then(Commands.argument("targets", net.minecraft.commands.arguments.EntityArgument.players())
-                                .executes(ctx -> DisplayCommands.applyHideTargets(ctx, null))
+                        .then(Commands.argument("targets", EntityArgument.players())
                                 .then(Commands.literal("show")
                                         .executes(ctx -> DisplayCommands.applyHideTargets(ctx, Boolean.TRUE)))
                                 .then(Commands.literal("hide")
@@ -337,16 +338,25 @@ public class TimerCommands {
                 .then(Commands.literal("help")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_HELP, 4))
                         .executes(ctx -> HelpSystem.showHelpPage(ctx.getSource(), 1))
-                        .then(Commands.argument("pageOrCommand", StringArgumentType.word())
-                                .executes(ctx -> {
-                                    String arg = StringArgumentType.getString(ctx, "pageOrCommand");
-                                    try {
-                                        int page = Integer.parseInt(arg);
-                                        return HelpSystem.showHelpPage(ctx.getSource(), page);
-                                    } catch (NumberFormatException e) {
-                                        return HelpSystem.showCommandHelp(ctx.getSource(), arg);
+                        // Two arguments of different types rather than one word
+                        // the handler re-parses in a try/catch. Brigadier picks
+                        // the integer when the token is one, and a page number
+                        // out of range is now refused instead of silently
+                        // looked up as the name of a subcommand.
+                        .then(Commands.argument("page", IntegerArgumentType.integer(1))
+                                .executes(ctx -> HelpSystem.showHelpPage(ctx.getSource(),
+                                        IntegerArgumentType.getInteger(ctx, "page")))
+                        )
+                        .then(Commands.argument("subcommand", StringArgumentType.word())
+                                .suggests((ctx, builder) -> {
+                                    String remaining = builder.getRemaining().toLowerCase();
+                                    for (String topic : HelpSystem.topics()) {
+                                        if (topic.startsWith(remaining)) builder.suggest(topic);
                                     }
+                                    return builder.buildFuture();
                                 })
+                                .executes(ctx -> HelpSystem.showCommandHelp(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "subcommand")))
                         )
                 )
                 // position and scale read the timer first and nothing else.
@@ -373,22 +383,31 @@ public class TimerCommands {
                                 )
                         )
                 )
+                // Sound belonged to no timer at all: it wrote the server
+                // default and there was no way to give one timer its own.
                 .then(Commands.literal("sound")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SOUND, 4))
-                        .then(Commands.argument("soundId", VanillaCompat.idArgument())
-                                .suggests((context, builder) ->
-                                        VanillaCompat.suggestSoundEvents(builder))
-                                .executes(ctx -> DisplayCommands.setSoundDefault(ctx,
-                                        VanillaCompat.getIdArgument(ctx, "soundId")))
-                                .then(Commands.argument("volume", FloatArgumentType.floatArg(0.0f, 1.0f))
-                                        .executes(ctx -> DisplayCommands.setSoundWithVolume(ctx,
-                                                VanillaCompat.getIdArgument(ctx, "soundId"),
-                                                FloatArgumentType.getFloat(ctx, "volume")))
-                                        .then(Commands.argument("pitch", FloatArgumentType.floatArg(0.5f, 2.0f))
-                                                .executes(ctx -> DisplayCommands.setSoundFull(ctx,
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(DisplayCommands::soundView)
+                                .then(Commands.literal("reset")
+                                        .executes(DisplayCommands::soundReset)
+                                )
+                                .then(Commands.argument("soundId", VanillaCompat.idArgument())
+                                        .suggests((context, builder) ->
+                                                VanillaCompat.suggestSoundEvents(builder))
+                                        .executes(ctx -> DisplayCommands.setSound(ctx,
+                                                VanillaCompat.getIdArgument(ctx, "soundId"), 0.75f, 2.0f))
+                                        .then(Commands.argument("volume", FloatArgumentType.floatArg(0.0f, 1.0f))
+                                                .executes(ctx -> DisplayCommands.setSound(ctx,
                                                         VanillaCompat.getIdArgument(ctx, "soundId"),
-                                                        FloatArgumentType.getFloat(ctx, "volume"),
-                                                        FloatArgumentType.getFloat(ctx, "pitch")))
+                                                        FloatArgumentType.getFloat(ctx, "volume"), 2.0f))
+                                                .then(Commands.argument("pitch", FloatArgumentType.floatArg(0.5f, 2.0f))
+                                                        .executes(ctx -> DisplayCommands.setSound(ctx,
+                                                                VanillaCompat.getIdArgument(ctx, "soundId"),
+                                                                FloatArgumentType.getFloat(ctx, "volume"),
+                                                                FloatArgumentType.getFloat(ctx, "pitch")))
+                                                )
                                         )
                                 )
                         )
