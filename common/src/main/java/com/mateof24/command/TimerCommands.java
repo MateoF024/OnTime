@@ -164,6 +164,11 @@ public class TimerCommands {
                                         .then(Commands.argument("minutes", IntegerArgumentType.integer(0, 59))
                                                 .then(Commands.argument("seconds", IntegerArgumentType.integer(0, 59))
                                                         .executes(ctx -> LifecycleCommands.createTimer(ctx, false))
+                                                        // The direction has to be spelled before a command can
+                                                        // follow. Letting the command come straight after the
+                                                        // seconds meant Brigadier tried the boolean first and
+                                                        // swallowed the first word of any command beginning
+                                                        // with "true" or "false".
                                                         .then(Commands.argument("countUp", BoolArgumentType.bool())
                                                                 .executes(ctx -> LifecycleCommands.createTimer(ctx, BoolArgumentType.getBool(ctx, "countUp")))
                                                                 .then(Commands.argument("command", StringArgumentType.greedyString())
@@ -171,10 +176,6 @@ public class TimerCommands {
                                                                                 BoolArgumentType.getBool(ctx, "countUp"),
                                                                                 StringArgumentType.getString(ctx, "command")))
                                                                 )
-                                                        )
-                                                        .then(Commands.argument("command", StringArgumentType.greedyString())
-                                                                .executes(ctx -> LifecycleCommands.createTimerWithCommand(ctx, false,
-                                                                        StringArgumentType.getString(ctx, "command")))
                                                         )
                                                 )
                                         )

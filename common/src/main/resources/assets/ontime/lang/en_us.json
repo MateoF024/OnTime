@@ -432,5 +432,7 @@
   "ontime.command.webpanel.open": "Click to open in your browser",
   "ontime.command.sound.view": "%s plays %s (volume %s, pitch %s)",
   "ontime.command.sound.timer": "%s now plays %s (volume %s, pitch %s)",
-  "ontime.command.sound.reset": "%s is back to the default sound"
+  "ontime.command.sound.reset": "%s is back to the default sound",
+  "ontime.gui.editor.field.finish_command": "Command when it ends",
+  "ontime.gui.editor.field.finish_command.tip": "Optional. Runs when the timer reaches its end. More can be added later from the Commands page."
 }

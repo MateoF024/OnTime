@@ -80,6 +80,7 @@ public final class TimerEditor {
         out.add(new Field(Section.QUICK, "identity", "seconds", Kind.INT, "seconds"));
         out.add(new Field(Section.QUICK, "identity", "countUp", Kind.BOOL, "direction"));
         out.add(new Field(Section.QUICK, "identity", "silent", Kind.BOOL, "silent"));
+        out.add(new Field(Section.QUICK, "identity", "finishCommand", Kind.TEXT, "finish_command"));
 
         // The twelve a timer owns a copy of, under the same three headings the
         // settings tab gives the defaults: the same things, so the same shape.
@@ -131,10 +132,23 @@ public final class TimerEditor {
      * getting out of step.</p>
      */
     public static List<Entry> laidOut(Section section) {
+        return laidOut(section, false);
+    }
+
+    /**
+     * The rows of a section.
+     *
+     * <p>{@code finishCommand} exists only while creating. It is not a field a
+     * timer has — the timer has a list of commands, and the editor's Commands
+     * page is where that list is kept. Asking here saves the one thing you
+     * always know at creation from needing a second visit.</p>
+     */
+    public static List<Entry> laidOut(Section section, boolean creating) {
         List<Entry> out = new ArrayList<>();
         String heading = null;
         for (Field field : FIELDS) {
             if (field.section() != section) continue;
+            if (!creating && "finishCommand".equals(field.key())) continue;
             if (!field.group().equals(heading)) {
                 heading = field.group();
                 out.add(new Entry(heading, null));
@@ -197,6 +211,7 @@ public final class TimerEditor {
         pending.put("seconds", "0");
         pending.put("countUp", "false");
         pending.put("name", "");
+        pending.put("finishCommand", "");
     }
 
     public void close() {
@@ -410,6 +425,16 @@ public final class TimerEditor {
             args.addProperty("seconds", number(timer, "seconds"));
             args.addProperty("countUp", flag(timer, "countUp"));
             ops.add(new Op("timer.create", args));
+
+            // Its first finish command, if one was typed. Left blank the timer
+            // runs nothing, which is a timer the mod now allows.
+            String finish = value(timer, "finishCommand");
+            if (finish != null && !finish.isBlank()) {
+                JsonObject command = new JsonObject();
+                command.addProperty("name", value(timer, "name"));
+                command.addProperty("command", finish.trim());
+                ops.add(new Op("timer.addCommand", command));
+            }
             return ops;
         }
         if (timer == null) return ops;

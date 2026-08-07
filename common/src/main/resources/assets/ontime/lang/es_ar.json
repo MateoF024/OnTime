@@ -432,5 +432,7 @@
   "ontime.command.webpanel.open": "Pulsa para abrirlo en el navegador",
   "ontime.command.sound.view": "%s suena con %s (volumen %s, tono %s)",
   "ontime.command.sound.timer": "%s ahora suena con %s (volumen %s, tono %s)",
-  "ontime.command.sound.reset": "%s vuelve al sonido por defecto"
+  "ontime.command.sound.reset": "%s vuelve al sonido por defecto",
+  "ontime.gui.editor.field.finish_command": "Comando al terminar",
+  "ontime.gui.editor.field.finish_command.tip": "Opcional. Se ejecuta cuando el contador llega al final. Después se pueden añadir más desde la página de Comandos."
 }

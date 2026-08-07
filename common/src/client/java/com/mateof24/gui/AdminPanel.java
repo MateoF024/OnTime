@@ -576,7 +576,7 @@ public final class AdminPanel {
      * </p>
      */
     private void buildFieldRows(AdminModel.TimerRow timer, TimerEditor.Section section, int bottom) {
-        List<TimerEditor.Entry> entries = TimerEditor.laidOut(section);
+        List<TimerEditor.Entry> entries = TimerEditor.laidOut(section, editor.isCreating());
         // A row needs its control's height, not a whole slot: the last one fits
         // whenever there is room for the box itself.
         int room = bottom - editorFieldTop;
@@ -1538,7 +1538,7 @@ public final class AdminPanel {
      */
     private void drawFieldRows(Painter painter, AdminModel.TimerRow timer,
                                TimerEditor.Section section, int x, int columnWidth) {
-        List<TimerEditor.Entry> entries = TimerEditor.laidOut(section);
+        List<TimerEditor.Entry> entries = TimerEditor.laidOut(section, editor.isCreating());
         for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
             TimerEditor.Entry entry = entries.get(detailScroll + i);
             int y = editorFieldTop + i * SETTING_HEIGHT;
@@ -2071,7 +2071,7 @@ public final class AdminPanel {
         } else if (model.tab() == AdminModel.Tab.TIMERS) {
             if (editor.advanced()) {
                 int rows = editor.section() == TimerEditor.Section.COMMANDS
-                        ? commandCount() : TimerEditor.laidOut(editor.section()).size();
+                        ? commandCount() : TimerEditor.laidOut(editor.section(), editor.isCreating()).size();
                 if (rows <= editorRowsShown) return false;
                 int before = detailScroll;
                 detailScroll = Math.max(0, Math.min(rows - editorRowsShown,
@@ -2083,7 +2083,7 @@ public final class AdminPanel {
             // Two columns again, so the wheel goes to whichever the pointer
             // is over. Anything else guesses, and guesses wrong.
             if (twoColumn && pointerX >= detailX - GUTTER / 2 && model.selectedTimer() != null) {
-                int rows = TimerEditor.laidOut(TimerEditor.Section.QUICK).size();
+                int rows = TimerEditor.laidOut(TimerEditor.Section.QUICK, editor.isCreating()).size();
                 if (rows <= editorRowsShown) return false;
                 int before = detailScroll;
                 detailScroll = Math.max(0, Math.min(rows - editorRowsShown,

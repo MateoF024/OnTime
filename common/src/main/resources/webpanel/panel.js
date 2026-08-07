@@ -38,7 +38,8 @@
       "dialog.new": "New timer", "dialog.clone": "Copy '%s'", "dialog.start": "Start '%s'",
       "dialog.edit": "Edit '%s'", "field.name": "Name", "field.newName": "New name",
       "field.hours": "Hours", "field.minutes": "Minutes", "field.seconds": "Seconds",
-      "field.direction": "Direction", "field.audience": "Audience", "field.mode": "Mode",
+      "field.direction": "Direction", "field.finishCommand": "Command when it ends (optional)",
+      "field.audience": "Audience", "field.mode": "Mode",
       "field.playerNames": "Player names, separated by commas",
       countdown: "Countdown", countup: "Count up", shared: "Shared", each: "One each",
       "group.identity": "The timer", "group.display": "Where it draws",
@@ -77,7 +78,8 @@
       "dialog.new": "Contador nuevo", "dialog.clone": "Copiar '%s'", "dialog.start": "Arrancar '%s'",
       "dialog.edit": "Editar '%s'", "field.name": "Nombre", "field.newName": "Nombre nuevo",
       "field.hours": "Horas", "field.minutes": "Minutos", "field.seconds": "Segundos",
-      "field.direction": "Sentido", "field.audience": "Audiencia", "field.mode": "Modo",
+      "field.direction": "Sentido", "field.finishCommand": "Comando al terminar (opcional)",
+      "field.audience": "Audiencia", "field.mode": "Modo",
       "field.playerNames": "Nombres de jugador, separados por comas",
       countdown: "Cuenta atrás", countup: "Cuenta adelante", shared: "Compartido",
       each: "Uno por jugador",
@@ -827,17 +829,27 @@
       select.replaceChildren(new Option(t("countdown"), "false"), new Option(t("countup"), "true"));
       $("label", dir).textContent = t("field.direction");
       body.append(dir);
+      // Optional, and the only chance to say it without a second visit to the
+      // editor. Left empty the timer runs nothing, which is a real answer.
+      const finish = field("finishCommand", "text", "");
+      $("label", finish).textContent = t("field.finishCommand");
+      body.append(finish);
     }, [
       [t("cancel"), "", null],
-      [t("save"), "primary", () => {
+      [t("save"), "primary", async () => {
         const get = key => $(`#modal-body [data-key='${key}']`);
-        return act("timer.create", {
-          name: get("name").value.trim(),
+        const name = get("name").value.trim();
+        const made = await act("timer.create", {
+          name,
           hours: parseInt(get("hours").value, 10) || 0,
           minutes: parseInt(get("minutes").value, 10) || 0,
           seconds: parseInt(get("seconds").value, 10) || 0,
           countUp: get("countUp").value === "true"
         });
+        if (made === false) return false;
+        const command = get("finishCommand").value.trim();
+        if (command) await act("timer.addCommand", { name, command });
+        return made;
       }]
     ]);
   }
