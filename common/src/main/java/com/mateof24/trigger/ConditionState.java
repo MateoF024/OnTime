@@ -25,9 +25,32 @@ public final class ConditionState {
     /** Set once per group id when its window last mattered, for reporting. */
     private final Map<String, Long> groupSatisfiedAt = new HashMap<>();
 
+    /**
+     * Players an event has happened to, per leaf, since arming.
+     *
+     * <p>An event cannot be asked about — nobody can be polled for "did you
+     * die" — so the dispatcher writes it here and the engine reads it as
+     * though it were a state. That is what lets one mechanism serve both
+     * natures: the leaf still goes through the edge memory, so the first tick
+     * after it lands is a rising edge and the latch keeps it.</p>
+     */
+    private final Map<String, Set<UUID>> inbox = new HashMap<>();
+
     private boolean armed;
 
     public boolean isArmed() { return armed; }
+
+    /** Called by the dispatcher when something happens to somebody. */
+    public void recordEvent(String leafId, UUID player) {
+        if (leafId == null || player == null) return;
+        inbox.computeIfAbsent(leafId, k -> new java.util.HashSet<>()).add(player);
+    }
+
+    /** Whether an event has landed for this player since arming. */
+    public boolean hasEvent(String leafId, UUID player) {
+        Set<UUID> seen = inbox.get(leafId);
+        return seen != null && seen.contains(player);
+    }
 
     /** The memory for one leaf, made on first use. */
     public EdgeMemory of(Condition.Watch leaf) {
@@ -47,6 +70,7 @@ public final class ConditionState {
                     Map<String, Set<UUID>> satisfied) {
         perLeaf.clear();
         groupSatisfiedAt.clear();
+        inbox.clear();
         if (root != null) {
             for (Condition.Watch leaf : root.leaves()) {
                 EdgeMemory memory = new EdgeMemory();
@@ -62,6 +86,7 @@ public final class ConditionState {
         for (EdgeMemory memory : perLeaf.values()) memory.disarm();
         perLeaf.clear();
         groupSatisfiedAt.clear();
+        inbox.clear();
         armed = false;
     }
 
