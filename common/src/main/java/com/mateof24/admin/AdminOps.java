@@ -167,6 +167,7 @@ public final class AdminOps {
 
         root.add("config", configJson());
         root.add("players", playersJson(server));
+        root.add("advancements", advancementsJson(server));
         root.add("presets", presetsJson());
         return root;
     }
@@ -195,6 +196,7 @@ public final class AdminOps {
         json.addProperty("repeat", def.repeat());
         json.addProperty("repeatCount", def.repeatCount());
         json.addProperty("repeatCooldownTicks", def.repeatCooldownTicks());
+        json.addProperty("commandDelayTicks", def.commandDelayTicks());
         json.addProperty("nextTimer", def.nextTimer());
         json.addProperty("sequenceCooldownTicks", def.sequenceCooldownTicks());
         // Sent as rules, each carrying its condition. The surfaces read the
@@ -286,11 +288,34 @@ public final class AdminOps {
         json.addProperty("timerSoundPitch", config.getTimerSoundPitch());
         json.addProperty("maxTimerSeconds", config.getMaxTimerSeconds());
         json.addProperty("commandDelayTicks", config.getCommandDelayTicks());
+        json.addProperty("hideOnCooldown", config.isHideOnCooldown());
         json.addProperty("confirmRunThreshold", config.getConfirmRunThreshold());
         json.addProperty("webSocketEnabled", config.isWebSocketEnabled());
         json.addProperty("webSocketPort", config.getWebSocketPort());
         json.addProperty("webPanelPort", config.getWebPanelPort());
         return json;
+    }
+
+    /**
+     * Every advancement id, for the editor to complete from.
+     *
+     * <p>Sent rather than read off the client. The client has its own copy for
+     * the advancement screen, but going through here means the editor and the
+     * commands complete from one list — and a datapack that adds advancements
+     * shows up in both at once.</p>
+     */
+    private static JsonArray advancementsJson(MinecraftServer server) {
+        JsonArray out = new JsonArray();
+        if (server == null) return out;
+        try {
+            for (net.minecraft.advancements.AdvancementHolder holder
+                    : server.getAdvancements().getAllAdvancements()) {
+                out.add(holder.id().toString());
+            }
+        } catch (RuntimeException e) {
+            com.mateof24.OnTimeConstants.LOGGER.warn("Could not list advancements", e);
+        }
+        return out;
     }
 
     private static JsonArray playersJson(MinecraftServer server) {
@@ -490,6 +515,7 @@ public final class AdminOps {
             case "x" -> display.setX(args.get("value").getAsInt());
             case "y" -> display.setY(args.get("value").getAsInt());
             case "hideOnCooldown" -> display.setHideOnCooldown(args.get("value").getAsBoolean());
+            case "commandDelayTicks" -> timer.setCommandDelayTicks(args.get("value").getAsInt());
             case "scale" -> {
                 float scale = (float) args.get("value").getAsDouble();
                 if (scale < 0.1f || scale > 5.0f) return Result.fail("Scale must be between 0.1 and 5");

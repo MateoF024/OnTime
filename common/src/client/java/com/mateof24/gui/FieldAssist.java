@@ -111,6 +111,13 @@ public final class FieldAssist {
         timerNames = names == null ? List.of() : names;
     }
 
+    /** Set by the panel, out of the server's snapshot. */
+    private List<String> advancementIds = List.of();
+
+    public void setAdvancementIds(List<String> ids) {
+        advancementIds = ids == null ? List.of() : ids;
+    }
+
     /** Forgets every field; call when the screen rebuilds its widgets. */
     public void clear() {
         fields.clear();
@@ -337,7 +344,7 @@ public final class FieldAssist {
 
     private List<String> candidates(Source source) {
         if (source == Source.TIMERS) return timerNames;
-        if (source == Source.ADVANCEMENTS) return advancementIds();
+        if (source == Source.ADVANCEMENTS) return advancementIds;
         if (source != Source.SOUNDS) return List.of();
         if (soundIds == null) {
             List<String> ids = new ArrayList<>();
@@ -357,33 +364,6 @@ public final class FieldAssist {
         return soundIds;
     }
 
-    /**
-     * The advancements the server has sent this client.
-     *
-     * <p>Not cached the way sounds are: sounds come from a registry that is
-     * fixed once the game has loaded, while this arrives with the connection
-     * and grows as the server sends more. Rebuilt each time the list opens,
-     * which happens on a keystroke and walks a few hundred entries.</p>
-     */
-    private List<String> advancementIds() {
-        List<String> ids = new ArrayList<>();
-        try {
-            var connection = net.minecraft.client.Minecraft.getInstance().getConnection();
-            if (connection == null) return ids;
-            for (net.minecraft.advancements.AdvancementNode node
-                    : connection.getAdvancements().getTree().nodes()) {
-                // Object again: the id class was renamed at 26.1 and the only
-                // thing wanted here is its text.
-                Object id = node.holder().id();
-                ids.add(id.toString());
-            }
-        } catch (Throwable ignored) {
-            // Not connected, or a shape this version does not have. The field
-            // still takes typing, which is what it did before there was a list.
-        }
-        java.util.Collections.sort(ids);
-        return ids;
-    }
 
     /**
      * Writes the rest of the highlighted entry into the field as ghost text.

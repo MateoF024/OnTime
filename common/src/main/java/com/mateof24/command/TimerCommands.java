@@ -684,6 +684,20 @@ public class TimerCommands {
                                 .then(Commands.literal("clear")
                                         .executes(BehaviorCommands::clearScheduledCommands)
                                 )
+                                // The pause between two of this timer's own
+                                // commands. A datapack that builds a timer has
+                                // to be able to set it; the server default is
+                                // a default, not the only figure there is.
+                                .then(Commands.literal("delay")
+                                        .executes(BehaviorCommands::viewCommandDelay)
+                                        .then(Commands.argument("ticks", IntegerArgumentType.integer(0, 72000))
+                                                .executes(ctx -> BehaviorCommands.setCommandDelay(ctx,
+                                                        IntegerArgumentType.getInteger(ctx, "ticks")))
+                                        )
+                                        .then(Commands.literal("reset")
+                                                .executes(ctx -> BehaviorCommands.setCommandDelay(ctx, -1))
+                                        )
+                                )
                         )
                 )
                 .then(Commands.literal("title")

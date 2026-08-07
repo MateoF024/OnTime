@@ -30,7 +30,7 @@
       "timers.noMatch": "Nothing matches that", "settings.title": "Server defaults",
       pause: "Pause", resume: "Resume", reset: "Reset", stop: "Stop", start: "Start",
       clone: "Clone", "delete": "Delete", edit: "Edit", advanced: "Advanced",
-      "state.running": "Running", "state.paused": "Paused", "state.cooldown": "Cooling down",
+      "state.running": "Running", "state.paused": "Paused", "state.cooldown": "In cooldown",
       "confirm.stopAll": "Stop every execution?",
       "confirm.stopAll.body": "%s execution(s) will be stopped.",
       "confirm.delete": "Delete '%s'?",
@@ -64,6 +64,12 @@
       "trg.s.players": "these players", "trg.s.selector": "a selector",
       "trg.names": "Names, separated by commas", "trg.selector": "@a[team=red]",
       "trg.addGroup": "Add a group", "trg.addCond": "Add a condition",
+      "trg.newStart": "Rule that starts it", "trg.newEnd": "Rule that ends it",
+      "trg.say.when": "when", "trg.say.here": "into this group",
+      "trg.say.newRule": "on its own, as a rule of its own",
+      "trg.v.dimension_change": "Dimension, e.g. minecraft:the_nether",
+      "trg.v.advancement": "Advancement", "trg.v.ftb_quest": "Quest id",
+      "trg.v.ftb_reward": "Reward id", "trg.v.scoreboard": "Objective",
       "trg.groupAll": "all of these hold", "trg.groupAny": "any of these holds",
       "trg.groupAtLeast": "at least %s of these hold",
       "trg.orGroup": "or", "trg.startsIt": "Starts it", "trg.endsIt": "Ends it",
@@ -72,6 +78,7 @@
       "reset.do": "Restore defaults", "reset.title": "Restore every default?",
       "reset.body": "Applied at once, and it cannot be undone. Timers that already exist keep their own values.",
       "cmd.add": "Add", "cmd.none": "This timer runs no commands", "cmd.end": "At the end",
+      "cmd.delay": "Ticks between commands", "cmd.delay.default": "Server default",
       "cmd.text": "Command, without the leading slash",
       on: "On", off: "Off", finish: "Finish it", startIt: "Start it", none: "Off",
       "trigger.join": "A player joins", "trigger.leave": "A player leaves",
@@ -93,7 +100,7 @@
       "timers.noMatch": "Nada coincide con eso", "settings.title": "Valores por defecto",
       pause: "Pausar", resume: "Reanudar", reset: "Reiniciar", stop: "Parar", start: "Arrancar",
       clone: "Clonar", "delete": "Borrar", edit: "Editar", advanced: "Avanzado",
-      "state.running": "En marcha", "state.paused": "En pausa", "state.cooldown": "En espera",
+      "state.running": "En marcha", "state.paused": "En pausa", "state.cooldown": "En cooldown",
       "confirm.stopAll": "¿Parar todas las ejecuciones?",
       "confirm.stopAll.body": "Se pararán %s ejecución(es).",
       "confirm.delete": "¿Borrar '%s'?",
@@ -128,6 +135,12 @@
       "trg.s.players": "estos jugadores", "trg.s.selector": "un selector",
       "trg.names": "Nombres, separados por comas", "trg.selector": "@a[team=red]",
       "trg.addGroup": "Añadir un grupo", "trg.addCond": "Añadir una condición",
+      "trg.newStart": "Regla que lo arranca", "trg.newEnd": "Regla que lo termina",
+      "trg.say.when": "cuando", "trg.say.here": "en este grupo",
+      "trg.say.newRule": "por su cuenta, como una regla propia",
+      "trg.v.dimension_change": "Dimensión, p. ej. minecraft:the_nether",
+      "trg.v.advancement": "Logro", "trg.v.ftb_quest": "Id de la misión",
+      "trg.v.ftb_reward": "Id de la recompensa", "trg.v.scoreboard": "Objetivo",
       "trg.groupAll": "se cumplen todas", "trg.groupAny": "se cumple alguna",
       "trg.groupAtLeast": "se cumplen al menos %s",
       "trg.orGroup": "o", "trg.startsIt": "Lo arranca", "trg.endsIt": "Lo termina",
@@ -136,6 +149,7 @@
       "reset.do": "Restaurar valores", "reset.title": "¿Restaurar todos los valores?",
       "reset.body": "Se aplica al momento y no se puede deshacer. Los contadores ya creados conservan los suyos.",
       "cmd.add": "Añadir", "cmd.none": "Este contador no ejecuta ningún comando",
+      "cmd.delay": "Ticks entre comandos", "cmd.delay.default": "El del servidor",
       "cmd.end": "Al final", "cmd.text": "Comando, sin la barra inicial",
       on: "Sí", off: "No", finish: "Terminarlo", startIt: "Arrancarlo", none: "Nada",
       "trigger.join": "Entra un jugador", "trigger.leave": "Sale un jugador",
@@ -609,7 +623,7 @@
   /** The settings the server holds, and the twelve a timer copies from them. */
   const CONFIG_GROUPS = [
     ["display", [["positionPreset", "preset"], ["timerX", "int"], ["timerY", "int"],
-      ["timerScale", "float"]]],
+      ["timerScale", "float"], ["hideOnCooldown", "bool"]]],
     ["colors", [["colorHigh", "color"], ["colorMid", "color"], ["colorLow", "color"],
       ["thresholdMid", "int"], ["thresholdLow", "int"]]],
     ["sound", [["timerSoundId", "text"], ["timerSoundVolume", "float"], ["timerSoundPitch", "float"]]],
@@ -631,6 +645,7 @@
     const named = {
       preset: "position", x: "customX", y: "customY", scale: "scale",
       soundId: "tickSound", soundVolume: "soundVolume", soundPitch: "soundPitch",
+      hideOnCooldown: "hideDuringCooldown",
       above: "above", below: "below", left: "left", right: "right"
     }[bare] || bare;
     return named
@@ -979,7 +994,7 @@
     return [root];
   }
 
-  /** A group, its conditions, and the button that adds one more to it. */
+  /** A group, its conditions, and the button that opens a composer inside it. */
   function groupBlock(timer, rule, group) {
     const box = document.createElement("div");
     box.className = "trg-group";
@@ -1011,19 +1026,179 @@
       box.append(row);
     }
 
+    // Only a real group can take another condition, and the composer opens
+    // inside it. The button used to set a variable read by an adder at the
+    // far bottom of the sheet, which nothing on screen ever mentioned: there
+    // was no way to tell where the next condition was going to land.
     if (group.node === "group") {
       const add = document.createElement("button");
       add.type = "button";
       add.className = "btn small";
       add.textContent = t("trg.addCond");
-      add.onclick = () => { pendingGroup = group.id; };
+      add.onclick = () => openComposer(box, add, timer, rule.action, group.id);
       box.append(add);
     }
     return box;
   }
 
-  /** The group the add row will put its next condition into, if any. */
-  let pendingGroup = null;
+  /**
+   * The composer: one condition written out as a sentence.
+   *
+   * <p>It replaces a row of nine controls that stood at the bottom of the
+   * sheet whatever was chosen. Here the words carry the shape — "when any of
+   * the timer's audience earns an advancement ..." — and a control appears
+   * only where the sentence has a blank for it.</p>
+   *
+   * <p>Opened in place, so where the condition will land is where you are
+   * looking. Only one is open at a time.</p>
+   */
+  let openSay = null;
+
+  function closeComposer() {
+    if (!openSay) return;
+    openSay.node.remove();
+    if (openSay.trigger) openSay.trigger.hidden = false;
+    openSay = null;
+  }
+
+  function openComposer(host, trigger, timer, action, groupId) {
+    // Named by where it puts what it makes, so pressing the button that
+    // opened it puts it away and pressing a different one moves it there --
+    // comparing the buttons themselves made every "new rule" button look
+    // like the same button, because neither of them is one.
+    const key = groupId ? "group:" + groupId : "new:" + action;
+    const wasMine = openSay && openSay.key === key;
+    closeComposer();
+    if (wasMine) return;
+
+    const box = document.createElement("div");
+    box.className = "trg-say";
+
+    const head = document.createElement("div");
+    head.className = "trg-say-head";
+    const what = document.createElement("span");
+    what.className = "cmd-at" + (action === "start" ? "" : " end");
+    what.textContent = t(action === "start" ? "trg.startsIt" : "trg.endsIt");
+    const where = document.createElement("span");
+    where.className = "trg-say-where";
+    where.textContent = groupId ? t("trg.say.here") : t("trg.say.newRule");
+    head.append(what, where);
+    box.append(head);
+
+    const line = document.createElement("div");
+    line.className = "trg-say-line";
+
+    const word = text => {
+      const span = document.createElement("span");
+      span.className = "trg-word";
+      span.textContent = text;
+      return span;
+    };
+
+    const quantifier = document.createElement("select");
+    for (const q of QUANTIFIERS) quantifier.append(new Option(t("trg.q." + q), q));
+
+    const count = document.createElement("input");
+    count.type = "number";
+    count.min = "1";
+    count.value = "1";
+    count.className = "trg-num";
+
+    const scope = document.createElement("select");
+    for (const sc of SCOPES) scope.append(new Option(t("trg.s." + sc), sc));
+
+    const subject = document.createElement("input");
+    subject.type = "text";
+
+    const kind = document.createElement("select");
+    for (const name of TRIGGER_KINDS) kind.append(new Option(t("trg." + name), name));
+
+    const value = document.createElement("input");
+    value.type = "text";
+
+    const atLeast = word("\u2265");
+    const score = document.createElement("input");
+    score.type = "number";
+    score.value = "0";
+    score.className = "trg-num";
+
+    const when = word(t("trg.say.when"));
+    line.append(when, quantifier, count, scope, subject, kind, value, atLeast, score);
+
+    // Every blank the sentence does not have, gone. A bare event leaves
+    // "when any of the timer's audience — a player joins" and nothing else.
+    const shape = () => {
+      const picked = kind.value;
+      const scoreboard = picked === "scoreboard";
+      const bare = picked.startsWith("player_");
+      const subjectless = picked === NO_SUBJECT;
+
+      when.hidden = false;
+      quantifier.hidden = subjectless;
+      count.hidden = subjectless || quantifier.value !== "at_least";
+      scope.hidden = subjectless;
+      subject.hidden = subjectless
+        || (scope.value !== "players" && scope.value !== "selector");
+      subject.placeholder = scope.value === "selector" ? t("trg.selector") : t("trg.names");
+
+      value.hidden = bare;
+      // Named after what it wants, rather than "Id" for a dimension, an
+      // advancement and a quest alike.
+      value.placeholder = bare ? ""
+        : picked === "expression" ? t("trg.expr") : t("trg.v." + picked);
+      atLeast.hidden = !scoreboard;
+      score.hidden = !scoreboard;
+    };
+    kind.onchange = shape;
+    scope.onchange = shape;
+    quantifier.onchange = shape;
+    shape();
+    box.append(line);
+
+    const buttons = document.createElement("div");
+    buttons.className = "trg-say-buttons";
+
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "btn small";
+    cancel.textContent = t("cancel");
+    cancel.onclick = closeComposer;
+
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "primary small";
+    add.textContent = t("trg.add");
+    add.onclick = async () => {
+      const picked = kind.value;
+      const args = { name: timer.name, kind: picked, action };
+      if (!picked.startsWith("player_")) {
+        if (!value.value.trim()) { value.focus(); return; }
+        args.value = value.value.trim();
+      }
+      if (picked === "scoreboard") args.threshold = parseInt(score.value, 10) || 0;
+      if (picked !== NO_SUBJECT) {
+        args.quantifier = quantifier.value;
+        args.subject = scope.value;
+        if (quantifier.value === "at_least") args.count = parseInt(count.value, 10) || 1;
+        if (scope.value === "players" || scope.value === "selector") {
+          if (!subject.value.trim()) { subject.focus(); return; }
+          args.subjectValue = subject.value.trim();
+        }
+      }
+      if (groupId) args.groupId = groupId;
+      if (await act("timer.addTrigger", args)) {
+        closeComposer();
+        reopen(timer.name);
+      }
+    };
+    buttons.append(cancel, add);
+    box.append(buttons);
+
+    if (trigger) trigger.hidden = true;
+    host.append(box);
+    openSay = { node: box, trigger: trigger || null, key };
+    (kind.hidden ? value : kind).focus();
+  }
 
   /** Reopens the editor on fresh data, which is how every list here refreshes. */
   function reopen(name) {
@@ -1105,6 +1280,7 @@
       // the select wrote "death" where the server stores "player_death", which
       // never matched anything.
       group("triggers", s => {
+        closeComposer();
         const list = document.createElement("div");
         const rules = timer.rules || [];
         if (!rules.length) {
@@ -1154,101 +1330,30 @@
 
         s.append(list);
 
-        const adder = document.createElement("div");
-        adder.className = "cmd-add trg-add";
-
-        const kind = document.createElement("select");
-        for (const name of TRIGGER_KINDS) kind.append(new Option(t("trg." + name), name));
-
-        const value = document.createElement("input");
-        value.type = "text";
-
-        const score = document.createElement("input");
-        score.type = "number";
-        score.value = "0";
-
-        const target = document.createElement("input");
-        target.type = "text";
-        target.placeholder = t("trg.target");
-
-        const action = document.createElement("select");
-        action.append(new Option(t("finish"), "finish"), new Option(t("startIt"), "start"));
-
-        const quantifier = document.createElement("select");
-        for (const q of QUANTIFIERS) quantifier.append(new Option(t("trg.q." + q), q));
-
-        const count = document.createElement("input");
-        count.type = "number";
-        count.min = "1";
-        count.value = "1";
-
-        const scope = document.createElement("select");
-        for (const sc of SCOPES) scope.append(new Option(t("trg.s." + sc), sc));
-
-        const subject = document.createElement("input");
-        subject.type = "text";
-
-        // Only the boxes the chosen kind actually uses. A bare event needs
-        // nothing, a scoreboard needs three.
-        const shape = () => {
-          const picked = kind.value;
-          const scoreboard = picked === "scoreboard";
-          const bare = picked.startsWith("player_");
-          value.hidden = bare;
-          score.hidden = !scoreboard;
-          target.hidden = true;
-          value.placeholder = picked === "expression" ? t("trg.expr")
-            : scoreboard ? t("trg.score") : t("trg.value");
-
-          // An expression asks the server, not a player, so it has nobody to
-          // count and the whole subject row goes away with it.
-          const subjectless = picked === NO_SUBJECT;
-          quantifier.hidden = subjectless;
-          scope.hidden = subjectless;
-          count.hidden = subjectless || quantifier.value !== "at_least";
-          subject.hidden = subjectless
-            || (scope.value !== "players" && scope.value !== "selector");
-          subject.placeholder = scope.value === "selector" ? t("trg.selector") : t("trg.names");
-        };
-        quantifier.onchange = shape;
-        scope.onchange = shape;
-        kind.onchange = shape;
-        shape();
-
-        const add = document.createElement("button");
-        add.type = "button";
-        add.className = "primary small";
-        add.textContent = t("trg.add");
-        add.onclick = async () => {
-          const picked = kind.value;
-          const args = { name: timer.name, kind: picked, action: action.value };
-          if (!picked.startsWith("player_")) {
-            if (!value.value.trim()) return;
-            args.value = value.value.trim();
-          }
-          if (picked === "scoreboard") args.threshold = parseInt(score.value, 10) || 0;
-          if (picked !== NO_SUBJECT) {
-            args.quantifier = quantifier.value;
-            args.subject = scope.value;
-            if (quantifier.value === "at_least") args.count = parseInt(count.value, 10) || 1;
-            if (scope.value === "players" || scope.value === "selector") {
-              if (!subject.value.trim()) return;
-              args.subjectValue = subject.value.trim();
-            }
-          }
-          // Into the group whose "add a condition" was pressed last, or a
-          // rule of its own when none was.
-          if (pendingGroup) args.groupId = pendingGroup;
-          if (await act("timer.addTrigger", args)) {
-            pendingGroup = null;
-            reopen(timer.name);
-          }
-        };
-        adder.append(kind, value, score, quantifier, count, scope, subject, action, add);
-        s.append(adder);
+        // Two ways in rather than one, because what a rule does to the timer
+        // is the one thing about it that cannot be changed afterwards -- and
+        // choosing it here means the composer never has to ask.
+        const ways = document.createElement("div");
+        ways.className = "trg-new";
+        for (const action of ["start", "finish"]) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "btn small";
+          button.textContent = t(action === "start" ? "trg.newStart" : "trg.newEnd");
+          button.onclick = () => openComposer(list, null, timer, action, null);
+          ways.append(button);
+        }
+        s.append(ways);
       });
 
       group("commands", s => {
+        // The pause this timer puts between its own commands, above the list
+        // it spaces out. -1, and an empty box, mean the server default.
+        const delay = field("commandDelay", "int", timer.commandDelayTicks ?? -1);
+        $("label", delay).textContent = t("cmd.delay");
+        $("input", delay).placeholder = t("cmd.delay.default");
+        s.append(delay);
+
         const list = document.createElement("div");
         const entries = timer.commandList || [];
         if (!entries.length) {
@@ -1355,6 +1460,9 @@
         await act("timer.setSequence", {
           name: timer.name, next: get("nextTimer").value.trim(),
           cooldownSeconds: num("sequenceCooldown")
+        });
+        await act("timer.setDisplay", {
+          name: timer.name, key: "commandDelayTicks", value: num("commandDelay")
         });
       }]
     ]);

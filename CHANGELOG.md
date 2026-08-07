@@ -4,6 +4,12 @@
 
 ### Changed
 
+- **Breaking:** `TimerDefinition` carries `commandDelayTicks`, the pause a timer
+  puts between its own commands, between `repeatCooldownTicks` and `nextTimer`.
+  It reads -1 while the timer follows the server default rather than resolving
+  it, so a caller can tell "never set" from "set to zero". Anything
+  constructing the record has to pass it.
+
 - The event feed is a real WebSocket. Browsers and the `ws` libraries of Node
   and Python can connect to it now; the plain TCP line protocol still works on
   the same port.
@@ -24,6 +30,19 @@
 
 ### Added
 
+- Triggers are built one question at a time in game: what it should do, what
+  has to happen, who it has to happen to, how many of them, and only then the
+  details that answer needs. Every answer explains itself.
+- The web panel writes a trigger as a sentence, opened in the group it will
+  belong to. A control appears only where the sentence has a blank for it.
+- A pause between commands can be set on a timer, not only on the server:
+  `/timer commands <name> delay <ticks>`, the timer's Commands page in game, and
+  the Commands block of its editor in the web panel. `delay reset`, and -1 in
+  either box, leave it to the server default.
+- The counter can hide itself while it waits out a cooldown, so a timer between
+  repeats no longer reads as a timer that has broken. On by default.
+- Advancement fields complete as you type, from the list the server holds, the
+  same way the commands complete.
 - The web panel is rebuilt: cards, light and dark themes, a language selector,
   and progress bars in the same colour the counter has in game.
 - The web panel can do everything the in-game screen and the commands can do.

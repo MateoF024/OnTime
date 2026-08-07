@@ -35,6 +35,17 @@ public record TimerDefinition(
         int repeatCount,
         long repeatCooldownTicks,
 
+        /**
+         * Ticks between two of this timer's commands, or -1 while it follows
+         * the server default.
+         *
+         * <p>Reported as it was set, not as it resolves: a caller that wants
+         * the effective figure and finds -1 reads the server default, and one
+         * that wants to know whether this timer was ever told otherwise can
+         * only find out here.</p>
+         */
+        int commandDelayTicks,
+
         /** Timer started when this one ends, or null. */
         String nextTimer,
         long sequenceCooldownTicks,

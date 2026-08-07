@@ -644,19 +644,50 @@ dialog[open] { animation: pop .2s var(--ease); }
 .cmd-add .units > input { width: 58px; text-align: center; }
 
 /*
- * The trigger adder carries six controls, and which of them apply depends on
- * the kind chosen, so it wraps rather than holding columns for boxes that are
- * hidden half the time.
+ * The composer, which is a sentence: the controls sit in the reading order of
+ * the words around them and wrap like text, rather than holding a column each
+ * whether the chosen kind uses them or not.
  */
-.trg-add {
+.trg-say {
+  border: 1px dashed var(--accent);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  margin: 8px 0;
+  background: var(--surface-2, transparent);
+}
+.trg-say-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.trg-say-where { font-size: 12px; color: var(--muted); }
+.trg-say-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.trg-say-line > select { flex: 0 1 auto; min-width: 0; }
+.trg-say-line > input[type="text"] { flex: 1 1 180px; min-width: 0; }
+.trg-say-line .trg-num { flex: 0 0 84px; }
+.trg-word { font-size: 13px; color: var(--muted); }
+.trg-say-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* The two ways into the composer, side by side under the list. */
+.trg-new {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
 }
-.trg-add > select { flex: 0 1 auto; min-width: 0; }
-.trg-add > input[type="text"] { flex: 1 1 190px; min-width: 0; }
-.trg-add > input[type="number"] { flex: 0 0 96px; }
-.trg-add > button { flex: 0 0 auto; margin-left: auto; }
 
 @media (max-width: 620px) {
   .cmd-add { grid-template-columns: 1fr; }

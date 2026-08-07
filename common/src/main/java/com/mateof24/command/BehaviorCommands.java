@@ -212,6 +212,42 @@ final class BehaviorCommands {
         return 1;
     }
 
+    /**
+     * What this timer waits between two of its own commands.
+     *
+     * <p>Reported as the figure that will actually be used, and said plainly
+     * when that figure is the server's rather than this timer's — "follows
+     * the default" is the answer to a different question from "0 ticks", and
+     * the two used to be indistinguishable.</p>
+     */
+    static int viewCommandDelay(CommandContext<CommandSourceStack> ctx) {
+        return reportCommandDelay(ctx, null);
+    }
+
+    static int setCommandDelay(CommandContext<CommandSourceStack> ctx, int ticks) {
+        return reportCommandDelay(ctx, ticks);
+    }
+
+    private static int reportCommandDelay(CommandContext<CommandSourceStack> ctx, Integer ticks) {
+        String name = StringArgumentType.getString(ctx, "name");
+        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
+        if (timerOpt.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
+            return 0;
+        }
+        Timer timer = timerOpt.get();
+        if (ticks != null) {
+            timer.setCommandDelayTicks(ticks);
+            TimerManager.getInstance().saveTimers();
+        }
+        int own = timer.ownCommandDelayTicks();
+        ctx.getSource().sendSuccess(() -> own < 0
+                ? Component.translatable("ontime.command.set.command_delay.default", name)
+                : Component.translatable("ontime.command.set.command_delay.ok", name, own),
+                ticks != null);
+        return 1;
+    }
+
     static int clearScheduledCommands(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         if (!TimerManager.getInstance().clearScheduledCommands(name)) {

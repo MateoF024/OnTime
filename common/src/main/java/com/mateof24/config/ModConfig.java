@@ -131,6 +131,9 @@ public class ModConfig {
                 String bind = root.get("webSocketBindAddress").getAsString().trim();
                 if (!bind.isEmpty()) webSocketBindAddress = bind;
             }
+            if (root.has("hideOnCooldown")) {
+                hideOnCooldown = root.get("hideOnCooldown").getAsBoolean();
+            }
             if (root.has("commandDelayTicks")) {
                 commandDelayTicks = root.get("commandDelayTicks").getAsInt();
                 commandDelayTicks = Math.max(0, Math.min(1200, commandDelayTicks));
@@ -206,6 +209,7 @@ public class ModConfig {
             root.addProperty("timerX", timerX);
             root.addProperty("timerY", timerY);
             root.addProperty("timerScale", timerScale);
+        root.addProperty("hideOnCooldown", hideOnCooldown);
             root.addProperty("positionPreset", positionPreset.name());
             root.addProperty("maxTimerSeconds", maxTimerSeconds);
             root.addProperty("colorHigh", String.format("#%06X", colorHigh));

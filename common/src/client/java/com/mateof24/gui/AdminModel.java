@@ -86,6 +86,11 @@ public final class AdminModel {
 
         public int repeatCount() { return (int) numOr(raw, "repeatCount", -1); }
 
+        /** This timer's own pause between commands; -1 follows the default. */
+        public int commandDelayTicks() {
+            return (int) numOr(raw, "commandDelayTicks", -1);
+        }
+
         public long repeatCooldownTicks() { return num(raw, "repeatCooldownTicks"); }
 
         public long sequenceCooldownTicks() { return num(raw, "sequenceCooldownTicks"); }
@@ -225,6 +230,7 @@ public final class AdminModel {
     private List<RunRow> runs = List.of();
     private List<TimerRow> timers = List.of();
     private List<PlayerRow> players = List.of();
+    private List<String> advancements = List.of();
     private JsonObject config = new JsonObject();
 
     /**
@@ -240,6 +246,7 @@ public final class AdminModel {
         runs = readRuns(state.getAsJsonArray("runs"));
         timers = readTimers(state.getAsJsonArray("timers"));
         players = readPlayers(state.getAsJsonArray("players"));
+        advancements = readStrings(state.getAsJsonArray("advancements"));
         config = state.has("config") ? state.getAsJsonObject("config") : new JsonObject();
 
         if (selectedRunId != null && runs.stream().noneMatch(r -> r.runId().equals(selectedRunId))) {
@@ -335,6 +342,16 @@ public final class AdminModel {
         for (TimerRow row : timers) {
             if (row.name().toLowerCase(Locale.ROOT).contains(needle)) out.add(row);
         }
+        return out;
+    }
+
+    /** Every advancement the server knows, for the editor to complete from. */
+    public List<String> advancements() { return advancements; }
+
+    private static List<String> readStrings(JsonArray array) {
+        List<String> out = new ArrayList<>();
+        if (array == null) return out;
+        for (JsonElement element : array) out.add(element.getAsString());
         return out;
     }
 

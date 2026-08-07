@@ -47,6 +47,16 @@ public class Timer {
     private int repeatsDone = 0;
     private String nextTimer = null;
     private long repeatCooldownTicks = 0L;
+
+    /**
+     * Ticks between two of this timer's commands, or -1 to use the default.
+     *
+     * <p>Per timer because the reason for a pause is the commands themselves:
+     * one timer handing out kits needs a beat between them and the next one
+     * setting two scoreboard values does not. The server default stays, and
+     * is what a timer that has never been told otherwise uses.</p>
+     */
+    private int commandDelayTicks = -1;
     private long sequenceCooldownTicks = 0L;
 
     /**
@@ -245,6 +255,7 @@ public class Timer {
         json.addProperty("wasRunningBeforeShutdown", wasRunningBeforeShutdown);
         json.addProperty("repeat", repeat);
         json.addProperty("repeatCount", repeatCount);
+        json.addProperty("commandDelayTicks", commandDelayTicks);
         json.addProperty("repeatsDone", repeatsDone);
         json.addProperty("nextTimer", nextTimer != null ? nextTimer : "");
         json.addProperty("repeatCooldownTicks", repeatCooldownTicks);
@@ -298,6 +309,8 @@ public class Timer {
                 && json.get("wasRunningBeforeShutdown").getAsBoolean();
         timer.repeat = json.has("repeat") && json.get("repeat").getAsBoolean();
         timer.repeatCount = json.has("repeatCount") ? json.get("repeatCount").getAsInt() : -1;
+        timer.commandDelayTicks = json.has("commandDelayTicks")
+                ? json.get("commandDelayTicks").getAsInt() : -1;
         timer.repeatsDone = json.has("repeatsDone") ? json.get("repeatsDone").getAsInt() : 0;
         timer.nextTimer = json.has("nextTimer") ? json.get("nextTimer").getAsString() : "";
         if (timer.nextTimer.isEmpty()) timer.nextTimer = null;
@@ -391,6 +404,20 @@ public class Timer {
     public void setWasRunningBeforeShutdown(boolean was) { this.wasRunningBeforeShutdown = was; }
     public boolean isRepeat() { return repeat; }
     public void setRepeat(boolean repeat) { this.repeat = repeat; }
+    /** This timer's own pause between commands, falling back to the default. */
+    public int commandDelayTicks() {
+        return commandDelayTicks < 0
+                ? com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks()
+                : commandDelayTicks;
+    }
+
+    /** What was set on the timer itself: -1 while it follows the default. */
+    public int ownCommandDelayTicks() { return commandDelayTicks; }
+
+    public void setCommandDelayTicks(int ticks) {
+        commandDelayTicks = ticks < 0 ? -1 : ticks;
+    }
+
     public int getRepeatCount() { return repeatCount; }
     public void setRepeatCount(int count) { this.repeatCount = count; }
     public int getRepeatsDone() { return repeatsDone; }

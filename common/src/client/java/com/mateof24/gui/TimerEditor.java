@@ -115,6 +115,11 @@ public final class TimerEditor {
         out.add(new Field(Section.REPEAT, "sequence", "nextTimer", Kind.TEXT, "next_timer"));
         out.add(new Field(Section.REPEAT, "sequence", "sequenceCooldown", Kind.INT, "sequence_cooldown"));
 
+        // The one thing on the commands page that is a value rather than a
+        // list. It lives here because this is where somebody looking for it
+        // looks: on the page that holds the commands it spaces out.
+        out.add(new Field(Section.COMMANDS, "commands", "commandDelay", Kind.INT, "command_delay"));
+
         // Nothing for TRIGGERS: it is a list, not a form, so AdminPanel draws
         // it the way it draws the command list.
         return out;
@@ -366,6 +371,7 @@ public final class TimerEditor {
             case "silent" -> String.valueOf(timer.silent());
             case "repeat" -> String.valueOf(timer.repeat());
             case "repeatCount" -> String.valueOf(timer.repeatCount());
+            case "commandDelay" -> String.valueOf(timer.commandDelayTicks());
             case "repeatCooldown" -> String.valueOf(timer.repeatCooldownTicks() / 20L);
             case "nextTimer" -> timer.nextTimer() == null ? "" : timer.nextTimer();
             case "sequenceCooldown" -> String.valueOf(timer.sequenceCooldownTicks() / 20L);
@@ -373,11 +379,25 @@ public final class TimerEditor {
         };
     }
 
+    /**
+     * One field by name, for a page that draws a field of its own.
+     *
+     * <p>The commands page is a list, so it is built by hand rather than from
+     * a section -- and the one value on it still has to be the same field
+     * that everything else already knows how to read and apply.</p>
+     */
+    public static Field fieldFor(String key) {
+        for (Field field : FIELDS) {
+            if (field.key().equals(key)) return field;
+        }
+        return null;
+    }
+
     private static String defaultFor(String key) {
         return switch (key) {
             case "hours", "seconds", "score", "repeatCooldown", "sequenceCooldown" -> "0";
             case "minutes" -> "1";
-            case "repeatCount" -> "-1";
+            case "repeatCount", "commandDelay" -> "-1";
             case "countUp", "silent", "repeat" -> "false";
             case "scoreAction", "expressionAction", "triggerAction" -> "finish";
             default -> "";
@@ -493,6 +513,12 @@ public final class TimerEditor {
             args.addProperty("count", number(timer, "repeatCount"));
             args.addProperty("cooldownSeconds", number(timer, "repeatCooldown"));
             ops.add(new Op("timer.setRepeat", args));
+        }
+        if (changed(timer, "commandDelay")) {
+            JsonObject args = named(name);
+            args.addProperty("key", "commandDelayTicks");
+            args.addProperty("value", (long) numberOf(value(timer, "commandDelay")));
+            ops.add(new Op("timer.setDisplay", args));
         }
         if (changed(timer, "nextTimer") || changed(timer, "sequenceCooldown")) {
             JsonObject args = named(name);

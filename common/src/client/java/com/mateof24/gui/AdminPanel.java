@@ -60,7 +60,7 @@ public final class AdminPanel {
     /** Sits under vanilla's dimming, so it only needs to be a hint. */
     private static final int COLOR_BAND = 0x50000000;
     /** How many of the band's rows are spent fading it out. */
-    private static final int BAND_FADE = 10;
+    private static final int BAND_FADE = 4;
     /** Drawn over the world after the widgets, so it has to carry on its own. */
     private static final int COLOR_RULE = 0x70FFFFFF;
     private static final int COLOR_SCRIM = 0xC0000000;
@@ -301,6 +301,7 @@ public final class AdminPanel {
         // Refreshed every layout: a timer created a second ago should be
         // offered a second ago.
         assist.setTimerNames(model.timers().stream().map(AdminModel.TimerRow::name).toList());
+        assist.setAdvancementIds(model.advancements());
         timerMarks.clear();
         timerData.clear();
         dialogFields.clear();
@@ -574,9 +575,9 @@ public final class AdminPanel {
         editorControlX = width - GUTTER - editorControlWidth;
 
         if (editor.section() == TimerEditor.Section.COMMANDS) {
-            buildCommandRows(timer, contentBottom - 30);
+            buildCommandRows(timer, contentBottom - 52);
         } else if (editor.section() == TimerEditor.Section.TRIGGERS) {
-            buildTriggerRows(timer, contentBottom - (kindHasSubject() ? 51 : 30));
+            buildTriggerRows(timer, contentBottom - 26);
         } else {
             buildFieldRows(timer, editor.section(), contentBottom - 4);
         }
@@ -814,10 +815,6 @@ public final class AdminPanel {
         return out;
     }
 
-    private int triggerCount() {
-        return triggerLines(model.timer(model.selectedTimer())).size();
-    }
-
     /** True while the chosen kind needs no value at all. */
     private boolean kindIsBare() {
         return TRIGGER_KINDS[triggerKind].startsWith("player_");
@@ -827,16 +824,180 @@ public final class AdminPanel {
         return "scoreboard".equals(TRIGGER_KINDS[triggerKind]);
     }
 
+    // ------------------------------------------------------------------
+    // Triggers: the list, and the builder that adds to it
+    // ------------------------------------------------------------------
+
     /**
-     * The trigger list, and the row that adds one.
+     * Which question the builder is on, or -1 while the list is showing.
      *
-     * <p>Shaped like the commands page rather than like a form, because that
-     * is what it is now: a list of any length. It used to be three fixed
-     * blocks -- a scoreboard, an expression and a select of four game events --
-     * so half the kinds the server understood, advancements among them, could
-     * only be reached from a command.</p>
+     * <p>The composer used to be permanent and flat: ten controls over two
+     * rows, every one of them on screen whether the chosen kind had any use
+     * for it or not, and nothing anywhere saying which answer belonged to
+     * which question. It asks one thing at a time now, and only the things
+     * the answers so far have made worth asking.</p>
+     */
+    private int builderStep = -1;
+
+    private static final int STEP_ACTION = 0;
+    private static final int STEP_KIND = 1;
+    private static final int STEP_WHO = 2;
+    private static final int STEP_HOW_MANY = 3;
+    private static final int STEP_DETAILS = 4;
+    private static final int STEP_REVIEW = 5;
+
+    /**
+     * What has been typed, kept out of the boxes.
+     *
+     * <p>A widget is rebuilt on every answer, so anything living only in the
+     * box itself was gone the moment the next question was asked.</p>
+     */
+    private String builderValue = "";
+    private String builderScore = "0";
+    private String builderSubject = "";
+    private String builderCount = "1";
+
+    /** True when a step has nothing left to ask, given the answers so far. */
+    private boolean stepIsEmpty(int step) {
+        return switch (step) {
+            // The group already belongs to a rule, and that rule decided this.
+            case STEP_ACTION -> pendingGroup != null;
+            case STEP_WHO, STEP_HOW_MANY -> !kindHasSubject();
+            case STEP_DETAILS -> detailKeys().isEmpty();
+            default -> false;
+        };
+    }
+
+    /** The next question in that direction, or -1 when there is none behind. */
+    private int stepAfter(int step, int by) {
+        int next = step + by;
+        while (next >= 0 && next < STEP_REVIEW && stepIsEmpty(next)) next += by;
+        return next < 0 ? -1 : Math.min(next, STEP_REVIEW);
+    }
+
+    /** The boxes this kind still needs filled, in the order they are asked. */
+    private List<String> detailKeys() {
+        List<String> out = new ArrayList<>();
+        if (kindIsScoreboard()) {
+            out.add("objective");
+            out.add("score");
+        } else if (!kindIsBare()) {
+            out.add("value");
+        }
+        if (kindHasSubject() && scopeNeedsValue()) out.add("subject");
+        if (kindHasSubject() && countIsUsed()) out.add("count");
+        return out;
+    }
+
+    /** The answers a question offers, in the order it offers them. */
+    private String[] stepOptions() {
+        return switch (builderStep) {
+            case STEP_ACTION -> new String[] {"finish", "start"};
+            case STEP_KIND -> TRIGGER_KINDS;
+            case STEP_WHO -> SCOPES;
+            case STEP_HOW_MANY -> QUANTIFIERS;
+            default -> new String[0];
+        };
+    }
+
+    /** Which of them is the answer so far. */
+    private int stepChoice() {
+        return switch (builderStep) {
+            case STEP_ACTION -> triggerStarts ? 1 : 0;
+            case STEP_KIND -> triggerKind;
+            case STEP_WHO -> triggerScope;
+            case STEP_HOW_MANY -> triggerQuantifier;
+            default -> -1;
+        };
+    }
+
+    private void chooseStep(int index) {
+        switch (builderStep) {
+            case STEP_ACTION -> triggerStarts = index == 1;
+            case STEP_KIND -> triggerKind = index;
+            case STEP_WHO -> triggerScope = index;
+            case STEP_HOW_MANY -> triggerQuantifier = index;
+            default -> { }
+        }
+    }
+
+    /** The translation key an answer goes by, on both the button and the tip. */
+    private String optionKey(String option) {
+        return switch (builderStep) {
+            case STEP_ACTION -> "ontime.trigger.action." + option;
+            case STEP_KIND -> "ontime.trigger.kind." + option;
+            case STEP_WHO -> "ontime.who.s." + option;
+            default -> "ontime.who.q." + option;
+        };
+    }
+
+    private void openBuilder(AdminModel.TimerRow timer) {
+        // A condition joining a group inherits that group's rule: there is
+        // nothing to decide, so the builder never asks.
+        if (pendingGroup != null && timer != null) {
+            for (TriggerLine line : triggerLines(timer)) {
+                if (line.depth() == 1 && line.nodeId().equals(pendingGroup)) {
+                    triggerStarts = line.startsIt();
+                    break;
+                }
+            }
+        }
+        builderValue = "";
+        builderScore = "0";
+        builderSubject = "";
+        builderCount = "1";
+        detailScroll = 0;
+        builderStep = stepAfter(-1, 1);
+        init();
+    }
+
+    private void closeBuilder() {
+        builderStep = -1;
+        detailScroll = 0;
+        init();
+    }
+
+    /**
+     * The pause between two of this timer's commands.
+     *
+     * <p>On this page rather than in the settings because this is the page
+     * whose commands it spaces out. The server default is still there and
+     * still what a timer uses until it is told otherwise — which is what -1
+     * in this box means, and what the box says when it is empty.</p>
+     */
+    private void buildCommandDelayRow(AdminModel.TimerRow timer, int y) {
+        TimerEditor.Field field = TimerEditor.fieldFor("commandDelay");
+        if (field == null || timer == null) return;
+        String value = editor.displayed(timer, field);
+
+        commandDelayLabelY = y;
+        EditBox box = new EditBox(host.font(), editorFieldX + 108, y, 60, 18,
+                Component.translatable("ontime.gui.editor.field.command_delay"));
+        box.setMaxLength(6);
+        box.setValue(value);
+        box.setHint(Component.translatable("ontime.gui.editor.command.delay.default"));
+        box.setResponder(text -> editor.put(field.key(), text));
+        host.addWidget(box);
+        registerEditorField(box, field,
+                Tooltip.create(Component.translatable("ontime.gui.editor.field.command_delay.tip")));
+    }
+
+    /** Where the delay box's name is drawn, kept from the build pass. */
+    private int commandDelayLabelY = -1;
+
+    /**
+     * The trigger page: the rules a timer has, and the way to add one more.
+     *
+     * <p>Two screens rather than one. The list gets the whole page, and the
+     * builder takes it over — which is what lets either of them be readable
+     * at a size a Minecraft window actually is.</p>
      */
     private void buildTriggerRows(AdminModel.TimerRow timer, int bottom) {
+        if (builderStep >= 0) {
+            buildBuilder(timer, bottom);
+            return;
+        }
+
         List<TriggerLine> lines = triggerLines(timer);
         editorRowsShown = Math.max(1, (bottom - editorFieldTop) / 20);
         detailScroll = Math.max(0, Math.min(Math.max(0, lines.size() - editorRowsShown), detailScroll));
@@ -900,156 +1061,211 @@ public final class AdminPanel {
                     .build());
         }
 
-        int y = bottom + 6;
-        int right = width - GUTTER;
-
-        cycler(Component.translatable("ontime.trigger.kind." + TRIGGER_KINDS[triggerKind]),
-                editorFieldX, y, 118, "ontime.gui.editor.trigger.kind.tip",
-                TRIGGER_KINDS.length, next -> triggerKind = next, triggerKind);
-
-        int cursor = editorFieldX + 122;
-        int addX = right - 48;
-        int actionX = addX - 62;
-
-        if (kindIsScoreboard()) {
-            triggerValue = new EditBox(host.font(), cursor, y, 90, 18,
-                    Component.translatable("ontime.gui.editor.trigger.objective"));
-            triggerValue.setHint(Component.translatable("ontime.gui.editor.trigger.objective"));
-            triggerValue.setMaxLength(64);
-            host.addWidget(triggerValue);
-            assist.add(triggerValue, text -> true);
-
-            triggerScore = new EditBox(host.font(), cursor + 94, y, 44, 18,
-                    Component.translatable("ontime.gui.editor.trigger.score"));
-            triggerScore.setHint(Component.translatable("ontime.gui.editor.trigger.score"));
-            triggerScore.setMaxLength(9);
-            host.addWidget(triggerScore);
-            assist.add(triggerScore, FieldAssist.intBetween(-999999, 999999));
-
-            triggerTarget = new EditBox(host.font(), cursor + 142, y,
-                    Math.max(40, actionX - 4 - (cursor + 142)), 18,
-                    Component.translatable("ontime.gui.editor.trigger.target"));
-            triggerTarget.setHint(Component.translatable("ontime.gui.editor.trigger.target"));
-            triggerTarget.setMaxLength(64);
-            host.addWidget(triggerTarget);
-            assist.add(triggerTarget, text -> true);
-        } else if (!kindIsBare()) {
-            triggerScore = null;
-            triggerTarget = null;
-            // The hint names what this kind wants, rather than saying "Id" for
-            // an advancement, a dimension and a quest alike.
-            String hint = "ontime.gui.editor.trigger.value." + TRIGGER_KINDS[triggerKind];
-            triggerValue = new EditBox(host.font(), cursor, y, Math.max(60, actionX - 4 - cursor), 18,
-                    Component.translatable(hint));
-            triggerValue.setHint(Component.translatable(hint));
-            triggerValue.setMaxLength(256);
-            host.addWidget(triggerValue);
-            // Only the kinds with a list behind them get one. An FTB quest id
-            // is a hex string the client has no way to enumerate.
-            assist.add(triggerValue, text -> true, switch (TRIGGER_KINDS[triggerKind]) {
-                case "advancement" -> FieldAssist.Source.ADVANCEMENTS;
-                default -> FieldAssist.Source.NONE;
-            });
-        } else {
-            triggerValue = null;
-            triggerScore = null;
-            triggerTarget = null;
-        }
-
-        cycler(Component.translatable("ontime.trigger.action." + (triggerStarts ? "start" : "finish")),
-                actionX, y, 58, "ontime.gui.editor.trigger.action.tip",
-                2, next -> triggerStarts = next == 1, triggerStarts ? 1 : 0);
-
-        buildSubjectRow(y + 21, right);
-
-        host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.trigger.add"), b -> {
-                    if (timer == null) return;
-                    String kind = TRIGGER_KINDS[triggerKind];
-                    JsonObject args = new JsonObject();
-                    args.addProperty("name", timer.name());
-                    args.addProperty("kind", kind);
-                    args.addProperty("action", triggerStarts ? "start" : "finish");
-                    if (!kindIsBare()) {
-                        if (triggerValue == null || triggerValue.getValue().isBlank()) return;
-                        args.addProperty("value", triggerValue.getValue().trim());
-                    }
-                    if (kindIsScoreboard()) {
-                        args.addProperty("threshold", parseIntOr(triggerScore, 0));
-                    }
-                    if (kindHasSubject()) {
-                        args.addProperty("quantifier", QUANTIFIERS[triggerQuantifier]);
-                        args.addProperty("subject", SCOPES[triggerScope]);
-                        if (countIsUsed()) args.addProperty("count", parseIntOr(triggerCount, 1));
-                        if (scopeNeedsValue()) {
-                            if (triggerSubject == null || triggerSubject.getValue().isBlank()) return;
-                            args.addProperty("subjectValue", triggerSubject.getValue().trim());
-                        }
-                    }
-                    // Into the group that was chosen, or a rule of its own
-                    // when none was. Cleared either way, so the next one does
-                    // not quietly land somewhere it was not meant to.
-                    if (pendingGroup != null) args.addProperty("groupId", pendingGroup);
-                    pendingGroup = null;
-                    send("timer.addTrigger", args);
-                    awaitingApply = true;
-                })
-                .bounds(addX, y, 48, 18)
-                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.add.tip")))
+        // One way in, and it says where what it makes will land.
+        host.addWidget(Button.builder(
+                        Component.translatable(pendingGroup == null
+                                ? "ontime.gui.editor.trigger.new"
+                                : "ontime.gui.editor.trigger.newHere"),
+                        b -> openBuilder(timer))
+                .bounds(editorFieldX, bottom + 4, 148, 20)
+                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.trigger.new.tip")))
                 .build());
     }
 
+    /** How many rows the trigger page has, whichever of its two screens is up. */
+    private int triggerRowCount() {
+        if (builderStep < 0) return triggerLines(model.timer(editor.timerName())).size();
+        if (builderStep == STEP_DETAILS) return detailKeys().size();
+        return stepOptions().length;
+    }
 
-    /**
-     * Who the trigger watches, on its own line.
-     *
-     * <p>A second line rather than more boxes on the first: with a kind, an
-     * id, a score, a quantifier, a subject, its value and an action, one row
-     * would be a row of slivers at any window width worth using.</p>
-     */
-    private void buildSubjectRow(int y, int right) {
-        if (!kindHasSubject()) {
+    /** One question, its answers, and the way forwards and back. */
+    private void buildBuilder(AdminModel.TimerRow timer, int bottom) {
+        int right = width - GUTTER;
+        int top = editorFieldTop + 22;
+        editorRowsShown = Math.max(1, (bottom - top) / 20);
+
+        if (builderStep == STEP_DETAILS) {
+            buildDetailFields(top, right);
+        } else if (builderStep != STEP_REVIEW) {
+            String[] options = stepOptions();
+            detailScroll = Math.max(0,
+                    Math.min(Math.max(0, options.length - editorRowsShown), detailScroll));
+            for (int i = 0; i < editorRowsShown && detailScroll + i < options.length; i++) {
+                int index = detailScroll + i;
+                Component label = Component.translatable(optionKey(options[index]));
+                if (index == stepChoice()) label = label.copy().withStyle(ChatFormatting.GREEN);
+                host.addWidget(Button.builder(label, b -> {
+                            chooseStep(index);
+                            detailScroll = 0;
+                            builderStep = stepAfter(builderStep, 1);
+                            init();
+                        })
+                        .bounds(editorFieldX, top + i * 20, right - editorFieldX - 2, 18)
+                        .tooltip(Tooltip.create(
+                                Component.translatable(optionKey(options[index]) + ".help")))
+                        .build());
+            }
+        } else {
+            triggerValue = null;
+            triggerScore = null;
             triggerSubject = null;
             triggerCount = null;
+        }
+
+        int y = bottom + 4;
+        host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.trigger.back"),
+                        b -> {
+                            int previous = stepAfter(builderStep, -1);
+                            if (previous < 0) {
+                                closeBuilder();
+                                return;
+                            }
+                            builderStep = previous;
+                            detailScroll = 0;
+                            init();
+                        })
+                .bounds(editorFieldX, y, 70, 20)
+                .build());
+
+        if (builderStep == STEP_REVIEW) {
+            host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.trigger.create"),
+                            b -> submitBuilder(timer))
+                    .bounds(right - 100, y, 100, 20)
+                    .tooltip(Tooltip.create(Component.translatable(
+                            "ontime.gui.editor.trigger.create.tip")))
+                    .build());
             return;
         }
 
-        int x = editorFieldX;
-        cycler(Component.translatable("ontime.who.q." + QUANTIFIERS[triggerQuantifier]),
-                x, y, 82, "ontime.gui.editor.trigger.quantifier.tip",
-                QUANTIFIERS.length, next -> triggerQuantifier = next, triggerQuantifier);
-        x += 86;
+        Button next = Button.builder(Component.translatable("ontime.gui.editor.trigger.next"),
+                        b -> {
+                            builderStep = stepAfter(builderStep, 1);
+                            detailScroll = 0;
+                            init();
+                        })
+                .bounds(right - 70, y, 70, 20)
+                .build();
+        // Nothing to move on to until the boxes this kind needs are filled.
+        next.active = builderStep != STEP_DETAILS || detailsAreComplete();
+        host.addWidget(next);
+    }
 
-        if (countIsUsed()) {
-            triggerCount = new EditBox(host.font(), x, y, 34, 18,
-                    Component.translatable("ontime.gui.editor.trigger.count"));
-            triggerCount.setHint(Component.translatable("ontime.gui.editor.trigger.count"));
-            triggerCount.setMaxLength(4);
-            triggerCount.setValue("1");
-            host.addWidget(triggerCount);
-            assist.add(triggerCount, FieldAssist.intBetween(1, 9999));
-            x += 38;
-        } else {
-            triggerCount = null;
+    /** True once every box the chosen kind asked for holds something. */
+    private boolean detailsAreComplete() {
+        for (String key : detailKeys()) {
+            String text = switch (key) {
+                case "objective", "value" -> builderValue;
+                case "subject" -> builderSubject;
+                default -> "x";
+            };
+            if (text.isBlank()) return false;
         }
+        return true;
+    }
 
-        int scopeWidth = scopeNeedsValue() ? 118 : Math.max(118, right - x);
-        cycler(Component.translatable("ontime.who.s." + SCOPES[triggerScope]),
-                x, y, scopeWidth, "ontime.gui.editor.trigger.scope.tip",
-                SCOPES.length, next -> triggerScope = next, triggerScope);
-        x += scopeWidth + 4;
+    /** The boxes this kind needs, one per row, each one named beside it. */
+    private void buildDetailFields(int top, int right) {
+        triggerTarget = null;
+        triggerValue = null;
+        triggerScore = null;
+        triggerSubject = null;
+        triggerCount = null;
 
-        if (scopeNeedsValue()) {
-            String hint = "selector".equals(SCOPES[triggerScope])
-                    ? "ontime.gui.editor.trigger.selector" : "ontime.gui.editor.trigger.names";
-            triggerSubject = new EditBox(host.font(), x, y, Math.max(60, right - x), 18,
-                    Component.translatable(hint));
-            triggerSubject.setHint(Component.translatable(hint));
-            triggerSubject.setMaxLength(256);
-            host.addWidget(triggerSubject);
-            assist.add(triggerSubject, text -> true);
-        } else {
-            triggerSubject = null;
+        List<String> keys = detailKeys();
+        int boxX = editorFieldX + 96;
+        for (int i = 0; i < keys.size(); i++) {
+            String key = keys.get(i);
+            int y = top + i * 22;
+            int boxWidth = Math.max(60, right - boxX);
+            EditBox box = new EditBox(host.font(), boxX, y, boxWidth, 18,
+                    Component.translatable(detailLabelKey(key)));
+            box.setMaxLength("value".equals(key) ? 256 : 64);
+            host.addWidget(box);
+
+            switch (key) {
+                case "objective", "value" -> {
+                    box.setValue(builderValue);
+                    box.setResponder(text -> builderValue = text);
+                    triggerValue = box;
+                    assist.add(box, text -> !text.isBlank(),
+                            "advancement".equals(TRIGGER_KINDS[triggerKind])
+                                    ? FieldAssist.Source.ADVANCEMENTS : FieldAssist.Source.NONE);
+                }
+                case "score" -> {
+                    box.setValue(builderScore);
+                    box.setResponder(text -> builderScore = text);
+                    triggerScore = box;
+                    assist.add(box, FieldAssist.intBetween(-999999, 999999));
+                }
+                case "subject" -> {
+                    box.setValue(builderSubject);
+                    box.setResponder(text -> builderSubject = text);
+                    triggerSubject = box;
+                    assist.add(box, text -> !text.isBlank());
+                }
+                default -> {
+                    box.setValue(builderCount);
+                    box.setResponder(text -> builderCount = text);
+                    triggerCount = box;
+                    assist.add(box, FieldAssist.intBetween(1, 9999));
+                }
+            }
         }
+    }
+
+    /** What a detail box is called, which is also what its hint says. */
+    private String detailLabelKey(String key) {
+        return switch (key) {
+            case "objective" -> "ontime.gui.editor.trigger.objective";
+            case "score" -> "ontime.gui.editor.trigger.score";
+            case "count" -> "ontime.gui.editor.trigger.count";
+            case "subject" -> "selector".equals(SCOPES[triggerScope])
+                    ? "ontime.gui.editor.trigger.selector"
+                    : "ontime.gui.editor.trigger.names";
+            default -> "ontime.gui.editor.trigger.value." + TRIGGER_KINDS[triggerKind];
+        };
+    }
+
+    /** The answers, as the trigger they describe. */
+    private AdminModel.TimerRow.Trigger builderPreview() {
+        return new AdminModel.TimerRow.Trigger("", TRIGGER_KINDS[triggerKind],
+                kindIsBare() ? "" : builderValue.trim(), numberOr(builderScore, 0),
+                kindHasSubject() ? SCOPES[triggerScope] : "audience",
+                kindHasSubject() && scopeNeedsValue() ? builderSubject.trim() : "",
+                kindHasSubject() ? QUANTIFIERS[triggerQuantifier] : "any",
+                numberOr(builderCount, 1));
+    }
+
+    private void submitBuilder(AdminModel.TimerRow timer) {
+        if (timer == null) return;
+        String kind = TRIGGER_KINDS[triggerKind];
+        JsonObject args = new JsonObject();
+        args.addProperty("name", timer.name());
+        args.addProperty("kind", kind);
+        args.addProperty("action", triggerStarts ? "start" : "finish");
+        if (!kindIsBare()) {
+            if (builderValue.isBlank()) return;
+            args.addProperty("value", builderValue.trim());
+        }
+        if (kindIsScoreboard()) args.addProperty("threshold", numberOr(builderScore, 0));
+        if (kindHasSubject()) {
+            args.addProperty("quantifier", QUANTIFIERS[triggerQuantifier]);
+            args.addProperty("subject", SCOPES[triggerScope]);
+            if (countIsUsed()) args.addProperty("count", numberOr(builderCount, 1));
+            if (scopeNeedsValue()) {
+                if (builderSubject.isBlank()) return;
+                args.addProperty("subjectValue", builderSubject.trim());
+            }
+        }
+        // Into the group that was chosen, or a rule of its own when none was.
+        // Cleared either way, so the next one does not quietly land somewhere
+        // it was not meant to.
+        if (pendingGroup != null) args.addProperty("groupId", pendingGroup);
+        pendingGroup = null;
+        send("timer.addTrigger", args);
+        awaitingApply = true;
+        closeBuilder();
     }
 
     private static int parseIntOr(EditBox box, int fallback) {
@@ -1063,10 +1279,13 @@ public final class AdminPanel {
 
     /** One line per trigger: what it watches, and what it does to the timer. */
     private void drawTriggerRows(Painter painter, AdminModel.TimerRow timer) {
+        if (builderStep >= 0) {
+            drawBuilder(painter);
+            return;
+        }
         List<TriggerLine> lines = triggerLines(timer);
         if (lines.isEmpty()) {
-            painter.text(Component.translatable("ontime.gui.editor.trigger.none"),
-                    editorFieldX, editorFieldTop, COLOR_TEXT);
+            centred(painter, Component.translatable("ontime.gui.editor.trigger.none"));
             return;
         }
         for (int i = 0; i < editorRowsShown && detailScroll + i < lines.size(); i++) {
@@ -1082,6 +1301,90 @@ public final class AdminPanel {
             };
             painter.text(line.text(), editorFieldX + line.depth() * 10, y + 5, colour);
         }
+        drawScrollbar(painter, width - GUTTER + (GUTTER - 2) / 2, editorFieldTop,
+                editorFieldTop + editorRowsShown * 20, lines.size(), editorRowsShown, detailScroll);
+    }
+
+    /**
+     * The question, and how far through the builder it is.
+     *
+     * <p>The count is worth the room it takes: a flow that shows one thing at
+     * a time is only bearable when it says how much of it is left.</p>
+     */
+    private void drawBuilder(Painter painter) {
+        int right = width - GUTTER;
+        Component question = Component.translatable(switch (builderStep) {
+            case STEP_ACTION -> "ontime.gui.editor.trigger.ask.action";
+            case STEP_KIND -> "ontime.gui.editor.trigger.ask.kind";
+            case STEP_WHO -> "ontime.gui.editor.trigger.ask.who";
+            case STEP_HOW_MANY -> "ontime.gui.editor.trigger.ask.howMany";
+            case STEP_DETAILS -> "ontime.gui.editor.trigger.ask.details";
+            default -> "ontime.gui.editor.trigger.ask.review";
+        });
+        painter.text(question, editorFieldX, editorFieldTop + 4, COLOR_TEXT);
+
+        Component counter = Component.translatable("ontime.gui.editor.trigger.step",
+                stepsBefore() + 1, stepsTotal());
+        painter.text(counter, right - painter.textWidth(counter), editorFieldTop + 4, COLOR_MUTED_TEXT);
+
+        int top = editorFieldTop + 22;
+        if (builderStep == STEP_DETAILS) {
+            List<String> keys = detailKeys();
+            for (int i = 0; i < keys.size(); i++) {
+                painter.text(Component.translatable(detailLabelKey(keys.get(i))),
+                        editorFieldX, top + i * 22 + 5, COLOR_MUTED_TEXT);
+            }
+            return;
+        }
+        if (builderStep != STEP_REVIEW) {
+            drawScrollbar(painter, width - GUTTER + (GUTTER - 2) / 2, top,
+                    top + editorRowsShown * 20, stepOptions().length, editorRowsShown, detailScroll);
+        }
+        if (builderStep != STEP_REVIEW) return;
+
+        // The whole rule as one sentence, because it is the last chance to
+        // read it before it exists.
+        painter.text(Component.translatable(triggerStarts
+                        ? "ontime.gui.editor.trigger.startsIt"
+                        : "ontime.gui.editor.trigger.endsIt"),
+                editorFieldX, top, triggerStarts ? COLOR_RUNNING : COLOR_ERROR);
+        painter.text(Component.translatable("ontime.gui.editor.trigger.when"),
+                editorFieldX, top + 16, COLOR_MUTED_TEXT);
+        painter.text(describeTrigger(builderPreview()), editorFieldX + 10, top + 30, COLOR_TEXT);
+        if (pendingGroup != null) {
+            painter.text(Component.translatable("ontime.gui.editor.trigger.intoGroup"),
+                    editorFieldX, top + 48, COLOR_MUTED_TEXT);
+        }
+    }
+
+    /** How many questions this kind will have asked by the one it is on. */
+    private int stepsBefore() {
+        int count = 0;
+        for (int step = STEP_ACTION; step < builderStep; step++) {
+            if (!stepIsEmpty(step)) count++;
+        }
+        return count;
+    }
+
+    private int stepsTotal() {
+        int count = 0;
+        for (int step = STEP_ACTION; step <= STEP_REVIEW; step++) {
+            if (!stepIsEmpty(step)) count++;
+        }
+        return count;
+    }
+
+    /**
+     * The one line a page shows when it holds nothing.
+     *
+     * <p>Centred in the page rather than parked in its top-left corner, where
+     * it read as a stray label belonging to something else.</p>
+     */
+    private void centred(Painter painter, Component text) {
+        int left = editorFieldX;
+        int right = width - GUTTER;
+        painter.text(text, left + (right - left - painter.textWidth(text)) / 2,
+                editorFieldTop + (contentBottom - editorFieldTop) / 2 - 4, COLOR_MUTED_TEXT);
     }
 
     private static Component describeTrigger(AdminModel.TimerRow.Trigger trigger) {
@@ -1250,6 +1553,8 @@ public final class AdminPanel {
         command.setMaxLength(256);
         host.addWidget(command);
         assist.add(command, text -> true);
+
+        buildCommandDelayRow(timer, y + 22);
 
         host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.command.add"), b -> {
                     if (timer == null || command.getValue().isBlank()) return;
@@ -1957,8 +2262,9 @@ public final class AdminPanel {
      * The band behind the title, fading out downwards.
      *
      * <p>It has no bottom border, so a flat fill ended in a hard line across
-     * the screen with nothing to explain it. Fading the last rows out lets it
-     * stop without anybody noticing where.</p>
+     * the screen with nothing to explain it. The last few rows fade instead,
+     * and only the last few: the buttons have to sit in solid dark or they
+     * read as floating loose above the page.</p>
      *
      * <p>Drawn as rows rather than as a gradient call: {@link Painter} has one
      * fill and adding a gradient to it would mean a version-specific
@@ -2226,8 +2532,13 @@ public final class AdminPanel {
                     commandX, y, COLOR_TEXT);
         }
 
-        drawScrollbar(painter, width - GUTTER - 24, editorFieldTop, contentBottom - 30,
+        drawScrollbar(painter, width - GUTTER - 24, editorFieldTop, contentBottom - 52,
                 entries.size(), editorRowsShown, detailScroll);
+
+        if (commandDelayLabelY > 0) {
+            painter.text(Component.translatable("ontime.gui.editor.field.command_delay"),
+                    editorFieldX, commandDelayLabelY + 5, COLOR_MUTED_TEXT);
+        }
     }
 
     /** A scheduled command's clock reading. */
@@ -2706,9 +3017,12 @@ public final class AdminPanel {
             shown = settingsRows;
         } else if (model.tab() == AdminModel.Tab.TIMERS) {
             if (editor.advanced()) {
-                int rows = editor.section() == TimerEditor.Section.COMMANDS
-                        ? commandCount() : TimerEditor.laidOut(editor.section(), editor.isCreating(),
-                        timerIsCustom(model.timer(editor.timerName()))).size();
+                int rows = switch (editor.section()) {
+                    case COMMANDS -> commandCount();
+                    case TRIGGERS -> triggerRowCount();
+                    default -> TimerEditor.laidOut(editor.section(), editor.isCreating(),
+                            timerIsCustom(model.timer(editor.timerName()))).size();
+                };
                 if (rows <= editorRowsShown) return false;
                 int before = detailScroll;
                 detailScroll = Math.max(0, Math.min(rows - editorRowsShown,

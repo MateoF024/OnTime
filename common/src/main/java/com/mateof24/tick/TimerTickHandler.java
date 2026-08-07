@@ -311,13 +311,15 @@ public class TimerTickHandler {
     }
 
     /**
-     * Runs the commands in order; one failing command does not stop the
-     * rest. With config commandDelayTicks > 0 the (placeholder-resolved)
-     * commands are queued on the run instead and drained one per delay window.
+     * Runs the commands in order; one failing command does not stop the rest.
+     *
+     * <p>With a delay of more than zero the resolved commands are queued on
+     * the run instead and drained one per window. The delay is the timer's
+     * own when it has been given one, and the server default otherwise.</p>
      */
     private static void runCommandList(MinecraftServer server, TimerRun run, java.util.List<String> commands) {
         if (commands.isEmpty()) return;
-        int delayTicks = com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks();
+        int delayTicks = run.timer().commandDelayTicks();
         if (delayTicks > 0) {
             for (String command : commands) {
                 run.queueCommand(com.mateof24.command.PlaceholderSystem
@@ -337,8 +339,7 @@ public class TimerTickHandler {
         if (run.tickCommandDelay()) return;
         executeResolvedCommand(server, run, run.pollPendingCommand());
         if (run.hasPendingCommands()) {
-            run.setCommandDelay(Math.max(1,
-                    com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks()));
+            run.setCommandDelay(Math.max(1, run.timer().commandDelayTicks()));
         }
     }
 
