@@ -1,5 +1,8 @@
 package com.mateof24.trigger;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -115,4 +118,73 @@ public final class EdgeMemory {
 
     /** True once nobody is left to satisfy it — an empty subject is never true. */
     public boolean rosterIsEmpty() { return roster.isEmpty(); }
+
+    /**
+     * Written out so a match survives a restart.
+     *
+     * <p>Without it, a server that goes down mid-round comes back having
+     * forgotten who had already died, and "all four of them" starts again from
+     * nobody — silently, which is the worst way for it to be wrong.</p>
+     */
+    public JsonObject toJson() {
+        JsonObject json = new JsonObject();
+        json.addProperty("armed", armed);
+        JsonArray seen = new JsonArray();
+        lastSeen.forEach((player, answer) -> {
+            JsonObject entry = new JsonObject();
+            entry.addProperty("id", player.toString());
+            entry.addProperty("held", answer);
+            seen.add(entry);
+        });
+        json.add("lastSeen", seen);
+
+        JsonArray done = new JsonArray();
+        satisfiedAt.forEach((player, when) -> {
+            JsonObject entry = new JsonObject();
+            entry.addProperty("id", player.toString());
+            entry.addProperty("at", when);
+            done.add(entry);
+        });
+        json.add("satisfied", done);
+
+        JsonArray who = new JsonArray();
+        for (UUID player : roster) who.add(player.toString());
+        json.add("roster", who);
+        return json;
+    }
+
+    public static EdgeMemory fromJson(JsonObject json) {
+        EdgeMemory memory = new EdgeMemory();
+        if (json == null) return memory;
+        memory.armed = json.has("armed") && json.get("armed").getAsBoolean();
+        readEach(json, "lastSeen", entry ->
+                memory.lastSeen.put(UUID.fromString(entry.get("id").getAsString()),
+                        entry.get("held").getAsBoolean()));
+        readEach(json, "satisfied", entry ->
+                memory.satisfiedAt.put(UUID.fromString(entry.get("id").getAsString()),
+                        entry.get("at").getAsLong()));
+        if (json.has("roster") && json.get("roster").isJsonArray()) {
+            for (com.google.gson.JsonElement element : json.getAsJsonArray("roster")) {
+                try {
+                    memory.roster.add(UUID.fromString(element.getAsString()));
+                } catch (IllegalArgumentException ignored) {
+                    // A name that is not a uuid is from a file somebody edited.
+                }
+            }
+        }
+        return memory;
+    }
+
+    private static void readEach(JsonObject json, String key,
+                                 java.util.function.Consumer<JsonObject> each) {
+        if (!json.has(key) || !json.get(key).isJsonArray()) return;
+        for (com.google.gson.JsonElement element : json.getAsJsonArray(key)) {
+            if (!element.isJsonObject()) continue;
+            try {
+                each.accept(element.getAsJsonObject());
+            } catch (RuntimeException ignored) {
+                // One unreadable entry loses one player, not the whole round.
+            }
+        }
+    }
 }

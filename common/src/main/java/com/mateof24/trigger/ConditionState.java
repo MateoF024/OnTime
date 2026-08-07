@@ -1,5 +1,8 @@
 package com.mateof24.trigger;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -99,6 +102,48 @@ public final class ConditionState {
         Set<String> alive = new java.util.HashSet<>();
         for (Condition.Watch leaf : root.leaves()) alive.add(leaf.id());
         perLeaf.keySet().retainAll(alive);
+    }
+
+    public JsonObject toJson() {
+        JsonObject json = new JsonObject();
+        json.addProperty("armed", armed);
+        JsonObject leaves = new JsonObject();
+        perLeaf.forEach((id, memory) -> leaves.add(id, memory.toJson()));
+        json.add("leaves", leaves);
+
+        JsonObject events = new JsonObject();
+        inbox.forEach((id, players) -> {
+            JsonArray array = new JsonArray();
+            for (UUID player : players) array.add(player.toString());
+            events.add(id, array);
+        });
+        json.add("inbox", events);
+        return json;
+    }
+
+    public static ConditionState fromJson(JsonObject json) {
+        ConditionState state = new ConditionState();
+        if (json == null) return state;
+        state.armed = json.has("armed") && json.get("armed").getAsBoolean();
+        if (json.has("leaves") && json.get("leaves").isJsonObject()) {
+            JsonObject leaves = json.getAsJsonObject("leaves");
+            for (String id : leaves.keySet()) {
+                state.perLeaf.put(id, EdgeMemory.fromJson(leaves.getAsJsonObject(id)));
+            }
+        }
+        if (json.has("inbox") && json.get("inbox").isJsonObject()) {
+            JsonObject events = json.getAsJsonObject("inbox");
+            for (String id : events.keySet()) {
+                for (com.google.gson.JsonElement element : events.getAsJsonArray(id)) {
+                    try {
+                        state.recordEvent(id, UUID.fromString(element.getAsString()));
+                    } catch (IllegalArgumentException ignored) {
+                        // See EdgeMemory: a hand-edited file loses one entry.
+                    }
+                }
+            }
+        }
+        return state;
     }
 
     void markGroup(String groupId, long now) { groupSatisfiedAt.put(groupId, now); }

@@ -170,6 +170,51 @@ public final class RuleEngine {
         spent.removeIf(key -> key.startsWith(prefix));
     }
 
+    /**
+     * Everything armed, so a restart does not quietly start the round again.
+     *
+     * <p>Keyed by timer and rule, the same key the engine uses in memory, so a
+     * rule that was edited while the server was down simply finds nothing and
+     * arms fresh — which is what editing it is supposed to do anyway.</p>
+     */
+    public static com.google.gson.JsonObject toJson() {
+        com.google.gson.JsonObject json = new com.google.gson.JsonObject();
+        com.google.gson.JsonObject armed = new com.google.gson.JsonObject();
+        states.forEach((key, state) -> armed.add(key, state.toJson()));
+        json.add("armed", armed);
+
+        com.google.gson.JsonObject waiting = new com.google.gson.JsonObject();
+        pendingDelay.forEach(waiting::addProperty);
+        json.add("waiting", waiting);
+
+        com.google.gson.JsonArray done = new com.google.gson.JsonArray();
+        for (String key : spent) done.add(key);
+        json.add("spent", done);
+        return json;
+    }
+
+    public static void loadFrom(com.google.gson.JsonObject json) {
+        resetAll();
+        if (json == null) return;
+        if (json.has("armed") && json.get("armed").isJsonObject()) {
+            com.google.gson.JsonObject armed = json.getAsJsonObject("armed");
+            for (String key : armed.keySet()) {
+                states.put(key, ConditionState.fromJson(armed.getAsJsonObject(key)));
+            }
+        }
+        if (json.has("waiting") && json.get("waiting").isJsonObject()) {
+            com.google.gson.JsonObject waiting = json.getAsJsonObject("waiting");
+            for (String key : waiting.keySet()) {
+                pendingDelay.put(key, waiting.get(key).getAsLong());
+            }
+        }
+        if (json.has("spent") && json.get("spent").isJsonArray()) {
+            for (com.google.gson.JsonElement element : json.getAsJsonArray("spent")) {
+                spent.add(element.getAsString());
+            }
+        }
+    }
+
     public static void resetAll() {
         states.clear();
         pendingDelay.clear();

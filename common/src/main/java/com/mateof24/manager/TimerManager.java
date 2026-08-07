@@ -394,6 +394,10 @@ public class TimerManager {
 
     public void saveTimers() {
         TimerStorage.saveTimers(timers, activeName());
+        // What the armed triggers have seen goes with it. A round that spans a
+        // restart would otherwise come back having forgotten who had already
+        // died, silently, which is the worst way for it to be wrong.
+        TimerStorage.saveTriggerState(com.mateof24.trigger.RuleEngine.toJson());
     }
 
     /**
@@ -423,6 +427,8 @@ public class TimerManager {
 
         TimerStorage.TimerLoadResult result = TimerStorage.loadTimers();
         timers.putAll(result.getTimers());
+
+        com.mateof24.trigger.RuleEngine.loadFrom(TimerStorage.loadTriggerState());
 
         java.util.List<com.google.gson.JsonObject> stored = TimerStorage.loadRunElements();
         if (stored != null) {

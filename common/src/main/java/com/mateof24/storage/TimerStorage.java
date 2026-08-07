@@ -22,6 +22,8 @@ public class TimerStorage {
     private static final Path LEGACY_FILE = CONFIG_DIR.resolve("timers.json");
     private static final Path ACTIVE_FILE = TIMERS_DIR.resolve("_active.json");
     private static final Path RUNS_FILE = TIMERS_DIR.resolve("_runs.json");
+    /** What every armed trigger has seen. Runtime state, so it sits with the runs. */
+    private static final Path TRIGGERS_FILE = TIMERS_DIR.resolve("_triggers.json");
 
     public static void saveTimers(Map<String, Timer> timers, String activeTimerName) {
         try {
@@ -114,6 +116,33 @@ public class TimerStorage {
      * @return null when the file is absent, which is what tells the caller to
      *         fall back to migrating {@code _active.json}
      */
+    /**
+     * What the triggers have seen, so a round survives a restart.
+     *
+     * <p>Beside the runs rather than inside a timer: a timer file is what an
+     * operator configured, and this is what happened afterwards. Mixing the
+     * two would mean a backup of a configuration carried half a match with
+     * it.</p>
+     */
+    public static void saveTriggerState(JsonObject json) {
+        try {
+            Files.createDirectories(TIMERS_DIR);
+            writeJsonAtomic(TRIGGERS_FILE, json);
+        } catch (Exception e) {
+            com.mateof24.OnTimeConstants.LOGGER.warn("Could not save the trigger state", e);
+        }
+    }
+
+    public static JsonObject loadTriggerState() {
+        if (!Files.exists(TRIGGERS_FILE)) return null;
+        try (Reader reader = Files.newBufferedReader(TRIGGERS_FILE, StandardCharsets.UTF_8)) {
+            return GSON.fromJson(reader, JsonObject.class);
+        } catch (Exception e) {
+            com.mateof24.OnTimeConstants.LOGGER.warn("Could not read the trigger state", e);
+            return null;
+        }
+    }
+
     public static List<JsonObject> loadRunElements() {
         if (!Files.exists(RUNS_FILE)) return null;
         List<JsonObject> entries = new ArrayList<>();
