@@ -487,5 +487,9 @@
   "ontime.gui.editor.trigger.value.ftb_quest": "Id de la misión",
   "ontime.gui.editor.trigger.value.ftb_reward": "Id de la recompensa",
   "ontime.gui.editor.trigger.value.scoreboard": "Objetivo",
-  "ontime.gui.editor.trigger.value.expression": "Expresión"
+  "ontime.gui.editor.trigger.value.expression": "Expresión",
+  "ontime.config.hide_on_cooldown": "Ocultar mientras espera",
+  "ontime.config.hide_on_cooldown.tooltip": "Un contador entre repeticiones desaparece en vez de quedarse ahí parado. Parado parece roto, y la única forma de saberlo era esperar a ver.",
+  "ontime.gui.editor.field.config.hide_on_cooldown": "Ocultar mientras espera",
+  "ontime.gui.editor.field.config.hide_on_cooldown.tip": "Este contador desaparece mientras espera una repetición o una cesión de turno, en vez de quedarse ahí parado."
 }

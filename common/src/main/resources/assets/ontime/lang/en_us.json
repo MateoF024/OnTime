@@ -487,5 +487,9 @@
   "ontime.gui.editor.trigger.value.ftb_quest": "Quest id",
   "ontime.gui.editor.trigger.value.ftb_reward": "Reward id",
   "ontime.gui.editor.trigger.value.scoreboard": "Objective",
-  "ontime.gui.editor.trigger.value.expression": "Expression"
+  "ontime.gui.editor.trigger.value.expression": "Expression",
+  "ontime.config.hide_on_cooldown": "Hide while waiting",
+  "ontime.config.hide_on_cooldown.tooltip": "A counter between repeats disappears instead of sitting there stopped. Stopped reads as broken, and the only way to tell was to wait and see.",
+  "ontime.gui.editor.field.config.hide_on_cooldown": "Hide while waiting",
+  "ontime.gui.editor.field.config.hide_on_cooldown.tip": "This counter disappears while it waits out a repeat or a hand-over, instead of sitting there stopped."
 }

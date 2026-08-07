@@ -54,6 +54,7 @@ public final class TimerState {
         List<RunView> views = new ArrayList<>();
         for (TimerRun run : TimerManager.getInstance().runsView()) {
             if (run.isAwaitingSequence()) continue;
+            if (!isVisibleNow(run)) continue;
             if (!run.isVisibleTo(player)) continue;
             views.add(toView(run));
         }
@@ -82,6 +83,7 @@ public final class TimerState {
 
         for (TimerRun run : TimerManager.getInstance().runsView()) {
             if (run.isAwaitingSequence()) continue;
+            if (!isVisibleNow(run)) continue;
             RunView view = toView(run);
             if (run.audience().isGlobal()) {
                 for (List<RunView> seen : perPlayer.values()) seen.add(view);
@@ -100,6 +102,19 @@ public final class TimerState {
             grouped.computeIfAbsent(entry.getValue(), key -> new ArrayList<>()).add(entry.getKey());
         }
         return grouped;
+    }
+
+    /**
+     * Whether this run is drawn at all right now.
+     *
+     * <p>A counter waiting out a repeat or a hand-over sits there stopped,
+     * which reads as one that has broken — the only way to tell was to wait
+     * and see whether it started again. Hidden means not sent: there is
+     * nothing for the client to decide, and nothing to go stale if the
+     * connection is quiet.</p>
+     */
+    private static boolean isVisibleNow(TimerRun run) {
+        return !run.isInCooldown() || !run.timer().display().hideOnCooldown();
     }
 
     private static RunView toView(TimerRun run) {

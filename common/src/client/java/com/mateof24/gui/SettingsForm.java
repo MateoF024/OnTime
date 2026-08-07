@@ -93,6 +93,7 @@ public final class SettingsForm {
             // for every other preset the coordinates mean nothing at all.
             Row.action("customPosition", "customPosition"),
             Row.of("timerScale", Kind.FLOAT, "scale"),
+            Row.of("hideOnCooldown", Kind.BOOL, "hideOnCooldown"),
 
             Row.header("colors"),
             Row.of("colorHigh", Kind.COLOR, "colorHigh"),

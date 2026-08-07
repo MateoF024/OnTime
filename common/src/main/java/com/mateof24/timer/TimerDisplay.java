@@ -20,6 +20,7 @@ import com.mateof24.config.ModConfig;
  */
 public final class TimerDisplay {
 
+    private boolean hideOnCooldown;
     private String preset;
     private int x;
     private int y;
@@ -50,6 +51,7 @@ public final class TimerDisplay {
         display.colorLow = config.getColorLow();
         display.thresholdMid = config.getThresholdMid();
         display.thresholdLow = config.getThresholdLow();
+        display.hideOnCooldown = config.isHideOnCooldown();
         display.soundId = config.getTimerSoundId();
         display.soundVolume = config.getTimerSoundVolume();
         display.soundPitch = config.getTimerSoundPitch();
@@ -68,6 +70,7 @@ public final class TimerDisplay {
         other.colorLow = colorLow;
         other.thresholdMid = thresholdMid;
         other.thresholdLow = thresholdLow;
+        other.hideOnCooldown = hideOnCooldown;
         other.soundId = soundId;
         other.soundVolume = soundVolume;
         other.soundPitch = soundPitch;
@@ -90,6 +93,7 @@ public final class TimerDisplay {
     public int colorLow() { return colorLow; }
     public int thresholdMid() { return thresholdMid; }
     public int thresholdLow() { return thresholdLow; }
+    public boolean hideOnCooldown() { return hideOnCooldown; }
     public String soundId() { return soundId; }
     public float soundVolume() { return soundVolume; }
     public float soundPitch() { return soundPitch; }
@@ -118,6 +122,8 @@ public final class TimerDisplay {
 
     public void setThresholdLow(int value) { thresholdLow = Math.max(0, Math.min(100, value)); }
 
+    public void setHideOnCooldown(boolean value) { hideOnCooldown = value; }
+
     public void setSoundId(String value) {
         if (value != null && !value.isEmpty()) soundId = value;
     }
@@ -137,6 +143,7 @@ public final class TimerDisplay {
         json.addProperty("colorLow", colorLow);
         json.addProperty("thresholdMid", thresholdMid);
         json.addProperty("thresholdLow", thresholdLow);
+        json.addProperty("hideOnCooldown", hideOnCooldown);
         json.addProperty("soundId", soundId);
         json.addProperty("soundVolume", soundVolume);
         json.addProperty("soundPitch", soundPitch);
@@ -163,6 +170,7 @@ public final class TimerDisplay {
         if (has(json, "colorLow")) setColorLow(json.get("colorLow").getAsInt());
         if (has(json, "thresholdMid")) setThresholdMid(json.get("thresholdMid").getAsInt());
         if (has(json, "thresholdLow")) setThresholdLow(json.get("thresholdLow").getAsInt());
+        if (has(json, "hideOnCooldown")) hideOnCooldown = json.get("hideOnCooldown").getAsBoolean();
         if (has(json, "soundId")) setSoundId(json.get("soundId").getAsString());
         if (has(json, "soundVolume")) setSoundVolume(json.get("soundVolume").getAsFloat());
         if (has(json, "soundPitch")) setSoundPitch(json.get("soundPitch").getAsFloat());

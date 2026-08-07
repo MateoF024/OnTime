@@ -45,6 +45,15 @@ public class ModConfig {
     private String timerSoundId = "minecraft:block.note_block.hat";
     private float timerSoundVolume = 1.0f;
     private float timerSoundPitch = 2.0f;
+    /**
+     * Whether a counter waiting out a cooldown disappears instead of sitting
+     * there stopped.
+     *
+     * <p>On by default: a timer frozen between repeats reads as a timer that
+     * has broken, and the only way to tell the difference was to wait and see
+     * whether it started again.</p>
+     */
+    private boolean hideOnCooldown = true;
     private boolean webSocketEnabled = false;
     // Defaults adjacent to Minecraft's port range (25565 main, 25575 RCON) so
     // they group naturally in firewall/port-forwarding rules and avoid the
@@ -170,6 +179,14 @@ public class ModConfig {
                         "Could not restore the default of '{}'", field.getName(), e);
             }
         }
+        dirty = true;
+    }
+
+    public boolean isHideOnCooldown() { return hideOnCooldown; }
+
+    public void setHideOnCooldown(boolean value) {
+        if (hideOnCooldown == value) return;
+        hideOnCooldown = value;
         dirty = true;
     }
 

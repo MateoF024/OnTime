@@ -59,6 +59,8 @@ public final class AdminPanel {
 
     /** Sits under vanilla's dimming, so it only needs to be a hint. */
     private static final int COLOR_BAND = 0x50000000;
+    /** How many of the band's rows are spent fading it out. */
+    private static final int BAND_FADE = 10;
     /** Drawn over the world after the widgets, so it has to carry on its own. */
     private static final int COLOR_RULE = 0x70FFFFFF;
     private static final int COLOR_SCRIM = 0xC0000000;
@@ -1951,6 +1953,32 @@ public final class AdminPanel {
      * The header band. Drawn before the screen renders, so vanilla's dimming
      * and every widget land on top of it.
      */
+    /**
+     * The band behind the title, fading out downwards.
+     *
+     * <p>It has no bottom border, so a flat fill ended in a hard line across
+     * the screen with nothing to explain it. Fading the last rows out lets it
+     * stop without anybody noticing where.</p>
+     *
+     * <p>Drawn as rows rather than as a gradient call: {@link Painter} has one
+     * fill and adding a gradient to it would mean a version-specific
+     * implementation in each of the three screens, for something four lines of
+     * arithmetic do here.</p>
+     */
+    private void drawHeaderBand(Painter painter) {
+        int solid = HEADER_HEIGHT - BAND_FADE;
+        painter.rect(0, 0, width, solid, COLOR_BAND);
+
+        int alpha = COLOR_BAND >>> 24;
+        for (int row = 0; row < BAND_FADE; row++) {
+            // Squared, so it thins quickly at first and then trails off. A
+            // straight ramp still reads as an edge, only a softer one.
+            float left = 1f - (row + 1) / (float) BAND_FADE;
+            int faded = Math.round(alpha * left * left);
+            painter.rect(0, solid + row, width, 1, (faded << 24) | (COLOR_BAND & 0xFFFFFF));
+        }
+    }
+
     public void drawBands(Painter painter, int mouseX, int mouseY) {
         pointerX = mouseX;
         pointerY = mouseY;
@@ -1959,7 +1987,7 @@ public final class AdminPanel {
         // previous frame's answer.
         assist.update(mouseX, mouseY);
 
-        painter.rect(0, 0, width, HEADER_HEIGHT, COLOR_BAND);
+        drawHeaderBand(painter);
 
         // The dialog's fills go here for the same reason as the band: they are
         // large and opaque, and after the widgets they would bury its buttons.

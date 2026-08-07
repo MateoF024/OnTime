@@ -489,6 +489,7 @@ public final class AdminOps {
             }
             case "x" -> display.setX(args.get("value").getAsInt());
             case "y" -> display.setY(args.get("value").getAsInt());
+            case "hideOnCooldown" -> display.setHideOnCooldown(args.get("value").getAsBoolean());
             case "scale" -> {
                 float scale = (float) args.get("value").getAsDouble();
                 if (scale < 0.1f || scale > 5.0f) return Result.fail("Scale must be between 0.1 and 5");
