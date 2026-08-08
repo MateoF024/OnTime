@@ -57,14 +57,24 @@ public record Trigger(Kind kind, Action action, String value, int threshold, Who
      * schedule whose answer can be true for as long as it likes.</p>
      */
     public enum Kind {
-        PLAYER_JOIN(false, false),
+        // Being online is a state, and the edge of it is joining.
+        PLAYER_JOIN(true, false),
+        // Leaving, dying and coming back are the three that leave nothing
+        // behind to ask about. They are true for the one pass that reads them.
         PLAYER_LEAVE(false, false),
         PLAYER_DEATH(false, false),
         PLAYER_RESPAWN(false, false),
-        DIMENSION_CHANGE(false, true),
-        ADVANCEMENT(false, true),
-        FTB_QUEST(false, true),
-        FTB_REWARD(false, true),
+        // Being in a dimension is a state, and the edge of it is arriving.
+        // As an event it was true for ever after, so "in the Nether and in the
+        // End" meant "went to both at some point" -- which one player can do,
+        // and which is not what an "and" says.
+        DIMENSION_CHANGE(true, true),
+        // These three were already asked rather than pushed: the probe queries
+        // them and always did. Only the label said otherwise, and the label is
+        // what decided they latched.
+        ADVANCEMENT(true, true),
+        FTB_QUEST(true, true),
+        FTB_REWARD(true, true),
         SCOREBOARD(true, true),
         EXPRESSION(true, true);
 

@@ -93,10 +93,7 @@ public record TriggerRule(String id, Trigger.Action action, Condition condition,
         if (trigger == null) return null;
         Condition.Watch watch = new Condition.Watch(
                 Condition.freshId(), trigger.kind(), trigger.value(), trigger.threshold(),
-                trigger.who(),
-                // What the flat form did: an event was a moment and had to be
-                // remembered, a polled kind was a state asked over and over.
-                true, !trigger.kind().polled(), false);
+                trigger.who(), true, false);
         return TriggerRule.of(trigger.action(), watch);
     }
 }

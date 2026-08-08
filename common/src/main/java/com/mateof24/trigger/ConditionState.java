@@ -26,7 +26,6 @@ public final class ConditionState {
     private final Map<String, EdgeMemory> perLeaf = new HashMap<>();
 
     /** Set once per group id when its window last mattered, for reporting. */
-    private final Map<String, Long> groupSatisfiedAt = new HashMap<>();
 
     /**
      * Players an event has happened to, per leaf, since arming.
@@ -55,6 +54,28 @@ public final class ConditionState {
         return seen != null && seen.contains(player);
     }
 
+    /**
+     * Whoever an event has landed for, which may include somebody who is no
+     * longer online — leaving the server is exactly such an event, and the one
+     * it happened to is the one the resolver can no longer see.
+     */
+    public Set<UUID> eventPlayers(String leafId) {
+        Set<UUID> seen = inbox.get(leafId);
+        return seen == null ? Set.of() : Set.copyOf(seen);
+    }
+
+    /**
+     * Forgets every event that has landed.
+     *
+     * <p>Called once the engine has read them. An event is true for the one
+     * evaluation that follows it and no longer: while the inbox was kept until
+     * the rule disarmed, "all of these hold" over two events meant "both
+     * happened at some point since arming", which is not what an and says.</p>
+     */
+    public void clearInbox() {
+        inbox.clear();
+    }
+
     /** The memory for one leaf, made on first use. */
     public EdgeMemory of(Condition.Watch leaf) {
         return perLeaf.computeIfAbsent(leaf.id(), k -> new EdgeMemory());
@@ -72,7 +93,6 @@ public final class ConditionState {
     public void arm(Condition root, Map<String, Set<UUID>> subjects,
                     Map<String, Set<UUID>> satisfied) {
         perLeaf.clear();
-        groupSatisfiedAt.clear();
         inbox.clear();
         if (root != null) {
             for (Condition.Watch leaf : root.leaves()) {
@@ -88,7 +108,6 @@ public final class ConditionState {
     public void disarm() {
         for (EdgeMemory memory : perLeaf.values()) memory.disarm();
         perLeaf.clear();
-        groupSatisfiedAt.clear();
         inbox.clear();
         armed = false;
     }
@@ -146,7 +165,5 @@ public final class ConditionState {
         return state;
     }
 
-    void markGroup(String groupId, long now) { groupSatisfiedAt.put(groupId, now); }
 
-    Long groupSatisfiedAt(String groupId) { return groupSatisfiedAt.get(groupId); }
 }

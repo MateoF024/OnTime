@@ -93,9 +93,15 @@ public final class RuleEngine {
                     continue;
                 }
 
-                if (!ConditionEngine.isTrue(rule.condition(), state, new ServerProbe(server, timer, state))) {
-                    continue;
-                }
+                boolean holds = ConditionEngine.isTrue(
+                        rule.condition(), state, new ServerProbe(server, timer, state));
+                // Read, then forgotten. An event counts for the one pass that
+                // follows it, so two of them in one branch have to have landed
+                // in the same tick to be true together -- which is what "all
+                // of these hold" says. Anything that landed after this pass
+                // began is still in the inbox for the next one.
+                state.clearInbox();
+                if (!holds) continue;
 
                 if (rule.delayTicks() > 0) {
                     // Committed from here: if the condition lapses while it

@@ -92,6 +92,17 @@ public final class EdgeMemory {
         return true;
     }
 
+    /**
+     * Whether this player has had a rising edge since the rule armed.
+     *
+     * <p>What separates "is in the Nether" from "arrived in the Nether":
+     * somebody already there when the rule armed has no edge, and so is not a
+     * reason for anything to happen.</p>
+     */
+    public boolean sawEdge(UUID player) {
+        return satisfiedAt.containsKey(player);
+    }
+
     /** Drops a player who is no longer being watched, so "all of them" can still finish. */
     public void forget(UUID player) {
         lastSeen.remove(player);

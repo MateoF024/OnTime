@@ -651,7 +651,6 @@ public final class AdminOps {
                 com.mateof24.trigger.Condition.freshId(), kind, value.trim(),
                 intOf(args, "threshold", 0), who,
                 !args.has("edge") || args.get("edge").getAsBoolean(),
-                args.has("latched") ? args.get("latched").getAsBoolean() : !kind.polled(),
                 args.has("negated") && args.get("negated").getAsBoolean());
 
         // Into an existing group when one is named, so a second condition can
@@ -703,13 +702,13 @@ public final class AdminOps {
                 com.mateof24.trigger.Condition.Group.Mode.parse(str(args, "mode"));
         com.mateof24.trigger.Condition.Group group = new com.mateof24.trigger.Condition.Group(
                 com.mateof24.trigger.Condition.freshId(), mode, intOf(args, "count", 1),
-                (long) intOf(args, "windowSeconds", 0) * 1000L, java.util.List.of());
+                java.util.List.of());
 
         String ruleId = str(args, "ruleId");
         if (ruleId == null || ruleId.isBlank()) {
             com.mateof24.trigger.Condition.Group outer = new com.mateof24.trigger.Condition.Group(
                     com.mateof24.trigger.Condition.freshId(),
-                    com.mateof24.trigger.Condition.Group.Mode.ANY, 1, 0L,
+                    com.mateof24.trigger.Condition.Group.Mode.ANY, 1,
                     java.util.List.of(group));
             timer.rules().add(new com.mateof24.trigger.TriggerRule(
                     com.mateof24.trigger.Condition.freshId(),
@@ -751,7 +750,7 @@ public final class AdminOps {
             children.addAll(outer.children());
             children.add(group);
             return new com.mateof24.trigger.Condition.Group(outer.id(), outer.mode(),
-                    outer.count(), outer.windowMillis(), children);
+                    outer.count(), children);
         }
         // A rule that was one plain condition becomes the first group of an
         // "any", which is what it already meant on its own.

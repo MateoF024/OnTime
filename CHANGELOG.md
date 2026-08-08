@@ -4,6 +4,19 @@
 
 ### Changed
 
+- **Breaking:** "all of these hold" means at the same moment. Conditions that
+  have a state behind them are asked rather than remembered: being in a
+  dimension, holding an advancement, having completed a quest or claimed a
+  reward, being online. Each is true while it is true and stops when it stops,
+  so an "and" of two of them asks for both at once — one player can no longer
+  satisfy "in the Nether and in the End" by visiting them in turn. Leaving,
+  dying and respawning leave nothing behind to ask about, so they are true for
+  the one pass that reads them: two of those in one alternative have to land in
+  the same tick.
+- **Breaking:** a condition no longer carries  and a group no longer
+  carries . The latch is what made an "and" mean "both happened
+  at some point"; the window was its bound and nothing ever set it. Both are
+  dropped from the stored shape and from .
 - **Breaking:** the FTB quest poller, the trigger registry and the trigger
   evaluator are gone. They were the pre-5.0.0 engine, and nothing read what
   they wrote: FTB quests and rewards are polled per player by the condition

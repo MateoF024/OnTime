@@ -74,7 +74,7 @@ public interface Condition {
             kept.add(pruned);
         }
         if (kept.isEmpty()) return null;
-        return new Group(group.id(), group.mode(), group.count(), group.windowMillis(), kept);
+        return new Group(group.id(), group.mode(), group.count(), kept);
     }
 
     /**
@@ -97,8 +97,7 @@ public interface Condition {
         if (groupId.equals(group.id())) {
             List<Condition> children = new ArrayList<>(group.children());
             children.add(added);
-            return new Group(group.id(), group.mode(), group.count(),
-                    group.windowMillis(), children);
+            return new Group(group.id(), group.mode(), group.count(), children);
         }
         List<Condition> children = new ArrayList<>();
         boolean found = false;
@@ -110,7 +109,7 @@ public interface Condition {
             children.add(grown == null ? child : grown);
         }
         if (!found) return null;
-        return new Group(group.id(), group.mode(), group.count(), group.windowMillis(), children);
+        return new Group(group.id(), group.mode(), group.count(), children);
     }
 
     /** Null when the object describes nothing this version understands. */
@@ -131,30 +130,22 @@ public interface Condition {
      * whole design.</p>
      *
      * @param edge    true when only a change counts, so holding an advancement
-     *                is not earning one. False means a state that already
-     *                holds when the trigger arms is enough on its own.
-     * @param latched true when satisfying it once keeps it satisfied. Required
-     *                for anything combined with AND — one player changing
-     *                dimension says nothing about the rest, so the halves have
-     *                to be remembered to ever be true together.
-     * @param negated true for "nobody is in the Nether". Only meaningful while
-     *                live: a latched negative freezes true the moment it is,
-     *                which is never what anybody means.
+     *                is not earning one and standing in the Nether when the
+     *                rule arms is not arriving there. False means a state that
+     *                already holds is enough on its own.
+     * @param negated true for "nobody is in the Nether".
      */
     record Watch(String id, Trigger.Kind kind, String value, int threshold, Who who,
-                 boolean edge, boolean latched, boolean negated) implements Condition {
+                 boolean edge, boolean negated) implements Condition {
 
         public Watch {
             if (id == null || id.isBlank()) id = freshId();
             if (value == null) value = "";
             if (who == null) who = Who.DEFAULT;
-            // A negated latch is a contradiction rather than a preference, so
-            // it is refused here instead of being left to every caller.
-            if (negated) latched = false;
         }
 
         public static Watch of(Trigger.Kind kind, Who who) {
-            return new Watch(freshId(), kind, "", 0, who, true, !kind.polled(), false);
+            return new Watch(freshId(), kind, "", 0, who, true, false);
         }
 
         /** Whether this is complete enough to ever be true. */
@@ -176,7 +167,6 @@ public interface Condition {
             if (kind == Trigger.Kind.SCOREBOARD) json.addProperty("threshold", threshold);
             json.add("who", who.toJson());
             json.addProperty("edge", edge);
-            json.addProperty("latched", latched);
             if (negated) json.addProperty("negated", true);
             return json;
         }
@@ -192,7 +182,6 @@ public interface Condition {
                     json.has("threshold") ? json.get("threshold").getAsInt() : 0,
                     json.has("who") ? Who.fromJson(json.getAsJsonObject("who")) : Who.DEFAULT,
                     !json.has("edge") || json.get("edge").getAsBoolean(),
-                    json.has("latched") && json.get("latched").getAsBoolean(),
                     json.has("negated") && json.get("negated").getAsBoolean());
         }
     }
@@ -207,13 +196,13 @@ public interface Condition {
      * count of one — but both are spelled out because that is how people say
      * them.</p>
      *
-     * @param windowMillis how long a satisfied child stays counted, or 0 for
-     *                     ever. This is what makes "both teams ready within
-     *                     thirty seconds" mean anything: without it a latch
-     *                     from an hour ago still counts and "both" is
-     *                     satisfied by one.
+     * <p>"All of these hold" means at the same moment. A group carried a
+     * window once, so that two things happening minutes apart could still
+     * count as together; nothing ever set it, and what it did set was the
+     * worst of the two answers — zero meaning "for ever", which turned every
+     * and into "both happened at some point".</p>
      */
-    record Group(String id, Mode mode, int count, long windowMillis,
+    record Group(String id, Mode mode, int count,
                  List<Condition> children) implements Condition {
 
         public enum Mode {
@@ -235,11 +224,10 @@ public interface Condition {
             if (children == null) children = List.of();
             children = List.copyOf(children);
             if (count < 1) count = 1;
-            if (windowMillis < 0) windowMillis = 0;
         }
 
         public static Group of(Mode mode, List<Condition> children) {
-            return new Group(freshId(), mode, 1, 0L, children);
+            return new Group(freshId(), mode, 1, children);
         }
 
         /** How many children have to be true. */
@@ -271,7 +259,6 @@ public interface Condition {
             json.addProperty("id", id);
             json.addProperty("mode", mode.lower());
             if (mode == Mode.AT_LEAST) json.addProperty("count", count);
-            if (windowMillis > 0) json.addProperty("windowMillis", windowMillis);
             JsonArray array = new JsonArray();
             for (Condition child : children) array.add(child.toJson());
             json.add("children", array);
@@ -291,7 +278,6 @@ public interface Condition {
                     json.has("id") ? json.get("id").getAsString() : freshId(),
                     Mode.parse(json.has("mode") ? json.get("mode").getAsString() : null),
                     json.has("count") ? json.get("count").getAsInt() : 1,
-                    json.has("windowMillis") ? json.get("windowMillis").getAsLong() : 0L,
                     children);
         }
     }

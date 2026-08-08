@@ -43,9 +43,7 @@ public final class ConditionEngine {
         for (Condition child : group.children()) {
             if (isTrue(child, state, probe)) satisfied++;
         }
-        boolean enough = satisfied >= group.required();
-        if (enough) state.markGroup(group.id(), probe.now());
-        return enough;
+        return satisfied >= group.required();
     }
 
     /**
@@ -60,18 +58,28 @@ public final class ConditionEngine {
         if (!leaf.isValid()) return false;
 
         EdgeMemory memory = state.of(leaf);
-        Set<UUID> subject = probe.subject(leaf);
+        Set<UUID> subject = new java.util.HashSet<>(probe.subject(leaf));
+        // Whoever the event happened to, even if the resolver can no longer
+        // see them: leaving the server is exactly such an event, and its
+        // subject is the one person who is no longer online to be resolved.
+        subject.addAll(state.eventPlayers(leaf.id()));
 
         // An empty subject can never satisfy anything, for the same reason an
         // empty group cannot.
         if (subject.isEmpty()) return false;
 
         long now = probe.now();
-        int holdingNow = 0;
+        int have = 0;
         for (UUID player : subject) {
             boolean holds = probe.holds(leaf, player);
-            if (holds) holdingNow++;
             memory.observe(player, holds, now);
+            if (!holds) continue;
+            // True now, and it became true after the rule armed. Without the
+            // second half a player already standing in the Nether would be a
+            // reason to start, which is not what "when a player reaches the
+            // Nether" says.
+            if (leaf.edge() && !memory.sawEdge(player)) continue;
+            have++;
         }
 
         // Whoever the trigger no longer watches stops being expected, or "all
@@ -82,37 +90,7 @@ public final class ConditionEngine {
         for (UUID player : subject) memory.roster().add(player);
 
         int needed = WhoResolver.required(leaf.who(), memory.roster().size());
-        int have = leaf.latched()
-                ? memory.satisfiedCount(now, 0L)
-                : holdingNow;
-
-        // Not the edge memory's business: without an edge, a state that was
-        // already true when this armed counts on its own.
-        if (!leaf.edge() && !leaf.latched()) have = holdingNow;
-
         boolean met = have >= needed;
         return leaf.negated() != met;
-    }
-
-    /**
-     * The same answer, but only counting satisfactions inside a window.
-     *
-     * <p>Used by a group that carries one: "both teams ready" means little if
-     * one of them was ready an hour ago.</p>
-     */
-    public static boolean isTrueWithin(Condition condition, ConditionState state,
-                                       Probe probe, long windowMillis) {
-        if (windowMillis <= 0) return isTrue(condition, state, probe);
-        if (condition instanceof Condition.Watch leaf && leaf.latched()) {
-            EdgeMemory memory = state.of(leaf);
-            Set<UUID> subject = probe.subject(leaf);
-            if (subject.isEmpty()) return false;
-            long now = probe.now();
-            for (UUID player : subject) memory.observe(player, probe.holds(leaf, player), now);
-            int needed = WhoResolver.required(leaf.who(), memory.roster().size());
-            boolean met = memory.satisfiedCount(now, windowMillis) >= needed;
-            return leaf.negated() != met;
-        }
-        return isTrue(condition, state, probe);
     }
 }

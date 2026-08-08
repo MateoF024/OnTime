@@ -58,9 +58,26 @@ public final class ServerProbe implements ConditionEngine.Probe {
             case FTB_QUEST -> ftb(leaf, player, true);
             case FTB_REWARD -> ftb(leaf, player, false);
             case ADVANCEMENT -> advancement(leaf, player);
-            // Nothing to ask: it either happened since arming or it did not.
+            case DIMENSION_CHANGE -> inDimension(leaf, player);
+            case PLAYER_JOIN -> online(player) != null;
+            // Leaving, dying and respawning leave nothing to ask about. They
+            // are true for the one evaluation that reads them and no longer.
             default -> state.hasEvent(leaf.id(), player);
         };
+    }
+
+    /**
+     * Whether the player is in that dimension now.
+     *
+     * <p>Asked rather than remembered from the change, which is the whole
+     * point: "in the Nether" and "in the End" are then two things one player
+     * cannot be at once, and an "and" of them says so by itself.</p>
+     */
+    private boolean inDimension(Condition.Watch leaf, UUID player) {
+        ServerPlayer online = online(player);
+        if (online == null) return false;
+        return com.mateof24.compat.VanillaCompat.dimensionId(
+                (net.minecraft.server.level.ServerLevel) online.level()).equals(leaf.value());
     }
 
     private boolean scoreboard(Condition.Watch leaf, UUID player) {
