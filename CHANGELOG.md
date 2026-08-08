@@ -4,6 +4,12 @@
 
 ### Changed
 
+- **Breaking:** a command is a command and a pause, not a string. `TimerDefinition`
+  reports `finishCommands` and `scheduledCommands` as `TimedCommand` rather than
+  `String`. The server-wide `commandDelayTicks` setting and the per-timer copy of
+  it are gone with it: one figure for a whole timer could only ever be right for
+  one pair of its commands.
+
 - **Breaking:** "all of these hold" means at the same moment. Conditions that
   have a state behind them are asked rather than remembered: being in a
   dimension, holding an advancement, having completed a quest or claimed a
@@ -79,11 +85,11 @@
   rules: an id has to be an id, a selector a selector, and a list of names a
   list of names. Advancements, dimensions and the players online complete as
   you type, from what the server actually has.
-- A pause between commands can be set on a timer, not only on the server:
-  `/timer commands <name> delay <ticks>`, the timer's Commands page in game, and
-  the Commands block of its editor in the web panel. A timer takes a copy of the
-  server default when it is made, the way it takes its colours, so the box holds
-  a real figure; `delay reset` takes a fresh copy.
+- Every command carries its own pause: how long to wait after it before the
+  next one in the same batch. Set it as the command is added, on either
+  surface, or afterwards with `/timer commands <name> delay <index> <ticks>`.
+  Zero, which is what a command starts with, runs the batch together in one
+  tick.
 - The counter can hide itself while it waits out a cooldown, so a timer between
   repeats no longer reads as a timer that has broken. On by default.
 - Advancement fields complete as you type, from the list the server holds, the

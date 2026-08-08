@@ -66,7 +66,7 @@ public final class TimerRun {
      * Commands waiting on the configured delay, with placeholders already
      * resolved so {time} and {seconds} reflect the instant they were queued.
      */
-    private final java.util.ArrayDeque<String> pendingCommands = new java.util.ArrayDeque<>();
+    private final java.util.ArrayDeque<TimedCommand> pendingCommands = new java.util.ArrayDeque<>();
     private long commandDelayRemaining = 0L;
 
     private TimerRun(UUID runId, Timer timer, Audience audience, RunMode mode, UUID owner) {
@@ -260,11 +260,11 @@ public final class TimerRun {
 
     // ---- paced command queue ----
 
-    public void queueCommand(String resolvedCommand) { pendingCommands.add(resolvedCommand); }
+    public void queueCommand(TimedCommand resolved) { pendingCommands.add(resolved); }
 
     public boolean hasPendingCommands() { return !pendingCommands.isEmpty(); }
 
-    public String pollPendingCommand() { return pendingCommands.poll(); }
+    public TimedCommand pollPendingCommand() { return pendingCommands.poll(); }
 
     public boolean tickCommandDelay() {
         if (commandDelayRemaining > 0) {

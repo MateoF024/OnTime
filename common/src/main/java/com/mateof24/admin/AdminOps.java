@@ -117,6 +117,7 @@ public final class AdminOps {
                 case "timer.setDisplay" -> setDisplay(args);
                 case "timer.addCommand" -> addCommand(args);
                 case "timer.removeCommand" -> removeCommand(args);
+                case "timer.setCommandDelay" -> setCommandDelay(args);
                 case "timer.addTrigger" -> addTrigger(args);
                 case "timer.addGroup" -> addGroup(args);
                 case "timer.removeCondition" -> removeCondition(args);
@@ -179,13 +180,13 @@ public final class AdminOps {
         json.addProperty("targetTicks", def.targetTicks());
         json.addProperty("countUp", def.countUp());
         json.addProperty("silent", def.silent());
-        json.add("finishCommands", toArray(def.finishCommands()));
+        json.add("finishCommands", timedArray(def.finishCommands()));
 
         JsonArray scheduled = new JsonArray();
         def.scheduledCommands().forEach((at, commands) -> {
             JsonObject entry = new JsonObject();
             entry.addProperty("at", at);
-            entry.add("commands", toArray(commands));
+            entry.add("commands", timedArray(commands));
             scheduled.add(entry);
         });
         json.add("scheduled", scheduled);
@@ -197,7 +198,6 @@ public final class AdminOps {
         json.addProperty("repeat", def.repeat());
         json.addProperty("repeatCount", def.repeatCount());
         json.addProperty("repeatCooldownTicks", def.repeatCooldownTicks());
-        json.addProperty("commandDelayTicks", def.commandDelayTicks());
         json.addProperty("nextTimer", def.nextTimer());
         json.addProperty("sequenceCooldownTicks", def.sequenceCooldownTicks());
         // Sent as rules, each carrying its condition. The surfaces read the
@@ -225,6 +225,7 @@ public final class AdminOps {
                 JsonObject row = new JsonObject();
                 if (entry.atSeconds() != null) row.addProperty("at", entry.atSeconds());
                 row.addProperty("command", entry.command());
+                row.addProperty("delay", entry.delayTicks());
                 entries.add(row);
             }
             json.add("commandList", entries);
@@ -288,7 +289,6 @@ public final class AdminOps {
         json.addProperty("timerSoundVolume", config.getTimerSoundVolume());
         json.addProperty("timerSoundPitch", config.getTimerSoundPitch());
         json.addProperty("maxTimerSeconds", config.getMaxTimerSeconds());
-        json.addProperty("commandDelayTicks", config.getCommandDelayTicks());
         json.addProperty("hideOnCooldown", config.isHideOnCooldown());
         json.addProperty("confirmRunThreshold", config.getConfirmRunThreshold());
         json.addProperty("webSocketEnabled", config.isWebSocketEnabled());
@@ -329,6 +329,23 @@ public final class AdminOps {
             }
         } catch (RuntimeException e) {
             com.mateof24.OnTimeConstants.LOGGER.warn("Could not list dimensions", e);
+        }
+        return out;
+    }
+
+    /**
+     * A command and the pause after it, as one object each.
+     *
+     * <p>Not a bare string any more: the surfaces draw the pause beside the
+     * command, and a list of strings has nowhere to put it.</p>
+     */
+    private static JsonArray timedArray(java.util.List<com.mateof24.timer.TimedCommand> commands) {
+        JsonArray out = new JsonArray();
+        for (com.mateof24.timer.TimedCommand entry : commands) {
+            JsonObject one = new JsonObject();
+            one.addProperty("command", entry.command());
+            one.addProperty("delay", entry.delayTicks());
+            out.add(one);
         }
         return out;
     }
@@ -530,7 +547,6 @@ public final class AdminOps {
             case "x" -> display.setX(args.get("value").getAsInt());
             case "y" -> display.setY(args.get("value").getAsInt());
             case "hideOnCooldown" -> display.setHideOnCooldown(args.get("value").getAsBoolean());
-            case "commandDelayTicks" -> timer.setCommandDelayTicks(args.get("value").getAsInt());
             case "scale" -> {
                 float scale = (float) args.get("value").getAsDouble();
                 if (scale < 0.1f || scale > 5.0f) return Result.fail("Scale must be between 0.1 and 5");
@@ -582,9 +598,9 @@ public final class AdminOps {
             if (at * 20L > timer.getTargetTicks()) {
                 return Result.fail("That is past the end of this timer");
             }
-            ok = timer.addScheduledCommand(at, command);
+            ok = timer.addScheduledCommand(at, command, intOf(args, "delayTicks", 0));
         } else {
-            ok = timer.addFinishCommand(command);
+            ok = timer.addFinishCommand(command, intOf(args, "delayTicks", 0));
         }
         if (!ok) return Result.fail("This timer already holds as many commands as it may");
 
@@ -779,6 +795,19 @@ public final class AdminOps {
      * <p>A rule left with nothing goes with it. An empty group is false and
      * would sit there doing nothing while looking like a reason.</p>
      */
+    /** The pause after one entry of the flat list, by its position in it. */
+    private static Result setCommandDelay(JsonObject args) {
+        String name = requireTimer(args);
+        if (name == null) return Result.fail("No such timer");
+        com.mateof24.timer.Timer timer = TimerManager.getInstance().getTimer(name).orElse(null);
+        if (timer == null) return Result.fail("No such timer");
+        if (!timer.setEntryDelay(intOf(args, "index", -1), intOf(args, "delayTicks", 0))) {
+            return Result.fail("No such command");
+        }
+        TimerManager.getInstance().saveTimer(timer);
+        return Result.ok();
+    }
+
     private static Result removeCondition(JsonObject args) {
         String name = requireTimer(args);
         if (name == null) return Result.fail("No such timer");
@@ -954,7 +983,6 @@ public final class AdminOps {
             case "timerSoundVolume" -> config.setTimerSoundVolume(clampF((float) args.get("value").getAsDouble(), 0f, 1f));
             case "timerSoundPitch" -> config.setTimerSoundPitch(clampF((float) args.get("value").getAsDouble(), 0.5f, 2f));
             case "maxTimerSeconds" -> config.setMaxTimerSeconds(Math.max(1, args.get("value").getAsLong()));
-            case "commandDelayTicks" -> config.setCommandDelayTicks(clamp(intOf(args, "value", 0), 0, 1200));
             case "confirmRunThreshold" -> config.setConfirmRunThreshold(Math.max(-1, intOf(args, "value", 8)));
             case "webSocketEnabled" -> config.setWebSocketEnabled(bool(args, "value", false));
             case "webSocketPort" -> config.setWebSocketPort(clamp(intOf(args, "value", 25581), 1024, 65535));

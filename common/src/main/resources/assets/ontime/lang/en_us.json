@@ -41,8 +41,6 @@
   "ontime.config.threshold_low.tooltip": "Percentage threshold for low color",
   "ontime.config.max_timer_seconds": "Longest timer (s)",
   "ontime.config.max_timer_seconds.tooltip": "Maximum allowed timer duration in seconds",
-  "ontime.config.command_delay_ticks": "Delay between commands (ticks)",
-  "ontime.config.command_delay_ticks.tooltip": "Pause in ticks (20 = 1 second) between commands that run as a sequence at the same moment (a scheduled time point or the finish list). 0 = run all in the same tick",
   "ontime.config.position_preset": "Position",
   "ontime.config.position_preset.tooltip": "Select a preset position for the timer. Choose 'Custom' to use manual X/Y coordinates",
   "ontime.config.timer_sound_id": "Tick sound",
@@ -505,11 +503,7 @@
   "ontime.who.q.any.help": "One of them is enough.",
   "ontime.who.q.all.help": "Every one of them has to.",
   "ontime.who.q.at_least.help": "A number of them you choose.",
-  "ontime.gui.editor.field.command_delay": "Ticks between commands",
-  "ontime.gui.editor.field.command_delay.tip": "§fHow long this timer waits between two of its own commands. Zero runs them together.",
-  "ontime.gui.editor.command.delay.default": "0",
-  "ontime.command.set.command_delay.usage": "/ontime set <timer> commanddelay <ticks>",
-  "ontime.command.set.command_delay.ok": "%s waits %s tick(s) between its commands",
+  "ontime.command.set.command_delay.ok": "Command %s now waits %s tick(s) before the next one",
   "ontime.gui.editor.trigger.or": "or",
   "ontime.gui.editor.trigger.noStart": "Nothing starts it early",
   "ontime.gui.editor.trigger.noFinish": "Nothing ends it early",
@@ -519,5 +513,9 @@
   "ontime.gui.editor.trigger.add": "Add",
   "ontime.gui.editor.trigger.names.hint": "Bob, Ann",
   "ontime.gui.editor.trigger.selector.hint": "@a[team=red]",
-  "ontime.gui.detail.triggers_heading": "What starts or ends it"
+  "ontime.gui.detail.triggers_heading": "What starts or ends it",
+  "ontime.command.commands.no_such": "There is no command %s on this timer",
+  "ontime.gui.editor.command.delay": "Wait",
+  "ontime.gui.editor.command.delay.tip": "Ticks to wait after this command before the next one in the same batch. Zero runs them together.",
+  "ontime.gui.editor.command.waits": "then waits %s"
 }

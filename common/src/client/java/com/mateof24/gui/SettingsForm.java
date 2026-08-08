@@ -109,7 +109,6 @@ public final class SettingsForm {
 
             Row.header("server"),
             Row.of("maxTimerSeconds", Kind.INT),
-            Row.of("commandDelayTicks", Kind.INT),
             Row.of("confirmRunThreshold", Kind.INT),
 
             Row.header("web"),

@@ -238,7 +238,7 @@ public class TimerManager {
     public boolean addScheduledCommand(String name, long atSeconds, String command) {
         Timer timer = timers.get(name);
         if (timer == null) return false;
-        if (!timer.addScheduledCommand(atSeconds, command)) return false;
+        if (!timer.addScheduledCommand(atSeconds, command, 0)) return false;
         saveTimer(timer);
         return true;
     }
@@ -246,7 +246,7 @@ public class TimerManager {
     public boolean addFinishCommand(String name, String command) {
         Timer timer = timers.get(name);
         if (timer == null) return false;
-        if (!timer.addFinishCommand(command)) return false;
+        if (!timer.addFinishCommand(command, 0)) return false;
         saveTimer(timer);
         return true;
     }

@@ -80,7 +80,7 @@
       "reset.do": "Restore defaults", "reset.title": "Restore every default?",
       "reset.body": "Applied at once, and it cannot be undone. Timers that already exist keep their own values.",
       "cmd.add": "Add", "cmd.none": "This timer runs no commands", "cmd.end": "At the end",
-      "cmd.delay": "Ticks between commands", "cmd.delay.default": "0",
+      "cmd.wait": "Wait", "cmd.waits": "then waits %s",
       "cmd.text": "Command, without the leading slash",
       on: "On", off: "Off", finish: "Finish it", startIt: "Start it", none: "Off",
       "trigger.join": "A player joins", "trigger.leave": "A player leaves",
@@ -154,7 +154,7 @@
       "reset.do": "Restaurar valores", "reset.title": "¿Restaurar todos los valores?",
       "reset.body": "Se aplica al momento y no se puede deshacer. Los contadores ya creados conservan los suyos.",
       "cmd.add": "Añadir", "cmd.none": "Este contador no ejecuta ningún comando",
-      "cmd.delay": "Ticks entre comandos", "cmd.delay.default": "0",
+      "cmd.wait": "Espera", "cmd.waits": "luego espera %s",
       "cmd.end": "Al final", "cmd.text": "Comando, sin la barra inicial",
       on: "Sí", off: "No", finish: "Terminarlo", startIt: "Arrancarlo", none: "Nada",
       "trigger.join": "Entra un jugador", "trigger.leave": "Sale un jugador",
@@ -632,7 +632,7 @@
     ["colors", [["colorHigh", "color"], ["colorMid", "color"], ["colorLow", "color"],
       ["thresholdMid", "int"], ["thresholdLow", "int"]]],
     ["sound", [["timerSoundId", "text"], ["timerSoundVolume", "float"], ["timerSoundPitch", "float"]]],
-    ["server", [["maxTimerSeconds", "int"], ["commandDelayTicks", "int"],
+    ["server", [["maxTimerSeconds", "int"],
       ["confirmRunThreshold", "int"]]],
     ["web", [["webSocketEnabled", "bool"], ["webSocketPort", "int"], ["webPanelPort", "int"]]]
   ];
@@ -1413,13 +1413,6 @@
       });
 
       group("commands", s => {
-        // The pause this timer puts between its own commands, above the list
-        // it spaces out. -1, and an empty box, mean the server default.
-        const delay = field("commandDelay", "int", timer.commandDelayTicks ?? 0);
-        $("label", delay).textContent = t("cmd.delay");
-        $("input", delay).placeholder = t("cmd.delay.default");
-        s.append(delay);
-
         const list = document.createElement("div");
         const entries = timer.commandList || [];
         if (!entries.length) {
@@ -1436,7 +1429,9 @@
           at.textContent = entry.at === undefined ? t("cmd.end") : clock(entry.at * 20);
           const text = document.createElement("span");
           text.className = "cmd-text";
-          text.textContent = entry.command;
+          text.textContent = entry.delay > 0
+            ? entry.command + "   " + t("cmd.waits", entry.delay)
+            : entry.command;
           const remove = document.createElement("button");
           remove.type = "button";
           remove.className = "danger small";
@@ -1469,6 +1464,15 @@
         command.type = "text";
         command.placeholder = t("cmd.text");
         command.dataset.key = "cc";
+
+        // What waits after this one before the next in the same batch. Beside
+        // the command, because that is whose pause it is.
+        const wait = document.createElement("input");
+        wait.type = "number";
+        wait.min = "0";
+        wait.value = "0";
+        wait.className = "cmd-wait";
+        wait.title = t("cmd.wait");
         const add = document.createElement("button");
         add.type = "button";
         add.className = "primary small";
@@ -1479,12 +1483,13 @@
           const at = n("ch") * 3600 + n("cm") * 60 + n("cs");
           const args = { name: timer.name, command: command.value.trim() };
           if (at > 0) args.atSeconds = at;
+          args.delayTicks = parseInt(wait.value, 10) || 0;
           if (await act("timer.addCommand", args)) {
             const fresh = state.timers.find(x => x.name === timer.name);
             if (fresh) editDialog(fresh);
           }
         };
-        adder.append(cells, command, add);
+        adder.append(cells, command, wait, add);
         s.append(adder);
       });
     }, [
@@ -1526,9 +1531,6 @@
         await act("timer.setSequence", {
           name: timer.name, next: get("nextTimer").value.trim(),
           cooldownSeconds: num("sequenceCooldown")
-        });
-        await act("timer.setDisplay", {
-          name: timer.name, key: "commandDelayTicks", value: num("commandDelay")
         });
       }]
     ]);

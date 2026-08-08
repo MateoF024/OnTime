@@ -213,28 +213,12 @@ final class BehaviorCommands {
     }
 
     /**
-     * What this timer waits between two of its own commands.
+     * How long to wait after one command before the next one runs.
      *
-     * <p>Reported as the figure that will actually be used, and said plainly
-     * when that figure is the server's rather than this timer's — "follows
-     * the default" is the answer to a different question from "0 ticks", and
-     * the two used to be indistinguishable.</p>
+     * <p>Numbered as {@code list} numbers them and as {@code remove} takes
+     * them, so the three read off the same list.</p>
      */
-    static int viewCommandDelay(CommandContext<CommandSourceStack> ctx) {
-        return reportCommandDelay(ctx, null);
-    }
-
-    static int setCommandDelay(CommandContext<CommandSourceStack> ctx, int ticks) {
-        return reportCommandDelay(ctx, ticks);
-    }
-
-    /** Back to whatever the server currently offers a new timer. */
-    static int resetCommandDelay(CommandContext<CommandSourceStack> ctx) {
-        return reportCommandDelay(ctx,
-                com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks());
-    }
-
-    private static int reportCommandDelay(CommandContext<CommandSourceStack> ctx, Integer ticks) {
+    static int setCommandDelay(CommandContext<CommandSourceStack> ctx, int index, int ticks) {
         String name = StringArgumentType.getString(ctx, "name");
         Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
         if (timerOpt.isEmpty()) {
@@ -242,14 +226,14 @@ final class BehaviorCommands {
             return 0;
         }
         Timer timer = timerOpt.get();
-        if (ticks != null) {
-            timer.setCommandDelayTicks(ticks);
-            TimerManager.getInstance().saveTimers();
+        if (!timer.setEntryDelay(index - 1, ticks)) {
+            ctx.getSource().sendFailure(
+                    Component.translatable("ontime.command.commands.no_such", index));
+            return 0;
         }
-        int delay = timer.commandDelayTicks();
+        TimerManager.getInstance().saveTimers();
         ctx.getSource().sendSuccess(
-                () -> Component.translatable("ontime.command.set.command_delay.ok", name, delay),
-                ticks != null);
+                () -> Component.translatable("ontime.command.set.command_delay.ok", index, ticks), true);
         return 1;
     }
 

@@ -168,7 +168,8 @@ final class InfoCommands {
      * an overview, and {@code /timer commands <name> list} is the full one.
      */
     private static Component finishCommands(Timer timer) {
-        List<String> all = timer.getFinishCommands();
+        List<String> all = timer.getFinishCommands().stream()
+                .map(com.mateof24.timer.TimedCommand::command).toList();
         if (all.isEmpty()) return null;
 
         if (all.size() <= MAX_LISTED_COMMANDS) return Component.literal(String.join("  |  ", all));

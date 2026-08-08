@@ -31,7 +31,8 @@ public final class ApiViews {
     }
 
     public static TimerDefinition of(Timer timer) {
-        java.util.Map<Long, java.util.List<String>> scheduled = new java.util.LinkedHashMap<>();
+        java.util.Map<Long, java.util.List<com.mateof24.timer.TimedCommand>> scheduled =
+                new java.util.LinkedHashMap<>();
         for (Timer.CommandEvent event : timer.getCommandEvents()) {
             scheduled.put(event.getAtSeconds(), java.util.List.copyOf(event.getCommands()));
         }
@@ -53,7 +54,6 @@ public final class ApiViews {
                 timer.isRepeat(),
                 timer.getRepeatCount(),
                 timer.getRepeatCooldownTicks(),
-                timer.commandDelayTicks(),
                 timer.getNextTimer(),
                 timer.getSequenceCooldownTicks(),
                 java.util.List.copyOf(timer.rules()),

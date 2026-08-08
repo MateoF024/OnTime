@@ -20,11 +20,11 @@ public class Timer {
     /** Commands fired when the displayed time crosses {@code atSeconds} (4.0.0). */
     public static final class CommandEvent {
         private final long atSeconds;
-        private final List<String> commands = new ArrayList<>();
+        private final List<TimedCommand> commands = new ArrayList<>();
 
         public CommandEvent(long atSeconds) { this.atSeconds = atSeconds; }
         public long getAtSeconds() { return atSeconds; }
-        public List<String> getCommands() { return commands; }
+        public List<TimedCommand> getCommands() { return commands; }
     }
 
     /**
@@ -33,7 +33,7 @@ public class Timer {
      * (events sorted by time ascending, commands in insertion order),
      * then finish commands. {@code atSeconds == null} means "on finish".
      */
-    public record ScheduledEntry(Long atSeconds, String command) {}
+    public record ScheduledEntry(Long atSeconds, String command, int delayTicks) {}
 
     private final String name;
     private long currentTicks;
@@ -47,17 +47,6 @@ public class Timer {
     private int repeatsDone = 0;
     private String nextTimer = null;
     private long repeatCooldownTicks = 0L;
-
-    /**
-     * Ticks between two of this timer's commands.
-     *
-     * <p>A copy of the server default, taken when the timer is made, the same
-     * way its colours and its position are. It was -1 for "ask the default"
-     * once, which meant the box on the editor showed -1 rather than a number:
-     * a default is a value to hand over, not a value to point at.</p>
-     */
-    private int commandDelayTicks = com.mateof24.config.ModConfig.getInstance()
-            .getCommandDelayTicks();
     private long sequenceCooldownTicks = 0L;
 
     /**
@@ -70,7 +59,7 @@ public class Timer {
     private final List<com.mateof24.trigger.TriggerRule> rules = new ArrayList<>();
     // commandEvents is kept sorted by atSeconds ascending.
     private final List<CommandEvent> commandEvents = new ArrayList<>();
-    private final List<String> finishCommands = new ArrayList<>();
+    private final List<TimedCommand> finishCommands = new ArrayList<>();
     // Decorative titles around the counter (4.0.0), stored as the RAW string
     // the user typed (tellraw-style JSON or plain text) — parsing is
     // version-specific and happens through the compat layer. null = unset.
@@ -256,7 +245,6 @@ public class Timer {
         json.addProperty("wasRunningBeforeShutdown", wasRunningBeforeShutdown);
         json.addProperty("repeat", repeat);
         json.addProperty("repeatCount", repeatCount);
-        json.addProperty("commandDelayTicks", commandDelayTicks);
         json.addProperty("repeatsDone", repeatsDone);
         json.addProperty("nextTimer", nextTimer != null ? nextTimer : "");
         json.addProperty("repeatCooldownTicks", repeatCooldownTicks);
@@ -269,13 +257,13 @@ public class Timer {
             JsonObject e = new JsonObject();
             e.addProperty("atSeconds", event.getAtSeconds());
             JsonArray cmds = new JsonArray();
-            for (String c : event.getCommands()) cmds.add(c);
+            for (TimedCommand c : event.getCommands()) cmds.add(c.toJson());
             e.add("commands", cmds);
             events.add(e);
         }
         json.add("commandEvents", events);
         JsonArray finish = new JsonArray();
-        for (String c : finishCommands) finish.add(c);
+        for (TimedCommand c : finishCommands) finish.add(c.toJson());
         json.add("finishCommands", finish);
         json.addProperty("titleAbove", titleAbove != null ? titleAbove : "");
         json.addProperty("titleBelow", titleBelow != null ? titleBelow : "");
@@ -303,18 +291,13 @@ public class Timer {
         // written back: nothing else in the mod knows the field exists.
         if (json.has("command") && !json.get("command").isJsonNull()) {
             String only = json.get("command").getAsString();
-            if (!only.isEmpty()) timer.addFinishCommand(only);
+            if (!only.isEmpty()) timer.addFinishCommand(only, 0);
         }
         timer.silent = json.has("silent") && json.get("silent").getAsBoolean();
         timer.wasRunningBeforeShutdown = json.has("wasRunningBeforeShutdown")
                 && json.get("wasRunningBeforeShutdown").getAsBoolean();
         timer.repeat = json.has("repeat") && json.get("repeat").getAsBoolean();
         timer.repeatCount = json.has("repeatCount") ? json.get("repeatCount").getAsInt() : -1;
-        // A timer written before this existed takes the default now, which is
-        // what it was silently using anyway.
-        timer.commandDelayTicks = json.has("commandDelayTicks")
-                ? Math.max(0, json.get("commandDelayTicks").getAsInt())
-                : com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks();
         timer.repeatsDone = json.has("repeatsDone") ? json.get("repeatsDone").getAsInt() : 0;
         timer.nextTimer = json.has("nextTimer") ? json.get("nextTimer").getAsString() : "";
         if (timer.nextTimer.isEmpty()) timer.nextTimer = null;
@@ -333,13 +316,15 @@ public class Timer {
                 try { at = e.get("atSeconds").getAsLong(); } catch (Exception ex) { continue; }
                 if (at <= 0) continue;
                 for (JsonElement c : e.getAsJsonArray("commands")) {
-                    try { timer.addScheduledCommand(at, c.getAsString()); } catch (Exception ignored) {}
+                    TimedCommand read = TimedCommand.fromJson(c);
+                    if (read != null) timer.addScheduledCommand(at, read.command(), read.delayTicks());
                 }
             }
         }
         if (json.has("finishCommands") && json.get("finishCommands").isJsonArray()) {
             for (JsonElement c : json.getAsJsonArray("finishCommands")) {
-                try { timer.addFinishCommand(c.getAsString()); } catch (Exception ignored) {}
+                TimedCommand read = TimedCommand.fromJson(c);
+                if (read != null) timer.addFinishCommand(read.command(), read.delayTicks());
             }
         }
 
@@ -408,12 +393,6 @@ public class Timer {
     public void setWasRunningBeforeShutdown(boolean was) { this.wasRunningBeforeShutdown = was; }
     public boolean isRepeat() { return repeat; }
     public void setRepeat(boolean repeat) { this.repeat = repeat; }
-    /** This timer's pause between two of its own commands. */
-    public int commandDelayTicks() { return commandDelayTicks; }
-
-    public void setCommandDelayTicks(int ticks) {
-        commandDelayTicks = Math.max(0, ticks);
-    }
 
     public int getRepeatCount() { return repeatCount; }
     public void setRepeatCount(int count) { this.repeatCount = count; }
@@ -498,7 +477,7 @@ public class Timer {
     public List<CommandEvent> getCommandEvents() { return commandEvents; }
 
     /** Live list, insertion order. Server thread only. */
-    public List<String> getFinishCommands() { return finishCommands; }
+    public List<TimedCommand> getFinishCommands() { return finishCommands; }
 
     public boolean hasScheduledCommands() {
         return !commandEvents.isEmpty() || !finishCommands.isEmpty();
@@ -516,27 +495,50 @@ public class Timer {
      * the same instant run in insertion order. Returns false when a sanity
      * cap is hit ({@link #MAX_SCHEDULED_ENTRIES} / {@link #MAX_COMMANDS_PER_POINT}).
      */
-    public boolean addScheduledCommand(long atSeconds, String command) {
+    public boolean addScheduledCommand(long atSeconds, String command, int delayTicks) {
         if (scheduledEntryCount() >= MAX_SCHEDULED_ENTRIES) return false;
+        TimedCommand timed = new TimedCommand(command, delayTicks);
         for (CommandEvent event : commandEvents) {
             if (event.getAtSeconds() == atSeconds) {
                 if (event.getCommands().size() >= MAX_COMMANDS_PER_POINT) return false;
-                event.getCommands().add(command);
+                event.getCommands().add(timed);
                 return true;
             }
         }
         CommandEvent event = new CommandEvent(atSeconds);
-        event.getCommands().add(command);
+        event.getCommands().add(timed);
         int pos = 0;
         while (pos < commandEvents.size() && commandEvents.get(pos).getAtSeconds() < atSeconds) pos++;
         commandEvents.add(pos, event);
         return true;
     }
 
-    public boolean addFinishCommand(String command) {
+    public boolean addFinishCommand(String command, int delayTicks) {
         if (scheduledEntryCount() >= MAX_SCHEDULED_ENTRIES) return false;
         if (finishCommands.size() >= MAX_COMMANDS_PER_POINT) return false;
-        finishCommands.add(command);
+        finishCommands.add(new TimedCommand(command, delayTicks));
+        return true;
+    }
+
+    /**
+     * Sets the pause after the entry at that position of the flat list.
+     *
+     * <p>By position rather than by text: the same command may be in the list
+     * twice, at two times, and they are two entries with two answers.</p>
+     */
+    public boolean setEntryDelay(int index, int delayTicks) {
+        if (index < 0) return false;
+        for (CommandEvent event : commandEvents) {
+            if (index < event.getCommands().size()) {
+                TimedCommand was = event.getCommands().get(index);
+                event.getCommands().set(index, new TimedCommand(was.command(), delayTicks));
+                return true;
+            }
+            index -= event.getCommands().size();
+        }
+        if (index >= finishCommands.size()) return false;
+        TimedCommand was = finishCommands.get(index);
+        finishCommands.set(index, new TimedCommand(was.command(), delayTicks));
         return true;
     }
 
@@ -544,9 +546,13 @@ public class Timer {
     public List<ScheduledEntry> scheduledEntries() {
         List<ScheduledEntry> entries = new ArrayList<>();
         for (CommandEvent event : commandEvents) {
-            for (String c : event.getCommands()) entries.add(new ScheduledEntry(event.getAtSeconds(), c));
+            for (TimedCommand c : event.getCommands()) {
+                entries.add(new ScheduledEntry(event.getAtSeconds(), c.command(), c.delayTicks()));
+            }
         }
-        for (String c : finishCommands) entries.add(new ScheduledEntry(null, c));
+        for (TimedCommand c : finishCommands) {
+            entries.add(new ScheduledEntry(null, c.command(), c.delayTicks()));
+        }
         return Collections.unmodifiableList(entries);
     }
 

@@ -311,33 +311,54 @@ public class TimerTickHandler {
     /**
      * Runs the commands in order; one failing command does not stop the rest.
      *
-     * <p>With a delay of more than zero the resolved commands are queued on
-     * the run instead and drained one per window. The delay is the timer's
-     * own when it has been given one, and the server default otherwise.</p>
+     * <p>They go on the run's queue whenever any of them asks for a pause,
+     * and straight out when none does — which is nearly always, and is what a
+     * batch of commands did before delays existed at all. Placeholders are
+     * resolved on the way in, at the moment the batch was reached, not at the
+     * moment each one eventually runs.</p>
      */
-    private static void runCommandList(MinecraftServer server, TimerRun run, java.util.List<String> commands) {
+    private static void runCommandList(MinecraftServer server, TimerRun run,
+                                       java.util.List<com.mateof24.timer.TimedCommand> commands) {
         if (commands.isEmpty()) return;
-        int delayTicks = run.timer().commandDelayTicks();
-        if (delayTicks > 0) {
-            for (String command : commands) {
-                run.queueCommand(com.mateof24.command.PlaceholderSystem
-                        .replacePlaceholders(command, run, server));
+
+        boolean anyWaits = false;
+        for (com.mateof24.timer.TimedCommand entry : commands) {
+            if (entry.delayTicks() > 0) {
+                anyWaits = true;
+                break;
+            }
+        }
+
+        if (!anyWaits) {
+            for (com.mateof24.timer.TimedCommand entry : commands) {
+                executeResolvedCommand(server, run, com.mateof24.command.PlaceholderSystem
+                        .replacePlaceholders(entry.command(), run, server));
             }
             return;
         }
-        for (String command : commands) {
-            executeResolvedCommand(server, run,
-                    com.mateof24.command.PlaceholderSystem.replacePlaceholders(command, run, server));
+        for (com.mateof24.timer.TimedCommand entry : commands) {
+            run.queueCommand(new com.mateof24.timer.TimedCommand(
+                    com.mateof24.command.PlaceholderSystem
+                            .replacePlaceholders(entry.command(), run, server),
+                    entry.delayTicks()));
         }
     }
 
-    /** One queued command per delay window, preserving enqueue order. */
+    /**
+     * One queued command per window, in the order they were queued.
+     *
+     * <p>The window is the one the command just run asked for: the pause
+     * belongs to the command in front of it, so a batch can wait a second
+     * after the first and nothing after the second.</p>
+     */
     private static void drainPendingCommands(MinecraftServer server, TimerRun run) {
         if (!run.hasPendingCommands()) return;
         if (run.tickCommandDelay()) return;
-        executeResolvedCommand(server, run, run.pollPendingCommand());
-        if (run.hasPendingCommands()) {
-            run.setCommandDelay(Math.max(1, run.timer().commandDelayTicks()));
+        com.mateof24.timer.TimedCommand entry = run.pollPendingCommand();
+        if (entry == null) return;
+        executeResolvedCommand(server, run, entry.command());
+        if (run.hasPendingCommands() && entry.delayTicks() > 0) {
+            run.setCommandDelay(entry.delayTicks());
         }
     }
 

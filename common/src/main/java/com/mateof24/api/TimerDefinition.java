@@ -24,9 +24,9 @@ public record TimerDefinition(
         boolean silent,
 
         /** Everything this timer runs when it ends, in execution order. */
-        List<String> finishCommands,
+        List<com.mateof24.timer.TimedCommand> finishCommands,
         /** Seconds on the clock → commands fired when it crosses, in execution order. */
-        Map<Long, List<String>> scheduledCommands,
+        Map<Long, List<com.mateof24.timer.TimedCommand>> scheduledCommands,
         /** Raw title specs by slot ("above"/"below"/"left"/"right"); unset slots absent. */
         Map<String, String> titles,
 
@@ -36,13 +36,6 @@ public record TimerDefinition(
         long repeatCooldownTicks,
 
         /**
-         * Ticks between two of this timer's commands.
-         *
-         * <p>Always a real figure: a timer copies the server default when it
-         * is made and owns it from then on, the same way it owns its colours.
-         * </p>
-         */
-        int commandDelayTicks,
 
         /** Timer started when this one ends, or null. */
         String nextTimer,

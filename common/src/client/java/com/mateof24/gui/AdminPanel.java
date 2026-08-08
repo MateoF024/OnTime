@@ -1642,31 +1642,6 @@ public final class AdminPanel {
         }
     }
 
-    /**
-     * The pause between two of this timer's commands.
-     *
-     * <p>On this page rather than in the settings because this is the page
-     * whose commands it spaces out. The server default is still there and
-     * still what a timer uses until it is told otherwise, which is what -1 in
-     * this box means.</p>
-     */
-    private void buildCommandDelayRow(AdminModel.TimerRow timer, int y) {
-        TimerEditor.Field field = TimerEditor.fieldFor("commandDelay");
-        if (field == null || timer == null) return;
-
-        commandDelayLabelY = y;
-        EditBox box = new EditBox(host.font(), editorFieldX, y + 11, 70, 18,
-                Component.translatable("ontime.gui.editor.field.command_delay"));
-        box.setMaxLength(6);
-        box.setValue(editor.displayed(timer, field));
-        box.setResponder(text -> editor.put(field.key(), text));
-        host.addWidget(box);
-        registerEditorField(box, field,
-                Tooltip.create(Component.translatable("ontime.gui.editor.field.command_delay.tip")));
-    }
-
-    /** Where the delay box's name is drawn, kept from the build pass. */
-    private int commandDelayLabelY = -1;
 
     private void buildCommandRows(AdminModel.TimerRow timer, int bottom) {
         List<AdminModel.Scheduled> entries = timer == null ? List.of() : timer.commandList();
@@ -1717,13 +1692,25 @@ public final class AdminPanel {
         host.bindCommandField(command);
         commandBox = command;
 
-        buildCommandDelayRow(timer, y + 22);
+        // What waits after this one before the next in the same batch. Beside
+        // the command, because that is whose pause it is.
+        commandWait = new EditBox(host.font(), editorFieldX, y + 22, 44, 18,
+                Component.translatable("ontime.gui.editor.command.delay"));
+        commandWait.setMaxLength(5);
+        commandWait.setValue("0");
+        host.addWidget(commandWait);
+        assist.add(commandWait, FieldAssist.intBetween(0, 72000),
+                FieldAssist.Source.NONE,
+                Tooltip.create(Component.translatable("ontime.gui.editor.command.delay.tip")), null);
+        commandWaitLabelY = y + 22;
 
         Button add = Button.builder(Component.translatable("ontime.gui.editor.command.add"), b -> {
                     if (timer == null || command.getValue().isBlank()) return;
                     JsonObject args = new JsonObject();
                     args.addProperty("name", timer.name());
                     args.addProperty("command", command.getValue().trim());
+                    args.addProperty("delayTicks", numberOr(
+                            commandWait == null ? "0" : commandWait.getValue(), 0));
                     // All three boxes empty means a finish command, which is
                     // what empty should mean here: "when it ends".
                     long at = atSeconds();
@@ -1744,6 +1731,8 @@ public final class AdminPanel {
     /** Kept from the build pass, because typing does not lay the page out again. */
     private Button commandAdd;
     private EditBox commandBox;
+    private EditBox commandWait;
+    private int commandWaitLabelY = -1;
 
     /** Same rules as the defaults form; only the source of the value differs. */
 
@@ -2830,6 +2819,11 @@ public final class AdminPanel {
                                     .withStyle(ChatFormatting.ITALIC)
                             : when(entry),
                     editorFieldX, y, COLOR_COOLDOWN);
+            if (entry.delayTicks() > 0) {
+                Component wait = Component.translatable("ontime.gui.editor.command.waits",
+                        entry.delayTicks());
+                painter.text(wait, width - GUTTER - 26 - painter.textWidth(wait), y, COLOR_MUTED_TEXT);
+            }
             elidedText(painter, Component.literal(entry.commands().get(0)), commandX, y,
                     width - GUTTER - 26 - commandX, COLOR_TEXT);
         }
@@ -2837,11 +2831,9 @@ public final class AdminPanel {
         drawScrollbar(painter, width - GUTTER - 24, editorFieldTop, contentBottom - 62,
                 entries.size(), editorRowsShown, detailScroll);
 
-        // Above the box, so a long name has the whole width to itself.
-        if (commandDelayLabelY > 0) {
-            painter.text(Component.translatable("ontime.gui.editor.field.command_delay")
-                            .copy().append(":"),
-                    editorFieldX, commandDelayLabelY, COLOR_TEXT);
+        if (commandWaitLabelY > 0) {
+            painter.text(Component.translatable("ontime.gui.editor.command.delay").copy().append(":"),
+                    editorFieldX + 48, commandWaitLabelY + 5, COLOR_MUTED_TEXT);
         }
     }
 

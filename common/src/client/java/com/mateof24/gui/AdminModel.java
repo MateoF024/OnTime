@@ -87,9 +87,8 @@ public final class AdminModel {
         public int repeatCount() { return (int) numOr(raw, "repeatCount", -1); }
 
         /** This timer's own pause between commands; -1 follows the default. */
-        public int commandDelayTicks() {
-            return (int) numOr(raw, "commandDelayTicks", -1);
-        }
+        /** Every command with the pause that follows it, in execution order. */
+        public List<Scheduled> commands() { return commandList(); }
 
         public long repeatCooldownTicks() { return num(raw, "repeatCooldownTicks"); }
 
@@ -206,7 +205,8 @@ public final class AdminModel {
             for (JsonElement element : raw.getAsJsonArray("commandList")) {
                 JsonObject entry = element.getAsJsonObject();
                 Long at = entry.has("at") && !entry.get("at").isJsonNull() ? entry.get("at").getAsLong() : null;
-                out.add(new Scheduled(at == null ? -1L : at, List.of(str(entry, "command", ""))));
+                out.add(new Scheduled(at == null ? -1L : at,
+                        List.of(str(entry, "command", "")), (int) numOr(entry, "delay", 0)));
             }
             return out;
         }
@@ -216,7 +216,12 @@ public final class AdminModel {
     }
 
     /** Commands due at a point on the clock, as the panel lists them. */
-    public record Scheduled(long atSeconds, List<String> commands) {}
+    /**
+     * One command due at a point on the clock.
+     *
+     * @param delayTicks what waits after it before the next one runs
+     */
+    public record Scheduled(long atSeconds, List<String> commands, int delayTicks) {}
 
     public record PlayerRow(String uuid, String name, String team) {}
 
@@ -431,7 +436,15 @@ public final class AdminModel {
             if (json.has("scheduled") && json.get("scheduled").isJsonArray()) {
                 for (JsonElement entry : json.getAsJsonArray("scheduled")) {
                     JsonObject at = entry.getAsJsonObject();
-                    scheduled.add(new Scheduled(num(at, "at"), strings(at, "commands")));
+                    // The whole batch under one time, and each of them
+                    // carrying what waits after it.
+                    for (JsonElement one : at.has("commands") && at.get("commands").isJsonArray()
+                            ? at.getAsJsonArray("commands") : new com.google.gson.JsonArray()) {
+                        JsonObject each = one.getAsJsonObject();
+                        scheduled.add(new Scheduled(num(at, "at"),
+                                List.of(str(each, "command", "")),
+                                (int) numOr(each, "delay", 0)));
+                    }
                 }
             }
             List<String> finish = new ArrayList<>(strings(json, "finishCommands"));

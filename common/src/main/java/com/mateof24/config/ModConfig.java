@@ -77,7 +77,6 @@ public class ModConfig {
     // Global pause in ticks between commands that run as a sequence at the
     // SAME moment (a scheduled point or the finish list). 0 = all in one
     // tick, the pre-4.0.0 behavior.
-    private int commandDelayTicks = 0;
     // How many executions a single command may create before it has to be
     // confirmed. The gate is on the count, not on the selector: /timer start x
     // @a is one execution and never asks, /timer start x @a each is one per
@@ -133,10 +132,6 @@ public class ModConfig {
             }
             if (root.has("hideOnCooldown")) {
                 hideOnCooldown = root.get("hideOnCooldown").getAsBoolean();
-            }
-            if (root.has("commandDelayTicks")) {
-                commandDelayTicks = root.get("commandDelayTicks").getAsInt();
-                commandDelayTicks = Math.max(0, Math.min(1200, commandDelayTicks));
             }
             if (root.has("confirmRunThreshold")) {
                 confirmRunThreshold = Math.max(-1, root.get("confirmRunThreshold").getAsInt());
@@ -225,7 +220,6 @@ public class ModConfig {
             root.addProperty("webPanelPort", webPanelPort);
             root.addProperty("webPanelBindAddress", webPanelBindAddress);
         root.addProperty("webSocketBindAddress", webSocketBindAddress);
-            root.addProperty("commandDelayTicks", commandDelayTicks);
             root.addProperty("confirmRunThreshold", confirmRunThreshold);
             com.mateof24.storage.AtomicJsonIO.write(GSON, CONFIG_FILE, root);
         } catch (IOException e) {
@@ -365,9 +359,7 @@ public class ModConfig {
         dirty = true;
     }
 
-    public int getCommandDelayTicks() { return commandDelayTicks; }
     public void setCommandDelayTicks(int ticks) {
-        this.commandDelayTicks = Math.max(0, Math.min(1200, ticks));
         dirty = true;
     }
 }

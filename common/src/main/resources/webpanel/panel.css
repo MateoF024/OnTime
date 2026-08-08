@@ -803,3 +803,6 @@ dialog[open] { animation: pop .2s var(--ease); }
   letter-spacing: .12em;
   margin: 8px 0 8px 6px;
 }
+
+/* The pause after one command, beside the command it follows. */
+.cmd-wait { width: 64px; }

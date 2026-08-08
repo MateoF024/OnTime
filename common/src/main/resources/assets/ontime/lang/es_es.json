@@ -138,8 +138,6 @@
   "ontime.command.title.too_long": "§cTítulo demasiado largo (máx %s caracteres)",
   "ontime.command.title.current.header": "§e=== Títulos de '%s' ===",
   "ontime.command.title.current.entry": "§7%s: §f%s",
-  "ontime.config.command_delay_ticks": "Espera entre comandos (ticks)",
-  "ontime.config.command_delay_ticks.tooltip": "Pausa en ticks (20 = 1 segundo) entre comandos que se ejecutan en secuencia en el mismo instante (un punto programado o la lista de finalización). 0 = todos en el mismo tick",
   "ontime.command.title.current.none": "§7El timer §f'%s' §7no tiene títulos",
   "ontime.help.title.desc": "Define textos decorativos arriba, abajo, a la izquierda o derecha del contador (texto plano o JSON estilo tellraw)",
   "ontime.command.start.shared": "§aContador §f'%s' §ainiciado para §f%s §ajugador(es)",
@@ -505,11 +503,7 @@
   "ontime.who.q.any.help": "Con uno alcanza.",
   "ontime.who.q.all.help": "Tiene que pasarle a todos.",
   "ontime.who.q.at_least.help": "Una cantidad que tú elijas.",
-  "ontime.gui.editor.field.command_delay": "Ticks entre comandos",
-  "ontime.gui.editor.field.command_delay.tip": "§fCuánto espera este contador entre dos de sus propios comandos. Cero los ejecuta juntos.",
-  "ontime.gui.editor.command.delay.default": "0",
-  "ontime.command.set.command_delay.usage": "/ontime set <contador> commanddelay <ticks>",
-  "ontime.command.set.command_delay.ok": "%s espera %s tick(s) entre sus comandos",
+  "ontime.command.set.command_delay.ok": "El comando %s espera ahora %s tick(s) antes del siguiente",
   "ontime.gui.editor.trigger.or": "o",
   "ontime.gui.editor.trigger.noStart": "Nada lo arranca antes de tiempo",
   "ontime.gui.editor.trigger.noFinish": "Nada lo termina antes de tiempo",
@@ -519,5 +513,9 @@
   "ontime.gui.editor.trigger.add": "Añadir",
   "ontime.gui.editor.trigger.names.hint": "Bob, Ana",
   "ontime.gui.editor.trigger.selector.hint": "@a[team=red]",
-  "ontime.gui.detail.triggers_heading": "Qué lo arranca o lo termina"
+  "ontime.gui.detail.triggers_heading": "Qué lo arranca o lo termina",
+  "ontime.command.commands.no_such": "Este contador no tiene ningún comando %s",
+  "ontime.gui.editor.command.delay": "Espera",
+  "ontime.gui.editor.command.delay.tip": "Ticks que se esperan tras este comando antes del siguiente del mismo grupo. Cero los ejecuta juntos.",
+  "ontime.gui.editor.command.waits": "luego espera %s"
 }

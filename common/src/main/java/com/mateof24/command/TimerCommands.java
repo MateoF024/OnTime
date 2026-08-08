@@ -688,14 +688,18 @@ public class TimerCommands {
                                 // commands. A datapack that builds a timer has
                                 // to be able to set it; the server default is
                                 // a default, not the only figure there is.
+                                // The pause after one command, addressed the
+                                // way remove addresses one: by its number in
+                                // the list. It belongs to the command in front
+                                // of it, not to the timer.
                                 .then(Commands.literal("delay")
-                                        .executes(BehaviorCommands::viewCommandDelay)
-                                        .then(Commands.argument("ticks", IntegerArgumentType.integer(0, 72000))
-                                                .executes(ctx -> BehaviorCommands.setCommandDelay(ctx,
-                                                        IntegerArgumentType.getInteger(ctx, "ticks")))
-                                        )
-                                        .then(Commands.literal("reset")
-                                                .executes(BehaviorCommands::resetCommandDelay)
+                                        .then(Commands.argument("index", IntegerArgumentType.integer(1))
+                                                .then(Commands.argument("ticks",
+                                                                IntegerArgumentType.integer(0, 72000))
+                                                        .executes(ctx -> BehaviorCommands.setCommandDelay(ctx,
+                                                                IntegerArgumentType.getInteger(ctx, "index"),
+                                                                IntegerArgumentType.getInteger(ctx, "ticks")))
+                                                )
                                         )
                                 )
                         )
