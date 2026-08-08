@@ -988,13 +988,13 @@ public final class AdminPanel {
         }
 
         List<TriggerLine> lines = triggerLines(timer);
-        editorRowsShown = Math.max(1, (bottom - editorFieldTop) / 20);
+        editorRowsShown = Math.max(1, (bottom - editorFieldTop) / TRIGGER_ROW);
         detailScroll = Math.max(0, Math.min(Math.max(0, lines.size() - editorRowsShown), detailScroll));
 
         int right = width - GUTTER;
         for (int i = 0; i < editorRowsShown && detailScroll + i < lines.size(); i++) {
             TriggerLine line = lines.get(detailScroll + i);
-            int y = editorFieldTop + i * 20;
+            int y = editorFieldTop + i * TRIGGER_ROW;
 
             // One button, on the line whose place it means: under a heading it
             // opens a new branch, on a branch it joins that one. Pressing it
@@ -1007,7 +1007,7 @@ public final class AdminPanel {
                                 b -> openBuilder(line.startsIt(), line.groupId()))
                         // The row it is on says where it adds. Saying it again
                         // on the button only makes the button longer.
-                        .bounds(right - 44 - (branch ? 22 : 0), y, 44, 18)
+                        .bounds(right - 44 - (branch ? 26 : 0), y, 44, 18)
                         .tooltip(Tooltip.create(Component.translatable(branch
                                 ? "ontime.gui.editor.trigger.addToBranch.tip"
                                 : "ontime.gui.editor.trigger.addBranch.tip")))
@@ -1043,7 +1043,7 @@ public final class AdminPanel {
     private void buildBuilder(AdminModel.TimerRow timer, int bottom) {
         int right = width - GUTTER;
         int top = editorFieldTop + 22;
-        editorRowsShown = Math.max(1, (bottom - top) / 20);
+        editorRowsShown = Math.max(1, (bottom - top) / TRIGGER_ROW);
 
         if (builderStep == STEP_DETAILS) {
             buildDetailFields(top, right);
@@ -1059,7 +1059,7 @@ public final class AdminPanel {
                                 // mind a second later is the common case, and
                                 // it should not cost a trip backwards.
                                 b -> { chooseStep(index); init(); })
-                        .bounds(editorFieldX, top + i * 20, right - editorFieldX - 2, 18)
+                        .bounds(editorFieldX, top + i * TRIGGER_ROW, right - editorFieldX - 2, 18)
                         .tooltip(Tooltip.create(
                                 Component.translatable(optionKey(options[index]) + ".help")))
                         .build();
@@ -1177,6 +1177,25 @@ public final class AdminPanel {
             default -> FieldAssist.Source.NONE;
         };
     }
+
+    /**
+     * Height of one row of the trigger page.
+     *
+     * <p>Two more than a list row elsewhere. The rows carry buttons, and at
+     * twenty they sat in one unbroken column of identical grey rectangles with
+     * two pixels between them.</p>
+     */
+    private static final int TRIGGER_ROW = 22;
+
+    /**
+     * The colour the tree is drawn in.
+     *
+     * <p>Deliberately not {@link #COLOR_RULE}: that one divides the panel into
+     * regions, and these join rows to each other, which is the opposite job.
+     * Mid grey rather than dark, because this draws over the world and dark
+     * grey disappears against anything but a bright sky.</p>
+     */
+    private static final int COLOR_TREE = 0xB0787880;
 
     /** How tall one detail field is: its name, then the box under it. */
     private static final int DETAIL_HEIGHT = 32;
@@ -1314,9 +1333,10 @@ public final class AdminPanel {
             return;
         }
         List<TriggerLine> lines = triggerLines(timer);
+        drawTriggerTree(painter, lines);
         for (int i = 0; i < editorRowsShown && detailScroll + i < lines.size(); i++) {
             TriggerLine line = lines.get(detailScroll + i);
-            int y = editorFieldTop + i * 20;
+            int y = editorFieldTop + i * TRIGGER_ROW;
             // Green and red mean starts and ends, here as everywhere else in
             // this panel, and they are on the two headings only -- the rows
             // under a heading already belong to it.
@@ -1333,10 +1353,72 @@ public final class AdminPanel {
                 case CONDITION -> 20;
                 default -> 0;
             };
-            elidedText(painter, line.text(), x, y + 5, width - GUTTER - taken - 6 - x, colour);
+            elidedText(painter, line.text(), x, y + 6, width - GUTTER - taken - 6 - x, colour);
         }
         drawScrollbar(painter, width - GUTTER + (GUTTER - 2) / 2, editorFieldTop,
-                editorFieldTop + editorRowsShown * 20, lines.size(), editorRowsShown, detailScroll);
+                editorFieldTop + editorRowsShown * TRIGGER_ROW,
+                lines.size(), editorRowsShown, detailScroll);
+    }
+
+    /**
+     * The lines that join a row to the row it belongs to.
+     *
+     * <p>Indentation alone left it to the eye to work out which conditions sat
+     * under which alternative, and with a dozen of them the eye stops trying.
+     * A spine runs down each heading past everything under it, and a stub
+     * reaches from the spine into each row.</p>
+     *
+     * <p>Drawn from the visible window rather than from the whole list, so it
+     * follows the scroll, and rebuilt every frame from the rows themselves, so
+     * adding or removing a condition redraws it with no bookkeeping at all. A
+     * spine never crosses a heading: the two headings are separate trees.</p>
+     */
+    private void drawTriggerTree(Painter painter, List<TriggerLine> lines) {
+        int last = Math.min(lines.size(), detailScroll + editorRowsShown);
+        int sectionSpine = editorFieldX + 4;
+        int branchSpine = editorFieldX + 14;
+
+        for (int i = detailScroll; i < last; i++) {
+            TriggerLine line = lines.get(i);
+            int y = editorFieldTop + (i - detailScroll) * TRIGGER_ROW;
+            int middle = y + 9;
+
+            switch (line.row()) {
+                case SECTION -> {
+                    // Down to the last row still under this heading, and no
+                    // further: the next heading is another tree entirely.
+                    int end = i;
+                    for (int j = i + 1; j < last; j++) {
+                        if (lines.get(j).row() == Row.SECTION) break;
+                        end = j;
+                    }
+                    if (end == i) break;
+                    int endY = editorFieldTop + (end - detailScroll) * TRIGGER_ROW + 9;
+                    // From under the heading's own text, not through it.
+                    int from = y + TRIGGER_ROW - 4;
+                    painter.rect(sectionSpine, from, 1, endY - from, COLOR_TREE);
+                }
+                case BRANCH -> {
+                    painter.rect(sectionSpine, middle, editorFieldX + 8 - sectionSpine, 1, COLOR_TREE);
+                    int end = i;
+                    for (int j = i + 1; j < last; j++) {
+                        if (lines.get(j).row() != Row.CONDITION) break;
+                        end = j;
+                    }
+                    if (end == i) break;
+                    int endY = editorFieldTop + (end - detailScroll) * TRIGGER_ROW + 9;
+                    int from = y + TRIGGER_ROW - 4;
+                    painter.rect(branchSpine, from, 1, endY - from, COLOR_TREE);
+                }
+                case CONDITION ->
+                        painter.rect(branchSpine, middle, editorFieldX + 18 - branchSpine, 1, COLOR_TREE);
+                case NOTHING ->
+                        painter.rect(sectionSpine, middle, editorFieldX + 8 - sectionSpine, 1, COLOR_TREE);
+                // The "or" names the spine it sits on; a stub into it would be
+                // pointing at a word rather than joining anything.
+                default -> { }
+            }
+        }
     }
 
     /** The question, how far through it is, and on the last one the whole rule. */
@@ -1368,7 +1450,8 @@ public final class AdminPanel {
             return;
         }
         drawScrollbar(painter, width - GUTTER + (GUTTER - 2) / 2, top,
-                top + editorRowsShown * 20, stepOptions().length, editorRowsShown, detailScroll);
+                top + editorRowsShown * TRIGGER_ROW,
+                stepOptions().length, editorRowsShown, detailScroll);
     }
 
     /**

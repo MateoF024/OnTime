@@ -43,6 +43,9 @@
   explains itself; in the web panel it writes a sentence, in place, where the
   condition will land. Answering the last one adds it -- there is no summary
   page to press through.
+- The trigger page draws its tree: a spine down each heading and a stub into
+  every row under it, redrawn as conditions are added and removed. A spine
+  never crosses between the two headings.
 - A line too long for its row is cut short and carries the whole of it in a
   tooltip, wrapped to stay on screen.
 - Typed values are checked as they are typed, on both surfaces and by the same

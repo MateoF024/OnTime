@@ -38,8 +38,16 @@ public final class TriggerDispatcher {
                 // recorded and dropped later: a start trigger on a running
                 // timer would otherwise sit pending and fire the moment it
                 // stopped, long after the event.
-                if (rule.action() == Trigger.Action.FINISH && !timer.isRunning()) continue;
-                if (rule.action() == Trigger.Action.START && timer.isRunning()) continue;
+                //
+                // Asked of the manager, which is where runs live and what the
+                // rule engine asks. Timer.isRunning() is a flag on the
+                // definition that a run sets when it starts and nothing clears
+                // when it ends -- "the definition itself is untouched", as
+                // endRun puts it. So once any run of a timer had ever started,
+                // every start event for it was dropped, forever.
+                boolean hasRun = TimerManager.getInstance().hasRunOf(timer.getName());
+                if (rule.action() == Trigger.Action.FINISH && !hasRun) continue;
+                if (rule.action() == Trigger.Action.START && hasRun) continue;
 
                 // Every leaf, not one. This asked the rule for its single leaf
                 // and gave up when there were two, so a branch of "somebody

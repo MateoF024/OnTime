@@ -98,6 +98,11 @@ public final class TimerEditor {
                 case COLOR -> Kind.COLOR;
                 case PRESET -> Kind.PRESET;
                 case ACTION -> Kind.PICKER;
+                // Without this a yes-or-no fell through to a text box here
+                // while the settings tab drew the same setting as a button.
+                // One setting, two controls, and one of them let you type
+                // anything at all into a field with two possible values.
+                case BOOL -> Kind.BOOL;
                 default -> Kind.TEXT;
             };
             out.add(new Field(Section.QUICK, group, "display." + row.displayKey(), kind,
@@ -487,6 +492,7 @@ public final class TimerEditor {
             args.addProperty("key", row.displayKey());
             String typed = value(timer, key);
             switch (row.kind()) {
+                case BOOL -> args.addProperty("value", Boolean.parseBoolean(typed.trim()));
                 case INT -> args.addProperty("value", (long) numberOf(typed));
                 case FLOAT -> args.addProperty("value", decimalOf(typed));
                 case COLOR -> {
