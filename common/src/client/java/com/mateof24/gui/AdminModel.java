@@ -62,7 +62,7 @@ public final class AdminModel {
             String nextTimer,
             boolean hasTitles,
             List<Scheduled> scheduled,
-            List<String> finishCommands,
+            List<Scheduled> finishCommands,
             JsonObject display,
             /**
              * The server's whole object for this timer.
@@ -447,7 +447,16 @@ public final class AdminModel {
                     }
                 }
             }
-            List<String> finish = new ArrayList<>(strings(json, "finishCommands"));
+            // Each finish command with what waits after it, the same shape
+            // the timed ones have: they are one list drawn as two.
+            List<Scheduled> finish = new ArrayList<>();
+            if (json.has("finishCommands") && json.get("finishCommands").isJsonArray()) {
+                for (JsonElement one : json.getAsJsonArray("finishCommands")) {
+                    JsonObject each = one.getAsJsonObject();
+                    finish.add(new Scheduled(-1L, List.of(str(each, "command", "")),
+                            (int) numOr(each, "delay", 0)));
+                }
+            }
             out.add(new TimerRow(
                     str(json, "name", ""),
                     num(json, "targetTicks"),

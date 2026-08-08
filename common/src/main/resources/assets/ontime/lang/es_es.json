@@ -281,7 +281,6 @@
   "ontime.gui.confirm.exit.save": "Guardar y salir",
   "ontime.gui.detail.title": "Ejecución",
   "ontime.gui.detail.audience_heading": "Audiencia",
-  "ontime.gui.detail.more": "+%s más",
   "ontime.gui.detail.commands_heading": "Comandos",
   "ontime.gui.detail.on_finish": "Al final",
   "ontime.gui.settings.group.display": "Pantalla por defecto",

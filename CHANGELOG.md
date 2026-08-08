@@ -71,6 +71,11 @@
 - The execution panel lists what starts or ends a timer, as the same tree the
   editor draws and with nothing to press. A heading with nothing under it is
   left out, the way a timer with no commands has no command section.
+- Everything under a run's actions scrolls: who is watching, what it runs and
+  what starts or ends it, in one list with a bar that appears only while
+  something is out of view. Long lists used to stop at the bottom of the pane
+  and say "+3 more", which is a way of saying there is more without offering
+  it.
 - Suggestions appear the moment a field is focused, in alphabetical order,
   rather than waiting for a first letter. Selector fields offer the five
   selectors, and the arguments one takes once a bracket is open.

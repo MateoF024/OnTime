@@ -2375,6 +2375,9 @@ public final class AdminPanel {
 
             Button button = Button.builder(Component.empty(), b -> {
                         model.selectRun(row.runId());
+                        // A different execution is a different list; carrying
+                        // the last one's offset over would open it partway down.
+                        runDetailScroll = 0;
                         model.clearMessage();
                         init();
                     })
@@ -3024,9 +3027,7 @@ public final class AdminPanel {
         painter.text(Component.translatable("ontime.gui.runs.detail.id", row.runId().substring(0, 8)),
                 detailX, y + 14 + 3 * LINE, COLOR_TEXT);
 
-        int next = drawAudienceList(painter, row);
-        next = drawCommands(painter, timer, next);
-        drawTriggerSummary(painter, timer, next);
+        drawDetailBody(painter, row, timer);
     }
 
     /**
@@ -3073,152 +3074,143 @@ public final class AdminPanel {
     }
 
     /**
-     * Who exactly is watching, one per line, under the actions.
+     * One drawn line of the scrolling half of the column.
      *
-     * <p>Only for an audience there is something to list: a global execution
-     * reaches whoever is connected, and naming them would be a snapshot that
-     * stops being true the moment somebody joins. The column header on the
-     * left keeps saying "Seen by" either way.</p>
+     * <p>The three sections used to draw themselves, each clipping at the
+     * bottom of the pane and each ending in "+N more" — which is a way of
+     * saying there is more without offering it. Built as a list instead, the
+     * pane can show a window of that list, and the window can move.</p>
+     *
+     * @param heading true for a section name, which carries a rule under it
      */
-    private int drawAudienceList(Painter painter, AdminModel.RunRow row) {
-        int top = actionsTop() + 2 * 22 + 8;
-        if (row.audienceGlobal() || row.audienceNames().isEmpty()) return top;
+    private record DetailLine(int indent, Component text, int colour, boolean heading) {}
 
-        if (top + 2 * LINE > contentBottom) return top;
+    /** How far the scrolling half has been moved, in lines. */
+    private int runDetailScroll = 0;
 
-        painter.text(Component.translatable("ontime.gui.detail.audience_heading"), detailX, top, COLOR_TEXT);
-        painter.rect(detailX, top + LINE - 1, detailWidth, 1, COLOR_RULE);
-
-        List<String> names = row.audienceNames();
-        int firstY = top + LINE + 3;
-        int room = Math.max(1, (contentBottom - firstY) / LINE);
-        int shown = names.size() <= room ? names.size() : Math.max(1, room - 1);
-
-        for (int i = 0; i < shown; i++) {
-            painter.text(Component.literal(names.get(i)), detailX + 4, firstY + i * LINE, COLOR_TEXT);
-        }
-        if (shown < names.size()) {
-            painter.text(Component.translatable("ontime.gui.detail.more", names.size() - shown),
-                    detailX + 4, firstY + shown * LINE, COLOR_TEXT);
-            return firstY + (shown + 1) * LINE + SECTION_GAP;
-        }
-        return firstY + shown * LINE + SECTION_GAP;
-    }
+    /** Lines shown at once, from the last layout; the wheel needs it too. */
+    private int runDetailRows = 1;
 
     /**
-     * What this timer will run, and when.
+     * Everything under the actions, in order, as lines.
      *
-     * <p>Two groups, because they are two different things and reading them as
-     * one list is what made the first version awkward. A scheduled command has
-     * a clock reading, and the readings line up in a column of their own so the
-     * eye can run down them. A finish command has no reading — "at zero" is not
-     * even true for a count-up — so rather than invent one and repeat it on
-     * every row, they sit under a line that says once when they happen.</p>
+     * <p>A section that has nothing to say is not here at all — no heading, no
+     * empty space. That is the same rule the audience list has always had, now
+     * applied to all three.</p>
      */
-    private int drawCommands(Painter painter, AdminModel.TimerRow timer, int top) {
-        if (timer == null || !timer.hasCommands()) return top;
-        if (top + 2 * LINE > contentBottom) return top;
+    private List<DetailLine> detailLines(Painter painter, AdminModel.RunRow row,
+                                         AdminModel.TimerRow timer) {
+        List<DetailLine> out = new ArrayList<>();
 
-        painter.text(Component.translatable("ontime.gui.detail.commands_heading"), detailX, top, COLOR_TEXT);
-        painter.rect(detailX, top + LINE - 1, detailWidth, 1, COLOR_RULE);
-
-        int y = top + LINE + 4;
-        int indent = detailX + 4;
-
-        // The time column is as wide as the widest reading, so short and long
-        // ones share an edge instead of each starting wherever they happen to.
-        int timeWidth = painter.textWidth(Component.translatable("ontime.gui.detail.on_finish"));
-        for (AdminModel.Scheduled entry : timer.scheduled()) {
-            timeWidth = Math.max(timeWidth, painter.textWidth(atLabel(entry)));
+        // ---- who is watching -----------------------------------------
+        // Only for an audience there is something to list: a global execution
+        // reaches whoever is connected, and naming them would be a snapshot
+        // that stops being true the moment somebody joins.
+        if (!row.audienceGlobal() && !row.audienceNames().isEmpty()) {
+            out.add(new DetailLine(0,
+                    Component.translatable("ontime.gui.detail.audience_heading"), COLOR_TEXT, true));
+            for (String name : row.audienceNames()) {
+                out.add(new DetailLine(4, Component.literal(name), COLOR_TEXT, false));
+            }
         }
-        int commandX = indent + timeWidth + 10;
 
-        for (AdminModel.Scheduled entry : timer.scheduled()) {
-            Component at = atLabel(entry);
-            for (String command : entry.commands()) {
-                if (y + LINE > contentBottom) {
-                    painter.text(Component.translatable("ontime.gui.detail.more", 1), indent, y, COLOR_TEXT);
-                    return contentBottom;
+        // ---- what it runs, and when ----------------------------------
+        if (timer != null && timer.hasCommands()) {
+            if (!out.isEmpty()) out.add(new DetailLine(0, Component.empty(), COLOR_TEXT, false));
+            out.add(new DetailLine(0,
+                    Component.translatable("ontime.gui.detail.commands_heading"), COLOR_TEXT, true));
+
+            // The time column is as wide as the widest reading, so short and
+            // long ones share an edge instead of each starting wherever they
+            // happen to.
+            Component onFinish = Component.translatable("ontime.gui.detail.on_finish")
+                    .copy().withStyle(ChatFormatting.ITALIC);
+            int timeWidth = painter.textWidth(onFinish);
+            for (AdminModel.Scheduled entry : timer.scheduled()) {
+                timeWidth = Math.max(timeWidth, painter.textWidth(atLabel(entry)));
+            }
+            int commandIndent = 4 + timeWidth + 10;
+
+            for (AdminModel.Scheduled entry : timer.scheduled()) {
+                Component at = atLabel(entry);
+                for (String command : entry.commands()) {
+                    out.add(new DetailLine(4, at, COLOR_COOLDOWN, false));
+                    out.add(new DetailLine(commandIndent, withWait(command, entry.delayTicks()),
+                            COLOR_TEXT, false));
                 }
-                // The reading in the accent colour, the command in plain white:
-                // one glance finds the times, the next reads the command.
-                painter.text(at, indent, y, COLOR_COOLDOWN);
-                elidedText(painter, Component.literal(command), commandX, y,
-                        detailX + detailWidth - commandX, COLOR_TEXT);
-                y += LINE;
+            }
+            boolean first = true;
+            for (AdminModel.Scheduled entry : timer.finishCommands()) {
+                for (String command : entry.commands()) {
+                    if (first) out.add(new DetailLine(4, onFinish, COLOR_COOLDOWN, false));
+                    first = false;
+                    out.add(new DetailLine(commandIndent, withWait(command, entry.delayTicks()),
+                            COLOR_TEXT, false));
+                }
             }
         }
 
-        if (timer.finishCommands().isEmpty()) return y + SECTION_GAP;
-        if (y + 2 * LINE > contentBottom) return contentBottom;
-
-        // A gap only when there is something above to be separated from.
-        if (!timer.scheduled().isEmpty()) y += 3;
-
-        // The finish commands line up in the same two columns as the timed
-        // ones, with the marker where a reading would be. Two lists that read
-        // as one list, which is what they are.
-        Component marker = Component.translatable("ontime.gui.detail.on_finish")
-                .copy().withStyle(ChatFormatting.ITALIC);
-        boolean first = true;
-        for (String command : timer.finishCommands()) {
-            if (y + LINE > contentBottom) {
-                painter.text(Component.translatable("ontime.gui.detail.more", 1), indent, y, COLOR_TEXT);
-                return contentBottom;
+        // ---- and what starts or ends it -------------------------------
+        if (timer != null && !timer.rules().isEmpty()) {
+            List<TriggerLine> tree = new ArrayList<>();
+            for (TriggerLine line : triggerLines(timer)) {
+                if (line.row() == Row.SECTION && !sectionHasAny(timer, line.startsIt())) continue;
+                if (line.row() == Row.NOTHING) continue;
+                tree.add(line);
             }
-            if (first) painter.text(marker, indent, y, COLOR_COOLDOWN);
-            first = false;
-            elidedText(painter, Component.literal(command), commandX, y,
-                    detailX + detailWidth - commandX, COLOR_TEXT);
-            y += LINE;
+            if (!tree.isEmpty()) {
+                if (!out.isEmpty()) out.add(new DetailLine(0, Component.empty(), COLOR_TEXT, false));
+                out.add(new DetailLine(0,
+                        Component.translatable("ontime.gui.detail.triggers_heading"),
+                        COLOR_TEXT, true));
+                for (TriggerLine line : tree) {
+                    int colour = switch (line.row()) {
+                        case SECTION -> line.startsIt() ? COLOR_RUNNING : COLOR_ERROR;
+                        case CONDITION -> COLOR_TEXT;
+                        default -> COLOR_MUTED_TEXT;
+                    };
+                    out.add(new DetailLine(4 + line.depth() * 8, line.text(), colour, false));
+                }
+            }
         }
-        return y + SECTION_GAP;
+        return out;
+    }
+
+    /** A command, and what waits after it when anything does. */
+    private static Component withWait(String command, int delayTicks) {
+        Component text = Component.literal(command);
+        if (delayTicks <= 0) return text;
+        return text.copy().append(Component.literal("  "))
+                .append(Component.translatable("ontime.gui.editor.command.waits", delayTicks)
+                        .copy().withStyle(ChatFormatting.DARK_GRAY));
     }
 
     /**
-     * What starts or ends this timer other than its own clock.
+     * The window of those lines that fits, and a bar when there is more.
      *
-     * <p>The same tree the editor draws, with nothing to press: this column
-     * says what a timer is, and a heading with nothing under it says nothing,
-     * so an empty side is left out rather than drawn empty. A timer with no
-     * rules at all has no section here, the way one with no commands has
-     * none.</p>
+     * <p>The bar is drawn only while something is out of view, which is what
+     * makes it worth looking at: a bar that is always there says nothing, and
+     * one that appears is the only notice that the list goes on.</p>
      */
-    private void drawTriggerSummary(Painter painter, AdminModel.TimerRow timer, int top) {
-        if (timer == null || timer.rules().isEmpty()) return;
-        if (top + 2 * LINE > contentBottom) return;
+    private void drawDetailBody(Painter painter, AdminModel.RunRow row, AdminModel.TimerRow timer) {
+        int top = actionsTop() + 2 * 22 + 8;
+        List<DetailLine> all = detailLines(painter, row, timer);
+        runDetailTotal = all.size();
+        runDetailRows = Math.max(1, (contentBottom - top) / LINE);
+        runDetailScroll = Math.max(0, Math.min(Math.max(0, all.size() - runDetailRows), runDetailScroll));
+        if (all.isEmpty()) return;
 
-        List<TriggerLine> lines = new ArrayList<>();
-        for (TriggerLine line : triggerLines(timer)) {
-            // A heading whose only child is "nothing ends it early" is a
-            // heading about nothing.
-            if (line.row() == Row.SECTION && !sectionHasAny(timer, line.startsIt())) continue;
-            if (line.row() == Row.NOTHING) continue;
-            lines.add(line);
-        }
-        if (lines.isEmpty()) return;
-
-        painter.text(Component.translatable("ontime.gui.detail.triggers_heading"),
-                detailX, top, COLOR_TEXT);
-        painter.rect(detailX, top + LINE - 1, detailWidth, 1, COLOR_RULE);
-
-        int y = top + LINE + 4;
-        for (int i = 0; i < lines.size(); i++) {
-            TriggerLine line = lines.get(i);
-            if (y + LINE > contentBottom) {
-                painter.text(Component.translatable("ontime.gui.detail.more", lines.size() - i),
-                        detailX + 4, y, COLOR_TEXT);
-                return;
+        for (int i = 0; i < runDetailRows && runDetailScroll + i < all.size(); i++) {
+            DetailLine line = all.get(runDetailScroll + i);
+            int y = top + i * LINE;
+            elidedText(painter, line.text(), detailX + line.indent(), y,
+                    detailX + detailWidth - 6 - (detailX + line.indent()), line.colour());
+            if (line.heading()) {
+                painter.rect(detailX, y + LINE - 1, detailWidth - 6, 1, COLOR_RULE);
             }
-            int colour = switch (line.row()) {
-                case SECTION -> line.startsIt() ? COLOR_RUNNING : COLOR_ERROR;
-                case CONDITION -> COLOR_TEXT;
-                default -> COLOR_MUTED_TEXT;
-            };
-            int x = detailX + 4 + line.depth() * 8;
-            elidedText(painter, line.text(), x, y, detailX + detailWidth - x, colour);
-            y += LINE;
         }
+        drawScrollbar(painter, detailX + detailWidth - 3, top, top + runDetailRows * LINE,
+                all.size(), runDetailRows, runDetailScroll);
     }
 
     /** Whether that heading has anything under it worth drawing. */
@@ -3228,6 +3220,15 @@ public final class AdminPanel {
         }
         return false;
     }
+
+    /**
+     * How many lines the scrolling half held when it was last drawn.
+     *
+     * <p>Kept from the draw rather than recomputed for the wheel: measuring a
+     * line needs the painter, and the wheel does not have one.</p>
+     */
+    private int runDetailTotal = 0;
+
 
     private static Component atLabel(AdminModel.Scheduled entry) {
         return Component.literal(
@@ -3361,6 +3362,17 @@ public final class AdminPanel {
         int total;
         int shown;
         if (model.tab() == AdminModel.Tab.RUNS) {
+            // Two lists side by side, and the wheel belongs to whichever the
+            // pointer is over. The detail's half scrolls without laying the
+            // panel out again: nothing in it is a widget.
+            if (twoColumn && pointerX >= detailX - GUTTER / 2 && model.selectedRun() != null) {
+                int rows = runDetailTotal;
+                if (rows <= runDetailRows) return false;
+                int before = runDetailScroll;
+                runDetailScroll = Math.max(0, Math.min(rows - runDetailRows,
+                        runDetailScroll - (int) Math.signum(amount)));
+                return runDetailScroll != before;
+            }
             total = model.runs().size();
             shown = visibleRows;
         } else if (model.tab() == AdminModel.Tab.SETTINGS) {

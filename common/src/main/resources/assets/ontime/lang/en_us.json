@@ -281,7 +281,6 @@
   "ontime.gui.confirm.exit.save": "Save and exit",
   "ontime.gui.detail.title": "Execution",
   "ontime.gui.detail.audience_heading": "Audience",
-  "ontime.gui.detail.more": "+%s more",
   "ontime.gui.detail.commands_heading": "Commands",
   "ontime.gui.detail.on_finish": "At the end",
   "ontime.gui.settings.group.display": "Default display",
