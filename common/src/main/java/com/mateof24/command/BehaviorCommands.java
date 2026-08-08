@@ -228,6 +228,12 @@ final class BehaviorCommands {
         return reportCommandDelay(ctx, ticks);
     }
 
+    /** Back to whatever the server currently offers a new timer. */
+    static int resetCommandDelay(CommandContext<CommandSourceStack> ctx) {
+        return reportCommandDelay(ctx,
+                com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks());
+    }
+
     private static int reportCommandDelay(CommandContext<CommandSourceStack> ctx, Integer ticks) {
         String name = StringArgumentType.getString(ctx, "name");
         Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
@@ -240,10 +246,9 @@ final class BehaviorCommands {
             timer.setCommandDelayTicks(ticks);
             TimerManager.getInstance().saveTimers();
         }
-        int own = timer.ownCommandDelayTicks();
-        ctx.getSource().sendSuccess(() -> own < 0
-                ? Component.translatable("ontime.command.set.command_delay.default", name)
-                : Component.translatable("ontime.command.set.command_delay.ok", name, own),
+        int delay = timer.commandDelayTicks();
+        ctx.getSource().sendSuccess(
+                () -> Component.translatable("ontime.command.set.command_delay.ok", name, delay),
                 ticks != null);
         return 1;
     }

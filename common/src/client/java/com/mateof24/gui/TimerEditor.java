@@ -402,7 +402,8 @@ public final class TimerEditor {
         return switch (key) {
             case "hours", "seconds", "score", "repeatCooldown", "sequenceCooldown" -> "0";
             case "minutes" -> "1";
-            case "repeatCount", "commandDelay" -> "-1";
+            case "repeatCount" -> "-1";
+            case "commandDelay" -> "0";
             case "countUp", "silent", "repeat" -> "false";
             case "scoreAction", "expressionAction", "triggerAction" -> "finish";
             default -> "";

@@ -36,13 +36,11 @@ public record TimerDefinition(
         long repeatCooldownTicks,
 
         /**
-         * Ticks between two of this timer's commands, or -1 while it follows
-         * the server default.
+         * Ticks between two of this timer's commands.
          *
-         * <p>Reported as it was set, not as it resolves: a caller that wants
-         * the effective figure and finds -1 reads the server default, and one
-         * that wants to know whether this timer was ever told otherwise can
-         * only find out here.</p>
+         * <p>Always a real figure: a timer copies the server default when it
+         * is made and owns it from then on, the same way it owns its colours.
+         * </p>
          */
         int commandDelayTicks,
 

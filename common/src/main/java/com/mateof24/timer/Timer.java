@@ -49,14 +49,15 @@ public class Timer {
     private long repeatCooldownTicks = 0L;
 
     /**
-     * Ticks between two of this timer's commands, or -1 to use the default.
+     * Ticks between two of this timer's commands.
      *
-     * <p>Per timer because the reason for a pause is the commands themselves:
-     * one timer handing out kits needs a beat between them and the next one
-     * setting two scoreboard values does not. The server default stays, and
-     * is what a timer that has never been told otherwise uses.</p>
+     * <p>A copy of the server default, taken when the timer is made, the same
+     * way its colours and its position are. It was -1 for "ask the default"
+     * once, which meant the box on the editor showed -1 rather than a number:
+     * a default is a value to hand over, not a value to point at.</p>
      */
-    private int commandDelayTicks = -1;
+    private int commandDelayTicks = com.mateof24.config.ModConfig.getInstance()
+            .getCommandDelayTicks();
     private long sequenceCooldownTicks = 0L;
 
     /**
@@ -309,8 +310,11 @@ public class Timer {
                 && json.get("wasRunningBeforeShutdown").getAsBoolean();
         timer.repeat = json.has("repeat") && json.get("repeat").getAsBoolean();
         timer.repeatCount = json.has("repeatCount") ? json.get("repeatCount").getAsInt() : -1;
+        // A timer written before this existed takes the default now, which is
+        // what it was silently using anyway.
         timer.commandDelayTicks = json.has("commandDelayTicks")
-                ? json.get("commandDelayTicks").getAsInt() : -1;
+                ? Math.max(0, json.get("commandDelayTicks").getAsInt())
+                : com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks();
         timer.repeatsDone = json.has("repeatsDone") ? json.get("repeatsDone").getAsInt() : 0;
         timer.nextTimer = json.has("nextTimer") ? json.get("nextTimer").getAsString() : "";
         if (timer.nextTimer.isEmpty()) timer.nextTimer = null;
@@ -404,18 +408,11 @@ public class Timer {
     public void setWasRunningBeforeShutdown(boolean was) { this.wasRunningBeforeShutdown = was; }
     public boolean isRepeat() { return repeat; }
     public void setRepeat(boolean repeat) { this.repeat = repeat; }
-    /** This timer's own pause between commands, falling back to the default. */
-    public int commandDelayTicks() {
-        return commandDelayTicks < 0
-                ? com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks()
-                : commandDelayTicks;
-    }
-
-    /** What was set on the timer itself: -1 while it follows the default. */
-    public int ownCommandDelayTicks() { return commandDelayTicks; }
+    /** This timer's pause between two of its own commands. */
+    public int commandDelayTicks() { return commandDelayTicks; }
 
     public void setCommandDelayTicks(int ticks) {
-        commandDelayTicks = ticks < 0 ? -1 : ticks;
+        commandDelayTicks = Math.max(0, ticks);
     }
 
     public int getRepeatCount() { return repeatCount; }

@@ -80,7 +80,7 @@
       "reset.do": "Restore defaults", "reset.title": "Restore every default?",
       "reset.body": "Applied at once, and it cannot be undone. Timers that already exist keep their own values.",
       "cmd.add": "Add", "cmd.none": "This timer runs no commands", "cmd.end": "At the end",
-      "cmd.delay": "Ticks between commands", "cmd.delay.default": "Server default",
+      "cmd.delay": "Ticks between commands", "cmd.delay.default": "0",
       "cmd.text": "Command, without the leading slash",
       on: "On", off: "Off", finish: "Finish it", startIt: "Start it", none: "Off",
       "trigger.join": "A player joins", "trigger.leave": "A player leaves",
@@ -154,7 +154,7 @@
       "reset.do": "Restaurar valores", "reset.title": "¿Restaurar todos los valores?",
       "reset.body": "Se aplica al momento y no se puede deshacer. Los contadores ya creados conservan los suyos.",
       "cmd.add": "Añadir", "cmd.none": "Este contador no ejecuta ningún comando",
-      "cmd.delay": "Ticks entre comandos", "cmd.delay.default": "El del servidor",
+      "cmd.delay": "Ticks entre comandos", "cmd.delay.default": "0",
       "cmd.end": "Al final", "cmd.text": "Comando, sin la barra inicial",
       on: "Sí", off: "No", finish: "Terminarlo", startIt: "Arrancarlo", none: "Nada",
       "trigger.join": "Entra un jugador", "trigger.leave": "Sale un jugador",
@@ -1415,7 +1415,7 @@
       group("commands", s => {
         // The pause this timer puts between its own commands, above the list
         // it spaces out. -1, and an empty box, mean the server default.
-        const delay = field("commandDelay", "int", timer.commandDelayTicks ?? -1);
+        const delay = field("commandDelay", "int", timer.commandDelayTicks ?? 0);
         $("label", delay).textContent = t("cmd.delay");
         $("input", delay).placeholder = t("cmd.delay.default");
         s.append(delay);

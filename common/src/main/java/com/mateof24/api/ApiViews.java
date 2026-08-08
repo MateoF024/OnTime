@@ -53,7 +53,7 @@ public final class ApiViews {
                 timer.isRepeat(),
                 timer.getRepeatCount(),
                 timer.getRepeatCooldownTicks(),
-                timer.ownCommandDelayTicks(),
+                timer.commandDelayTicks(),
                 timer.getNextTimer(),
                 timer.getSequenceCooldownTicks(),
                 java.util.List.copyOf(timer.rules()),

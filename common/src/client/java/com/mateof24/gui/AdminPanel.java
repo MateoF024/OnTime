@@ -291,6 +291,11 @@ public final class AdminPanel {
         colAudience = listX + Math.max(70, (int) (listWidth * 0.42f));
         colTimeRight = listX + listWidth - 6;
 
+        // Room at the foot of the list for the button that stops everything
+        // in it. Kept whether anything is running or not, so the list does not
+        // grow a row and lose it again as the last execution ends.
+        if (model.tab() == AdminModel.Tab.RUNS) listBottom -= 26;
+
         visibleRows = Math.max(1, (listBottom - listTop + ROW_GAP) / (ROW_HEIGHT + ROW_GAP));
         clampScroll();
 
@@ -1168,7 +1173,7 @@ public final class AdminPanel {
     private FieldAssist.Source detailSource(String key) {
         if ("subject".equals(key)) {
             return "players".equals(SCOPES[triggerScope])
-                    ? FieldAssist.Source.PLAYERS : FieldAssist.Source.NONE;
+                    ? FieldAssist.Source.PLAYERS : FieldAssist.Source.SELECTORS;
         }
         if (!"value".equals(key)) return FieldAssist.Source.NONE;
         return switch (TRIGGER_KINDS[triggerKind]) {
@@ -1188,14 +1193,15 @@ public final class AdminPanel {
     private static final int TRIGGER_ROW = 22;
 
     /**
-     * The colour the tree is drawn in.
+     * The tree, and the shadow it carries.
      *
-     * <p>Deliberately not {@link #COLOR_RULE}: that one divides the panel into
-     * regions, and these join rows to each other, which is the opposite job.
-     * Mid grey rather than dark, because this draws over the world and dark
-     * grey disappears against anything but a bright sky.</p>
+     * <p>White with a shadow under it, drawn the way every piece of text in
+     * this panel is drawn and for the same reason: the panel floats over the
+     * world, and one flat grey is legible against a bright sky or against dark
+     * terrain but never against both.</p>
      */
-    private static final int COLOR_TREE = 0xB0787880;
+    private static final int COLOR_TREE = 0xFFFFFFFF;
+    private static final int COLOR_TREE_SHADOW = 0xFF3F3F3F;
 
     /** How tall one detail field is: its name, then the box under it. */
     private static final int DETAIL_HEIGHT = 32;
@@ -1373,6 +1379,12 @@ public final class AdminPanel {
      * adding or removing a condition redraws it with no bookkeeping at all. A
      * spine never crosses a heading: the two headings are separate trees.</p>
      */
+    /** One arm of the tree, with the shadow a glyph of text would cast. */
+    private void treeLine(Painter painter, int x, int y, int width, int height) {
+        painter.rect(x + 1, y + 1, width, height, COLOR_TREE_SHADOW);
+        painter.rect(x, y, width, height, COLOR_TREE);
+    }
+
     private void drawTriggerTree(Painter painter, List<TriggerLine> lines) {
         int last = Math.min(lines.size(), detailScroll + editorRowsShown);
         int sectionSpine = editorFieldX + 4;
@@ -1385,21 +1397,25 @@ public final class AdminPanel {
 
             switch (line.row()) {
                 case SECTION -> {
-                    // Down to the last row still under this heading, and no
+                    // Down to the last row this heading joins to, and no
                     // further: the next heading is another tree entirely.
-                    int end = i;
+                    // That is the last alternative, not the last condition --
+                    // the conditions hang off their own alternative, and a
+                    // spine carrying on past it points at nothing.
+                    int end = -1;
                     for (int j = i + 1; j < last; j++) {
-                        if (lines.get(j).row() == Row.SECTION) break;
-                        end = j;
+                        Row row = lines.get(j).row();
+                        if (row == Row.SECTION) break;
+                        if (row == Row.BRANCH || row == Row.NOTHING) end = j;
                     }
-                    if (end == i) break;
+                    if (end < 0) break;
                     int endY = editorFieldTop + (end - detailScroll) * TRIGGER_ROW + 9;
                     // From under the heading's own text, not through it.
                     int from = y + TRIGGER_ROW - 4;
-                    painter.rect(sectionSpine, from, 1, endY - from, COLOR_TREE);
+                    treeLine(painter, sectionSpine, from, 1, endY - from);
                 }
                 case BRANCH -> {
-                    painter.rect(sectionSpine, middle, editorFieldX + 8 - sectionSpine, 1, COLOR_TREE);
+                    treeLine(painter, sectionSpine, middle, editorFieldX + 8 - sectionSpine, 1);
                     int end = i;
                     for (int j = i + 1; j < last; j++) {
                         if (lines.get(j).row() != Row.CONDITION) break;
@@ -1408,12 +1424,12 @@ public final class AdminPanel {
                     if (end == i) break;
                     int endY = editorFieldTop + (end - detailScroll) * TRIGGER_ROW + 9;
                     int from = y + TRIGGER_ROW - 4;
-                    painter.rect(branchSpine, from, 1, endY - from, COLOR_TREE);
+                    treeLine(painter, branchSpine, from, 1, endY - from);
                 }
                 case CONDITION ->
-                        painter.rect(branchSpine, middle, editorFieldX + 18 - branchSpine, 1, COLOR_TREE);
+                        treeLine(painter, branchSpine, middle, editorFieldX + 18 - branchSpine, 1);
                 case NOTHING ->
-                        painter.rect(sectionSpine, middle, editorFieldX + 8 - sectionSpine, 1, COLOR_TREE);
+                        treeLine(painter, sectionSpine, middle, editorFieldX + 8 - sectionSpine, 1);
                 // The "or" names the spine it sits on; a stub into it would be
                 // pointing at a word rather than joining anything.
                 default -> { }
@@ -1960,6 +1976,22 @@ public final class AdminPanel {
         };
     }
 
+    /**
+     * A name for the copy that nothing else is using.
+     *
+     * <p>It always said {@code name + "2"}, so copying the same timer twice
+     * offered the same name twice and the second one was refused by the
+     * server after the dialog had already been accepted.</p>
+     */
+    private String freeCopyName(String name) {
+        if (name == null) return "";
+        for (int suffix = 2; suffix < 1000; suffix++) {
+            String candidate = name + suffix;
+            if (model.timer(candidate) == null) return candidate;
+        }
+        return name + "2";
+    }
+
     private void buildTimerDialog() {
         int x = dialogX() + 14;
         int fieldWidth = DIALOG_WIDTH - 28;
@@ -1969,7 +2001,7 @@ public final class AdminPanel {
         switch (confirmOp) {
             case "clone" -> {
                 dialogFields.add(host.addWidget(field(x, y, fieldWidth,
-                        "ontime.gui.timers.field.name", name == null ? "" : name + "2")));
+                        "ontime.gui.timers.field.name", freeCopyName(name))));
             }
             case "start" -> {
                 // Both buttons name the setting and then its value. They used
@@ -2062,6 +2094,10 @@ public final class AdminPanel {
                 confirmOp = null;
                 init();
                 send("timer.clone", args);
+                // Without this the copy existed on the server and the list
+                // went on showing what it had, until something else happened
+                // to ask for a fresh one.
+                awaitingApply = true;
             }
             case "delete" -> {
                 args.addProperty("name", name);
@@ -2278,7 +2314,10 @@ public final class AdminPanel {
                                 confirmOp = "run.stopAll";
                                 init();
                             })
-                    .bounds(doneX - 6 - stopAllWidth, 5, stopAllWidth, 20)
+                    // At the foot of the list it acts on, not beside Exit. The
+                // list gives up the room for it in layout, so a screen full of
+                // executions cannot reach down and sit under it.
+                .bounds(listX, listBottom + 6, stopAllWidth, 20)
                     .tooltip(Tooltip.create(Component.translatable("ontime.gui.runs.stop_all.tip")))
                     .build());
         }
@@ -2974,7 +3013,8 @@ public final class AdminPanel {
                 detailX, y + 14 + 3 * LINE, COLOR_TEXT);
 
         int next = drawAudienceList(painter, row);
-        drawCommands(painter, timer, next);
+        next = drawCommands(painter, timer, next);
+        drawTriggerSummary(painter, timer, next);
     }
 
     /**
@@ -3063,9 +3103,9 @@ public final class AdminPanel {
      * even true for a count-up — so rather than invent one and repeat it on
      * every row, they sit under a line that says once when they happen.</p>
      */
-    private void drawCommands(Painter painter, AdminModel.TimerRow timer, int top) {
-        if (timer == null || !timer.hasCommands()) return;
-        if (top + 2 * LINE > contentBottom) return;
+    private int drawCommands(Painter painter, AdminModel.TimerRow timer, int top) {
+        if (timer == null || !timer.hasCommands()) return top;
+        if (top + 2 * LINE > contentBottom) return top;
 
         painter.text(Component.translatable("ontime.gui.detail.commands_heading"), detailX, top, COLOR_TEXT);
         painter.rect(detailX, top + LINE - 1, detailWidth, 1, COLOR_RULE);
@@ -3086,7 +3126,7 @@ public final class AdminPanel {
             for (String command : entry.commands()) {
                 if (y + LINE > contentBottom) {
                     painter.text(Component.translatable("ontime.gui.detail.more", 1), indent, y, COLOR_TEXT);
-                    return;
+                    return contentBottom;
                 }
                 // The reading in the accent colour, the command in plain white:
                 // one glance finds the times, the next reads the command.
@@ -3097,8 +3137,8 @@ public final class AdminPanel {
             }
         }
 
-        if (timer.finishCommands().isEmpty()) return;
-        if (y + 2 * LINE > contentBottom) return;
+        if (timer.finishCommands().isEmpty()) return y + SECTION_GAP;
+        if (y + 2 * LINE > contentBottom) return contentBottom;
 
         // A gap only when there is something above to be separated from.
         if (!timer.scheduled().isEmpty()) y += 3;
@@ -3112,7 +3152,7 @@ public final class AdminPanel {
         for (String command : timer.finishCommands()) {
             if (y + LINE > contentBottom) {
                 painter.text(Component.translatable("ontime.gui.detail.more", 1), indent, y, COLOR_TEXT);
-                return;
+                return contentBottom;
             }
             if (first) painter.text(marker, indent, y, COLOR_COOLDOWN);
             first = false;
@@ -3120,6 +3160,61 @@ public final class AdminPanel {
                     detailX + detailWidth - commandX, COLOR_TEXT);
             y += LINE;
         }
+        return y + SECTION_GAP;
+    }
+
+    /**
+     * What starts or ends this timer other than its own clock.
+     *
+     * <p>The same tree the editor draws, with nothing to press: this column
+     * says what a timer is, and a heading with nothing under it says nothing,
+     * so an empty side is left out rather than drawn empty. A timer with no
+     * rules at all has no section here, the way one with no commands has
+     * none.</p>
+     */
+    private void drawTriggerSummary(Painter painter, AdminModel.TimerRow timer, int top) {
+        if (timer == null || timer.rules().isEmpty()) return;
+        if (top + 2 * LINE > contentBottom) return;
+
+        List<TriggerLine> lines = new ArrayList<>();
+        for (TriggerLine line : triggerLines(timer)) {
+            // A heading whose only child is "nothing ends it early" is a
+            // heading about nothing.
+            if (line.row() == Row.SECTION && !sectionHasAny(timer, line.startsIt())) continue;
+            if (line.row() == Row.NOTHING) continue;
+            lines.add(line);
+        }
+        if (lines.isEmpty()) return;
+
+        painter.text(Component.translatable("ontime.gui.detail.triggers_heading"),
+                detailX, top, COLOR_TEXT);
+        painter.rect(detailX, top + LINE - 1, detailWidth, 1, COLOR_RULE);
+
+        int y = top + LINE + 4;
+        for (int i = 0; i < lines.size(); i++) {
+            TriggerLine line = lines.get(i);
+            if (y + LINE > contentBottom) {
+                painter.text(Component.translatable("ontime.gui.detail.more", lines.size() - i),
+                        detailX + 4, y, COLOR_TEXT);
+                return;
+            }
+            int colour = switch (line.row()) {
+                case SECTION -> line.startsIt() ? COLOR_RUNNING : COLOR_ERROR;
+                case CONDITION -> COLOR_TEXT;
+                default -> COLOR_MUTED_TEXT;
+            };
+            int x = detailX + 4 + line.depth() * 8;
+            elidedText(painter, line.text(), x, y, detailX + detailWidth - x, colour);
+            y += LINE;
+        }
+    }
+
+    /** Whether that heading has anything under it worth drawing. */
+    private boolean sectionHasAny(AdminModel.TimerRow timer, boolean starts) {
+        for (AdminModel.TimerRow.Rule rule : timer.rules()) {
+            if (rule.startsIt() == starts && !rule.groups().isEmpty()) return true;
+        }
+        return false;
     }
 
     private static Component atLabel(AdminModel.Scheduled entry) {

@@ -60,7 +60,16 @@ public final class FieldAssist {
         /** Every dimension that exists, sent in the same snapshot. */
         DIMENSIONS,
         /** Whoever is online, which is who a list of names can name. */
-        PLAYERS
+        PLAYERS,
+        /**
+         * The five selectors, and the keys one can be narrowed by.
+         *
+         * <p>Written out rather than read from the game: the parser that knows
+         * them takes a live command source and a whole context, which a text
+         * box on a screen has neither of. The list is small and it is fixed by
+         * the game, not by what any pack ships.</p>
+         */
+        SELECTORS
     }
 
     /** Clearance the list keeps from the edge of the screen. */
@@ -171,6 +180,36 @@ public final class FieldAssist {
     // The rules themselves live in InputRules, which knows nothing about
     // screens and can therefore be run against a list of cases. These are the
     // names the widgets here already call them by.
+
+    /**
+     * What to offer in a selector box, given what is in it.
+     *
+     * <p>The five selectors while it is empty or still on the {@code @}, and
+     * the keys a selector takes once a bracket is open — the same two lists
+     * chat offers, at the same two moments.</p>
+     */
+    private List<String> selectorSuggestions() {
+        String typed = target == null ? "" : target.getValue();
+        int bracket = typed.indexOf('[');
+        if (bracket < 0) return SELECTOR_HEADS;
+
+        // Inside the brackets: complete the key being typed, and keep what is
+        // already there so accepting one does not throw the rest away.
+        String prefix = typed.substring(0, Math.max(bracket + 1, typed.lastIndexOf(',') + 1));
+        List<String> out = new ArrayList<>();
+        for (String key : SELECTOR_KEYS) out.add(prefix + key);
+        return out;
+    }
+
+    private static final List<String> SELECTOR_HEADS =
+            List.of("@a", "@e", "@n", "@p", "@r", "@s");
+
+    /** The arguments a selector takes, as vanilla spells them. */
+    private static final List<String> SELECTOR_KEYS = List.of(
+            "advancements=", "distance=", "dx=", "dy=", "dz=", "gamemode=",
+            "level=", "limit=", "name=", "nbt=", "predicate=", "scores=",
+            "sort=", "tag=", "team=", "type=", "x=", "x_rotation=", "y=",
+            "y_rotation=", "z=");
 
     public static Predicate<String> id() { return com.mateof24.trigger.InputRules.id(); }
 
@@ -290,7 +329,19 @@ public final class FieldAssist {
     private void collect(Source source, String text) {
         matches.clear();
         String typed = text.trim().toLowerCase(Locale.ROOT);
-        if (typed.isEmpty()) return;
+
+        // An empty box offers everything, in order, which is what the chat
+        // line does the moment a slash is typed. Waiting for a first letter
+        // meant you had to already know what you were looking for.
+        if (typed.isEmpty()) {
+            List<String> all = new ArrayList<>(candidates(source));
+            all.sort(String.CASE_INSENSITIVE_ORDER);
+            for (String candidate : all) {
+                matches.add(candidate);
+                if (matches.size() >= MAX_SHOWN * 4) break;
+            }
+            return;
+        }
 
         for (String candidate : candidates(source)) {
             // Matched in lower case, offered as written: a sound id is already
@@ -308,6 +359,8 @@ public final class FieldAssist {
                 }
             }
         }
+        // Alphabetical, the way every list vanilla offers is.
+        matches.sort(String.CASE_INSENSITIVE_ORDER);
     }
 
     /**
@@ -355,6 +408,7 @@ public final class FieldAssist {
         if (source == Source.ADVANCEMENTS) return advancementIds;
         if (source == Source.DIMENSIONS) return dimensionIds;
         if (source == Source.PLAYERS) return playerNames;
+        if (source == Source.SELECTORS) return selectorSuggestions();
         if (source != Source.SOUNDS) return List.of();
         if (soundIds == null) {
             List<String> ids = new ArrayList<>();

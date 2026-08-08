@@ -695,7 +695,7 @@ public class TimerCommands {
                                                         IntegerArgumentType.getInteger(ctx, "ticks")))
                                         )
                                         .then(Commands.literal("reset")
-                                                .executes(ctx -> BehaviorCommands.setCommandDelay(ctx, -1))
+                                                .executes(BehaviorCommands::resetCommandDelay)
                                         )
                                 )
                         )

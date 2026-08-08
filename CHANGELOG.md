@@ -56,6 +56,14 @@
   explains itself; in the web panel it writes a sentence, in place, where the
   condition will land. Answering the last one adds it -- there is no summary
   page to press through.
+- The execution panel lists what starts or ends a timer, as the same tree the
+  editor draws and with nothing to press. A heading with nothing under it is
+  left out, the way a timer with no commands has no command section.
+- Suggestions appear the moment a field is focused, in alphabetical order,
+  rather than waiting for a first letter. Selector fields offer the five
+  selectors, and the arguments one takes once a bracket is open.
+- "Stop all" sits at the foot of the list it acts on, and the list gives up the
+  room for it.
 - The trigger page draws its tree: a spine down each heading and a stub into
   every row under it, redrawn as conditions are added and removed. A spine
   never crosses between the two headings.
@@ -67,8 +75,9 @@
   you type, from what the server actually has.
 - A pause between commands can be set on a timer, not only on the server:
   `/timer commands <name> delay <ticks>`, the timer's Commands page in game, and
-  the Commands block of its editor in the web panel. `delay reset`, and -1 in
-  either box, leave it to the server default.
+  the Commands block of its editor in the web panel. A timer takes a copy of the
+  server default when it is made, the way it takes its colours, so the box holds
+  a real figure; `delay reset` takes a fresh copy.
 - The counter can hide itself while it waits out a cooldown, so a timer between
   repeats no longer reads as a timer that has broken. On by default.
 - Advancement fields complete as you type, from the list the server holds, the
