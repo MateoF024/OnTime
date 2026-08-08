@@ -56,6 +56,12 @@
   explains itself; in the web panel it writes a sentence, in place, where the
   condition will land. Answering the last one adds it -- there is no summary
   page to press through.
+- The command box is the command block's. Completions come from the dispatcher
+  the server sent this client, so they are that server's actual commands --
+  another mod's and a datapack's functions included. The text is coloured
+  argument by argument the way the chat line colours it, whatever brigadier
+  could not make sense of goes red from the point it gave up, and Add stays
+  dead until the whole command parses.
 - The execution panel lists what starts or ends a timer, as the same tree the
   editor draws and with nothing to press. A heading with nothing under it is
   left out, the way a timer with no commands has no command section.

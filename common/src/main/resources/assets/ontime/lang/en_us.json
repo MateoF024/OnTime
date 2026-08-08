@@ -315,7 +315,7 @@
   "ontime.gui.editor.section.repeat": "Repeat",
   "ontime.gui.editor.trigger.none": "Nothing starts or ends this timer early",
   "ontime.gui.editor.command.none": "This timer runs no commands",
-  "ontime.gui.editor.command.text": "Command, without the leading slash",
+  "ontime.gui.editor.command.text": "Command",
   "ontime.gui.editor.command.add": "Add",
   "ontime.gui.editor.command.remove": "x",
   "ontime.gui.editor.command.remove.tip": "§cRemoves this command§f from the timer.",

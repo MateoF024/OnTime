@@ -61,25 +61,63 @@ public class AdminScreen extends Screen implements PanelHost {
         panel.drawBands(painter, mouseX, mouseY);
         super.render(graphics, mouseX, mouseY, partialTick);
         panel.drawContent(painter);
+        // Over everything, the way it is over the chat line.
+        if (commandField.suggestions() != null) {
+            commandField.suggestions().render(graphics, mouseX, mouseY);
+        }
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // First refusal: while the list is up, the arrows and tab belong to it.
+        if (commandField.suggestions() != null
+                && commandField.suggestions().keyPressed(keyCode, scanCode, modifiers)) {
+            return true;
+        }
         if (panel.keyPressed(keyCode)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (commandField.suggestions() != null
+                && commandField.suggestions().mouseClicked(mouseX, mouseY, button)) {
+            return true;
+        }
         if (panel.mouseClicked(mouseX, mouseY, button)) return true;
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
+        if (commandField.suggestions() != null
+                && commandField.suggestions().mouseScrolled(deltaY)) {
+            return true;
+        }
         if (panel.mouseScrolled(deltaY)) return true;
         return super.mouseScrolled(mouseX, mouseY, deltaX, deltaY);
     }
+
+    /**
+     * The command box's completions, when the page has one.
+     *
+     * <p>Vanilla's own control. Everything about building it is the same in
+     * every version, so it is built in {@link CommandField}; what differs is
+     * the shape of the three calls below, which is what this file is for.</p>
+     */
+    private final CommandField commandField = new CommandField();
+
+    @Override
+    public void bindCommandField(net.minecraft.client.gui.components.EditBox box) {
+        commandField.bind(this, box);
+        if (box != null) box.setFormatter(CommandField::colour);
+    }
+
+    @Override
+    public void refreshCommandField() {
+        commandField.refresh();
+    }
+
 
 
     @Override

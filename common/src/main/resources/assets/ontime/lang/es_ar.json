@@ -315,7 +315,7 @@
   "ontime.gui.editor.section.repeat": "Repetición",
   "ontime.gui.editor.trigger.none": "Nada arranca ni termina este contador antes de tiempo",
   "ontime.gui.editor.command.none": "Este contador no ejecuta ningún comando",
-  "ontime.gui.editor.command.text": "Comando, sin la barra inicial",
+  "ontime.gui.editor.command.text": "Comando",
   "ontime.gui.editor.command.add": "Añadir",
   "ontime.gui.editor.command.remove": "x",
   "ontime.gui.editor.command.remove.tip": "§cQuita este comando§f del contador.",

@@ -300,6 +300,9 @@ public final class AdminPanel {
         clampScroll();
 
         host.clearWidgets();
+        // Whatever was bound belonged to a box that has just been thrown away.
+        // The page that wants one binds it again as it builds.
+        host.bindCommandField(null);
         rowMarks.clear();
         rowData.clear();
         assist.clear();
@@ -1705,14 +1708,18 @@ public final class AdminPanel {
         EditBox command = new EditBox(host.font(), commandX, y,
                 width - GUTTER - 54 - commandX,
                 18, Component.translatable("ontime.gui.editor.command.text"));
-        command.setHint(Component.translatable("ontime.gui.editor.command.text"));
         command.setMaxLength(256);
+        // No hint saying to leave the slash off, and no completion list of our
+        // own: it is the command block's field now, and the first thing it
+        // does is offer every command the server knows.
+        command.setResponder(text -> host.refreshCommandField());
         host.addWidget(command);
-        assist.add(command, text -> true);
+        host.bindCommandField(command);
+        commandBox = command;
 
         buildCommandDelayRow(timer, y + 22);
 
-        host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.command.add"), b -> {
+        Button add = Button.builder(Component.translatable("ontime.gui.editor.command.add"), b -> {
                     if (timer == null || command.getValue().isBlank()) return;
                     JsonObject args = new JsonObject();
                     args.addProperty("name", timer.name());
@@ -1726,8 +1733,17 @@ public final class AdminPanel {
                 })
                 .bounds(width - GUTTER - 48, y, 48, 18)
                 .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.command.add.tip")))
-                .build());
+                .build();
+        // Dead until the dispatcher would accept it, so a typo is refused here
+        // rather than at the moment the timer ends and nobody is watching.
+        commandAdd = add;
+        add.active = CommandField.parses(command.getValue());
+        host.addWidget(add);
     }
+
+    /** Kept from the build pass, because typing does not lay the page out again. */
+    private Button commandAdd;
+    private EditBox commandBox;
 
     /** Same rules as the defaults form; only the source of the value differs. */
 
@@ -2784,6 +2800,10 @@ public final class AdminPanel {
     }
 
     private void drawCommandRows(Painter painter, AdminModel.TimerRow timer) {
+        // Live, because typing into a box does not lay the page out again.
+        if (commandAdd != null && commandBox != null) {
+            commandAdd.active = CommandField.parses(commandBox.getValue());
+        }
         List<AdminModel.Scheduled> entries = timer == null ? List.of() : timer.commandList();
         if (entries.isEmpty()) {
             painter.text(Component.translatable("ontime.gui.editor.command.none"),

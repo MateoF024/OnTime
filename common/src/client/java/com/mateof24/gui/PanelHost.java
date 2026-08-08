@@ -17,6 +17,20 @@ public interface PanelHost {
     /** Drops every widget, before laying the panel out again. */
     void clearWidgets();
 
+    /**
+     * Makes this box behave like the one on a command block.
+     *
+     * <p>Here rather than in the panel because the control is vanilla's, and
+     * the three calls that drive it — render, key, click — are the three that
+     * change shape between versions. The screen already has those.</p>
+     *
+     * @param box the box, or null when the page has no command on it
+     */
+    void bindCommandField(net.minecraft.client.gui.components.EditBox box);
+
+    /** Recomputes the completions, from the box's own responder. */
+    void refreshCommandField();
+
     /** Closes the panel, which also unsubscribes from the server's updates. */
     void closePanel();
 
