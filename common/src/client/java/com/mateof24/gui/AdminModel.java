@@ -231,6 +231,7 @@ public final class AdminModel {
     private List<TimerRow> timers = List.of();
     private List<PlayerRow> players = List.of();
     private List<String> advancements = List.of();
+    private List<String> dimensions = List.of();
     private JsonObject config = new JsonObject();
 
     /**
@@ -247,6 +248,7 @@ public final class AdminModel {
         timers = readTimers(state.getAsJsonArray("timers"));
         players = readPlayers(state.getAsJsonArray("players"));
         advancements = readStrings(state.getAsJsonArray("advancements"));
+        dimensions = readStrings(state.getAsJsonArray("dimensions"));
         config = state.has("config") ? state.getAsJsonObject("config") : new JsonObject();
 
         if (selectedRunId != null && runs.stream().noneMatch(r -> r.runId().equals(selectedRunId))) {
@@ -344,6 +346,9 @@ public final class AdminModel {
         }
         return out;
     }
+
+    /** Every dimension that exists, for the editor to complete from. */
+    public List<String> dimensions() { return dimensions; }
 
     /** Every advancement the server knows, for the editor to complete from. */
     public List<String> advancements() { return advancements; }

@@ -956,6 +956,43 @@
    * repeating, handing over, conditions, triggers and the command list.</p>
    */
 
+  /**
+   * What typed text has to look like before the composer will send it.
+   *
+   * <p>The same three shapes InputRules checks in game. None of them says the
+   * value exists -- no list here knows which advancements a pack shipped --
+   * only that it is the right shape, which is the part that can be answered
+   * while somebody is still typing.</p>
+   */
+  const SHAPES = {
+    id: value => {
+      const text = value.trim();
+      if (!text) return false;
+      const colon = text.indexOf(":");
+      const namespace = colon < 0 ? "minecraft" : text.slice(0, colon);
+      const path = colon < 0 ? text : text.slice(colon + 1);
+      return /^[a-z0-9_.-]+$/.test(namespace) && /^[a-z0-9_.\/-]+$/.test(path);
+    },
+    selector: value => {
+      const text = value.trim();
+      if (!/^@[apres]/.test(text)) return false;
+      if (text.length === 2) return true;
+      if (text[2] !== "[" || !text.endsWith("]") || text.length <= 4) return false;
+      let depth = 0;
+      for (const c of text) {
+        if (c === "[") depth++;
+        if (c === "]" && --depth < 0) return false;
+      }
+      return depth === 0;
+    },
+    names: value => {
+      const text = value.trim();
+      if (!text || text.endsWith(",")) return false;
+      return text.split(",").every(one => /^[A-Za-z0-9_]{1,16}$/.test(one.trim()));
+    },
+    filled: value => value.trim() !== "",
+  };
+
   /** The kinds the server accepts, in the order the editor offers them. */
   const TRIGGER_KINDS = ["player_join", "player_leave", "player_death", "player_respawn",
     "dimension_change", "advancement", "ftb_quest", "ftb_reward", "scoreboard", "expression"];
@@ -1166,7 +1203,6 @@
     kind.onchange = shape;
     scope.onchange = shape;
     quantifier.onchange = shape;
-    shape();
     box.append(line);
 
     const buttons = document.createElement("div");
@@ -1182,11 +1218,43 @@
     add.type = "button";
     add.className = "primary small";
     add.textContent = t("trg.add");
+
+    // What each box has to hold, given what has been chosen so far.
+    const valueShape = () => {
+      const picked = kind.value;
+      if (picked === "expression" || picked === "ftb_quest" || picked === "ftb_reward") {
+        return SHAPES.filled;
+      }
+      return picked === "scoreboard" ? SHAPES.filled : SHAPES.id;
+    };
+    const subjectShape = () =>
+      scope.value === "selector" ? SHAPES.selector : SHAPES.names;
+
+    /** Marks what is wrong and says whether anything is. */
+    const valid = () => {
+      let ok = true;
+      for (const [box, shape] of [[value, valueShape()], [subject, subjectShape()]]) {
+        const bad = !box.hidden && !shape(box.value);
+        box.classList.toggle("bad", bad && box.value !== "");
+        if (bad) ok = false;
+      }
+      if (!count.hidden && !(parseInt(count.value, 10) >= 1)) ok = false;
+      if (!score.hidden && !/^-?\d+$/.test(score.value.trim())) ok = false;
+      add.disabled = !ok;
+      return ok;
+    };
+    for (const box of [value, subject, count, score]) box.addEventListener("input", valid);
+    const reshape = () => { shape(); valid(); };
+    kind.onchange = reshape;
+    scope.onchange = reshape;
+    quantifier.onchange = reshape;
+    reshape();
+
     add.onclick = async () => {
+      if (!valid()) return;
       const picked = kind.value;
       const args = { name: timer.name, kind: picked, action };
       if (!picked.startsWith("player_")) {
-        if (!value.value.trim()) { value.focus(); return; }
         args.value = value.value.trim();
       }
       if (picked === "scoreboard") args.threshold = parseInt(score.value, 10) || 0;
@@ -1195,7 +1263,6 @@
         args.subject = scope.value;
         if (quantifier.value === "at_least") args.count = parseInt(count.value, 10) || 1;
         if (scope.value === "players" || scope.value === "selector") {
-          if (!subject.value.trim()) { subject.focus(); return; }
           args.subjectValue = subject.value.trim();
         }
       }

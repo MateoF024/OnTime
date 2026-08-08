@@ -35,7 +35,12 @@
   enough; inside an alternative everything has to hold at once. Adding a
   condition asks four questions in game, one at a time, and each answer
   explains itself; in the web panel it writes a sentence, in place, where the
-  condition will land.
+  condition will land. Answering the last one adds it -- there is no summary
+  page to press through.
+- Typed values are checked as they are typed, on both surfaces and by the same
+  rules: an id has to be an id, a selector a selector, and a list of names a
+  list of names. Advancements, dimensions and the players online complete as
+  you type, from what the server actually has.
 - A pause between commands can be set on a timer, not only on the server:
   `/timer commands <name> delay <ticks>`, the timer's Commands page in game, and
   the Commands block of its editor in the web panel. `delay reset`, and -1 in

@@ -303,6 +303,8 @@ public final class AdminPanel {
         // offered a second ago.
         assist.setTimerNames(model.timers().stream().map(AdminModel.TimerRow::name).toList());
         assist.setAdvancementIds(model.advancements());
+        assist.setDimensionIds(model.dimensions());
+        assist.setPlayerNames(model.players().stream().map(AdminModel.PlayerRow::name).toList());
         timerMarks.clear();
         timerData.clear();
         dialogFields.clear();
@@ -874,8 +876,8 @@ public final class AdminPanel {
     private static final int STEP_KIND = 0;
     private static final int STEP_WHO = 1;
     private static final int STEP_HOW_MANY = 2;
+    /** The last one. There is no page after it: answering it is creating it. */
     private static final int STEP_DETAILS = 3;
-    private static final int STEP_REVIEW = 4;
 
     /** What has been typed, kept out of the boxes, which are rebuilt constantly. */
     private String builderValue = "";
@@ -891,11 +893,23 @@ public final class AdminPanel {
         };
     }
 
-    /** The next question in that direction, or -1 when there is none behind. */
+    /**
+     * The next question in that direction.
+     *
+     * <p>-1 when there is nothing behind, which closes the builder, and past
+     * {@link #STEP_DETAILS} when there is nothing ahead, which creates the
+     * condition. There is no summary page in between: it was a page that
+     * asked for a press and changed nothing.</p>
+     */
     private int stepAfter(int step, int by) {
         int next = step + by;
-        while (next >= 0 && next < STEP_REVIEW && stepIsEmpty(next)) next += by;
-        return next < 0 ? -1 : Math.min(next, STEP_REVIEW);
+        while (next >= 0 && next <= STEP_DETAILS && stepIsEmpty(next)) next += by;
+        return next;
+    }
+
+    /** True when this question is the last one this kind will ask. */
+    private boolean onLastStep() {
+        return stepAfter(builderStep, 1) > STEP_DETAILS;
     }
 
     /** The boxes this kind still needs filled, in the order they are asked. */
@@ -1033,11 +1047,6 @@ public final class AdminPanel {
 
         if (builderStep == STEP_DETAILS) {
             buildDetailFields(top, right);
-        } else if (builderStep == STEP_REVIEW) {
-            triggerValue = null;
-            triggerScore = null;
-            triggerSubject = null;
-            triggerCount = null;
         } else {
             String[] options = stepOptions();
             detailScroll = Math.max(0,
@@ -1077,38 +1086,96 @@ public final class AdminPanel {
                 .bounds(editorFieldX, y, 70, 20)
                 .build());
 
-        if (builderStep == STEP_REVIEW) {
-            host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.trigger.create"),
-                            b -> submitBuilder(timer))
-                    .bounds(right - 100, y, 100, 20)
-                    .tooltip(Tooltip.create(Component.translatable(
-                            "ontime.gui.editor.trigger.create.tip")))
-                    .build());
-            return;
-        }
-
-        Button next = Button.builder(Component.translatable("ontime.gui.editor.trigger.next"),
+        // One button forwards, and on the last question forwards is done.
+        // A separate "create" page asked for a press and changed nothing.
+        boolean last = onLastStep();
+        Button next = Button.builder(
+                        Component.translatable(last
+                                ? "ontime.gui.editor.trigger.add"
+                                : "ontime.gui.editor.trigger.next"),
                         b -> {
+                            if (last) {
+                                submitBuilder(timer);
+                                return;
+                            }
                             builderStep = stepAfter(builderStep, 1);
                             detailScroll = 0;
                             init();
                         })
                 .bounds(right - 70, y, 70, 20)
                 .build();
-        next.active = builderStep != STEP_DETAILS || detailsAreComplete();
+        // Set again every frame in drawBuilder: this runs once, when the page
+        // is laid out, and typing into a box does not lay the page out again.
+        // It was the reason a filled-in field left the button dead until you
+        // went back and forward over it.
+        next.active = detailsAreComplete();
+        builderNext = next;
         host.addWidget(next);
     }
 
+    /** Kept from the build pass so typing can enable or disable it. */
+    private Button builderNext;
+
+    /**
+     * True once every box this kind asked for holds something it accepts.
+     *
+     * <p>The same rule the box tints itself by, so a red field and a dead
+     * forward button always mean the same thing. Blank was the only test
+     * before, which let an advancement called "asdf" through to a server that
+     * would never match it.</p>
+     */
     private boolean detailsAreComplete() {
+        if (builderStep != STEP_DETAILS) return true;
         for (String key : detailKeys()) {
-            String text = switch (key) {
-                case "objective", "value" -> builderValue;
-                case "subject" -> builderSubject;
-                default -> "x";
-            };
-            if (text.isBlank()) return false;
+            if (!detailRule(key).test(detailText(key))) return false;
         }
         return true;
+    }
+
+    private String detailText(String key) {
+        return switch (key) {
+            case "objective", "value" -> builderValue;
+            case "score" -> builderScore;
+            case "subject" -> builderSubject;
+            default -> builderCount;
+        };
+    }
+
+    /**
+     * What a box accepts, in one place.
+     *
+     * <p>Used both to tint the box and to decide whether the page can be left,
+     * because two copies of a rule are two rules.</p>
+     */
+    private java.util.function.Predicate<String> detailRule(String key) {
+        return switch (key) {
+            case "score" -> FieldAssist.intBetween(-999999, 999999);
+            case "count" -> FieldAssist.intBetween(1, 9999);
+            case "objective" -> text -> !text.trim().isEmpty() && !text.contains(" ");
+            case "subject" -> "selector".equals(SCOPES[triggerScope])
+                    ? FieldAssist.selector() : FieldAssist.nameList();
+            default -> switch (TRIGGER_KINDS[triggerKind]) {
+                // A quest id is a hex string FTB made up, and an expression is
+                // an expression: neither is a resource location.
+                case "ftb_quest", "ftb_reward" -> text -> !text.trim().isEmpty();
+                case "expression" -> text -> !text.trim().isEmpty();
+                default -> FieldAssist.id();
+            };
+        };
+    }
+
+    /** Where a box's completions come from, when it has any. */
+    private FieldAssist.Source detailSource(String key) {
+        if ("subject".equals(key)) {
+            return "players".equals(SCOPES[triggerScope])
+                    ? FieldAssist.Source.PLAYERS : FieldAssist.Source.NONE;
+        }
+        if (!"value".equals(key)) return FieldAssist.Source.NONE;
+        return switch (TRIGGER_KINDS[triggerKind]) {
+            case "advancement" -> FieldAssist.Source.ADVANCEMENTS;
+            case "dimension_change" -> FieldAssist.Source.DIMENSIONS;
+            default -> FieldAssist.Source.NONE;
+        };
     }
 
     /** How tall one detail field is: its name, then the box under it. */
@@ -1142,34 +1209,26 @@ public final class AdminPanel {
             if (hint != null) box.setHint(Component.translatable(hint));
             host.addWidget(box);
 
+            box.setValue(detailText(key));
             switch (key) {
                 case "objective", "value" -> {
-                    box.setValue(builderValue);
                     box.setResponder(text -> builderValue = text);
                     triggerValue = box;
-                    assist.add(box, text -> !text.isBlank(),
-                            "advancement".equals(TRIGGER_KINDS[triggerKind])
-                                    ? FieldAssist.Source.ADVANCEMENTS : FieldAssist.Source.NONE);
                 }
                 case "score" -> {
-                    box.setValue(builderScore);
                     box.setResponder(text -> builderScore = text);
                     triggerScore = box;
-                    assist.add(box, FieldAssist.intBetween(-999999, 999999));
                 }
                 case "subject" -> {
-                    box.setValue(builderSubject);
                     box.setResponder(text -> builderSubject = text);
                     triggerSubject = box;
-                    assist.add(box, text -> !text.isBlank());
                 }
                 default -> {
-                    box.setValue(builderCount);
                     box.setResponder(text -> builderCount = text);
                     triggerCount = box;
-                    assist.add(box, FieldAssist.intBetween(1, 9999));
                 }
             }
+            assist.add(box, detailRule(key), detailSource(key));
         }
     }
 
@@ -1275,12 +1334,14 @@ public final class AdminPanel {
     /** The question, how far through it is, and on the last one the whole rule. */
     private void drawBuilder(Painter painter) {
         int right = width - GUTTER;
+        // Live, because typing does not lay the page out again.
+        if (builderNext != null) builderNext.active = detailsAreComplete();
+
         Component question = Component.translatable(switch (builderStep) {
             case STEP_KIND -> "ontime.gui.editor.trigger.ask.kind";
             case STEP_WHO -> "ontime.gui.editor.trigger.ask.who";
             case STEP_HOW_MANY -> "ontime.gui.editor.trigger.ask.howMany";
-            case STEP_DETAILS -> "ontime.gui.editor.trigger.ask.details";
-            default -> "ontime.gui.editor.trigger.ask.review";
+            default -> "ontime.gui.editor.trigger.ask.details";
         });
         painter.text(question, editorFieldX, editorFieldTop + 4, COLOR_TEXT);
 
@@ -1289,6 +1350,7 @@ public final class AdminPanel {
         painter.text(counter, right - painter.textWidth(counter), editorFieldTop + 4, COLOR_MUTED_TEXT);
 
         int top = editorFieldTop + 22;
+        drawBuilderSoFar(painter, contentBottom - 34);
         if (builderStep == STEP_DETAILS) {
             List<String> keys = detailKeys();
             for (int i = 0; i < keys.size(); i++) {
@@ -1297,23 +1359,25 @@ public final class AdminPanel {
             }
             return;
         }
-        if (builderStep != STEP_REVIEW) {
-            drawScrollbar(painter, width - GUTTER + (GUTTER - 2) / 2, top,
-                    top + editorRowsShown * 20, stepOptions().length, editorRowsShown, detailScroll);
-            return;
-        }
+        drawScrollbar(painter, width - GUTTER + (GUTTER - 2) / 2, top,
+                top + editorRowsShown * 20, stepOptions().length, editorRowsShown, detailScroll);
+    }
 
-        painter.text(Component.translatable(builderStarts
-                        ? "ontime.gui.editor.trigger.startsIt"
-                        : "ontime.gui.editor.trigger.endsIt"),
-                editorFieldX, top, builderStarts ? COLOR_RUNNING : COLOR_ERROR);
-        painter.text(Component.translatable("ontime.gui.editor.trigger.when"),
-                editorFieldX, top + 16, COLOR_MUTED_TEXT);
-        painter.text(describeTrigger(builderPreview()), editorFieldX + 10, top + 30, COLOR_TEXT);
-        painter.text(Component.translatable(builderGroup == null
-                        ? "ontime.gui.editor.trigger.asOwnBranch"
-                        : "ontime.gui.editor.trigger.intoBranch"),
-                editorFieldX, top + 48, COLOR_MUTED_TEXT);
+    /**
+     * What has been answered so far, on one line above the buttons.
+     *
+     * <p>The summary used to be a page of its own with a button on it, which
+     * is a press that changes nothing. Here it costs no press and it is
+     * visible while the answer that shapes it is still being given.</p>
+     */
+    private void drawBuilderSoFar(Painter painter, int y) {
+        Component action = Component.translatable(builderStarts
+                ? "ontime.gui.editor.trigger.startsIt"
+                : "ontime.gui.editor.trigger.endsIt");
+        painter.text(action, editorFieldX, y, builderStarts ? COLOR_RUNNING : COLOR_ERROR);
+        painter.text(trimmed(painter, describeTrigger(builderPreview()),
+                        width - GUTTER - 80 - (editorFieldX + painter.textWidth(action) + 6)),
+                editorFieldX + painter.textWidth(action) + 6, y, COLOR_MUTED_TEXT);
     }
 
     /** How many questions this kind will have asked by the one it is on. */
@@ -1327,7 +1391,7 @@ public final class AdminPanel {
 
     private int stepsTotal() {
         int count = 0;
-        for (int step = STEP_KIND; step <= STEP_REVIEW; step++) {
+        for (int step = STEP_KIND; step <= STEP_DETAILS; step++) {
             if (!stepIsEmpty(step)) count++;
         }
         return count;

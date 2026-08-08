@@ -168,6 +168,7 @@ public final class AdminOps {
         root.add("config", configJson());
         root.add("players", playersJson(server));
         root.add("advancements", advancementsJson(server));
+        root.add("dimensions", dimensionsJson(server));
         root.add("presets", presetsJson());
         return root;
     }
@@ -314,6 +315,20 @@ public final class AdminOps {
             }
         } catch (RuntimeException e) {
             com.mateof24.OnTimeConstants.LOGGER.warn("Could not list advancements", e);
+        }
+        return out;
+    }
+
+    /** Every dimension that exists, for the editor to complete from. */
+    private static JsonArray dimensionsJson(MinecraftServer server) {
+        JsonArray out = new JsonArray();
+        if (server == null) return out;
+        try {
+            for (net.minecraft.server.level.ServerLevel level : server.getAllLevels()) {
+                out.add(com.mateof24.compat.VanillaCompat.dimensionId(level));
+            }
+        } catch (RuntimeException e) {
+            com.mateof24.OnTimeConstants.LOGGER.warn("Could not list dimensions", e);
         }
         return out;
     }

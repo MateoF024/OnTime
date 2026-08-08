@@ -56,7 +56,11 @@ public final class FieldAssist {
          * That also means the list is empty on the title screen, which the
          * panel never is.</p>
          */
-        ADVANCEMENTS
+        ADVANCEMENTS,
+        /** Every dimension that exists, sent in the same snapshot. */
+        DIMENSIONS,
+        /** Whoever is online, which is who a list of names can name. */
+        PLAYERS
     }
 
     /** Clearance the list keeps from the edge of the screen. */
@@ -118,6 +122,17 @@ public final class FieldAssist {
         advancementIds = ids == null ? List.of() : ids;
     }
 
+    private List<String> dimensionIds = List.of();
+    private List<String> playerNames = List.of();
+
+    public void setDimensionIds(List<String> ids) {
+        dimensionIds = ids == null ? List.of() : ids;
+    }
+
+    public void setPlayerNames(List<String> names) {
+        playerNames = names == null ? List.of() : names;
+    }
+
     /** Forgets every field; call when the screen rebuilds its widgets. */
     public void clear() {
         fields.clear();
@@ -153,25 +168,18 @@ public final class FieldAssist {
 
     // ---- rules ----
 
-    /** A namespaced id, or a bare path, which is what vanilla accepts too. */
-    public static Predicate<String> id() {
-        return text -> {
-            String value = text.trim();
-            if (value.isEmpty()) return false;
-            int colon = value.indexOf(':');
-            String namespace = colon < 0 ? "minecraft" : value.substring(0, colon);
-            String path = colon < 0 ? value : value.substring(colon + 1);
-            return !path.isEmpty() && namespace.chars().allMatch(FieldAssist::namespaceChar)
-                    && path.chars().allMatch(FieldAssist::pathChar);
-        };
+    // The rules themselves live in InputRules, which knows nothing about
+    // screens and can therefore be run against a list of cases. These are the
+    // names the widgets here already call them by.
+
+    public static Predicate<String> id() { return com.mateof24.trigger.InputRules.id(); }
+
+    public static Predicate<String> selector() {
+        return com.mateof24.trigger.InputRules.selector();
     }
 
-    private static boolean namespaceChar(int c) {
-        return c == '_' || c == '-' || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.';
-    }
-
-    private static boolean pathChar(int c) {
-        return namespaceChar(c) || c == '/';
+    public static Predicate<String> nameList() {
+        return com.mateof24.trigger.InputRules.nameList();
     }
 
     public static Predicate<String> intBetween(long min, long max) {
@@ -345,6 +353,8 @@ public final class FieldAssist {
     private List<String> candidates(Source source) {
         if (source == Source.TIMERS) return timerNames;
         if (source == Source.ADVANCEMENTS) return advancementIds;
+        if (source == Source.DIMENSIONS) return dimensionIds;
+        if (source == Source.PLAYERS) return playerNames;
         if (source != Source.SOUNDS) return List.of();
         if (soundIds == null) {
             List<String> ids = new ArrayList<>();
