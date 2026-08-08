@@ -45,7 +45,6 @@ public class TimerTickHandler {
             }
         }
         com.mateof24.trigger.RuleEngine.resetAll();
-        com.mateof24.trigger.TriggerRegistry.resetAll();
         // The tally of who has already acted goes with it: a round that starts
         // again starts from nobody, or "all four have died" stays true for ever
         // after the first round.
@@ -62,7 +61,6 @@ public class TimerTickHandler {
         // fields produces one file write here instead of one per change.
         com.mateof24.storage.PlayerPreferences.flush();
         com.mateof24.config.ModConfig.getInstance().flush();
-        com.mateof24.trigger.FTBQuestsPoller.poll(server);
 
         // Every rule, every tick, armed or not. One place where there were
         // two: the start side ran from here once a second and the finish side

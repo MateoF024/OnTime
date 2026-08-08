@@ -1325,7 +1325,15 @@ public final class AdminPanel {
                 case CONDITION -> COLOR_TEXT;
                 default -> COLOR_MUTED_TEXT;
             };
-            painter.text(line.text(), editorFieldX + line.depth() * 10, y + 5, colour);
+            int x = editorFieldX + line.depth() * 10;
+            // Whatever the buttons on this row have left, less a little air.
+            int taken = switch (line.row()) {
+                case SECTION -> 44;
+                case BRANCH -> 66;
+                case CONDITION -> 20;
+                default -> 0;
+            };
+            elidedText(painter, line.text(), x, y + 5, width - GUTTER - taken - 6 - x, colour);
         }
         drawScrollbar(painter, width - GUTTER + (GUTTER - 2) / 2, editorFieldTop,
                 editorFieldTop + editorRowsShown * 20, lines.size(), editorRowsShown, detailScroll);
@@ -1375,9 +1383,9 @@ public final class AdminPanel {
                 ? "ontime.gui.editor.trigger.startsIt"
                 : "ontime.gui.editor.trigger.endsIt");
         painter.text(action, editorFieldX, y, builderStarts ? COLOR_RUNNING : COLOR_ERROR);
-        painter.text(trimmed(painter, describeTrigger(builderPreview()),
-                        width - GUTTER - 80 - (editorFieldX + painter.textWidth(action) + 6)),
-                editorFieldX + painter.textWidth(action) + 6, y, COLOR_MUTED_TEXT);
+        int soFarX = editorFieldX + painter.textWidth(action) + 6;
+        elidedText(painter, describeTrigger(builderPreview()), soFarX, y,
+                width - GUTTER - 80 - soFarX, COLOR_MUTED_TEXT);
     }
 
     /** How many questions this kind will have asked by the one it is on. */
@@ -2362,7 +2370,19 @@ public final class AdminPanel {
      * Text and colour marks. Nothing here is large or opaque, so it cannot bury
      * a widget — and the row columns are meant to sit on top of their button.
      */
+    /**
+     * A line that did not fit, and the whole of what it said.
+     *
+     * <p>Collected while drawing rather than laid out in advance: whether a
+     * line fits depends on the width it was given, and only the code that
+     * draws it knows that.</p>
+     */
+    private record Elided(int x, int y, int width, int height, Component full) {}
+
+    private final List<Elided> elided = new ArrayList<>();
+
     public void drawContent(Painter painter) {
+        elided.clear();
         painter.text(Component.translatable("ontime.gui.title"), GUTTER, 11, COLOR_TEXT);
 
         if (confirmOp != null) {
@@ -2390,8 +2410,98 @@ public final class AdminPanel {
             case SETTINGS -> drawSettings(painter);
         }
 
-        // Last, so it is over everything including the fields it overlaps.
+        // Over everything, including the fields it overlaps.
+        drawElidedTooltip(painter);
         assist.render(painter);
+    }
+
+    /**
+     * Draws text, cut short if it has to be, and remembers when it was.
+     *
+     * <p>A line that is cut keeps a tooltip with the whole of it, which is the
+     * only way a long advancement id is readable at all: the alternative is a
+     * row that runs off the side of the screen, which is what it did.</p>
+     */
+    private void elidedText(Painter painter, Component text, int x, int y, int limit, int colour) {
+        Component shown = trimmed(painter, text, limit);
+        painter.text(shown, x, y, colour);
+        if (shown != text) {
+            elided.add(new Elided(x, y - 2, painter.textWidth(shown), painter.lineHeight() + 4, text));
+        }
+    }
+
+    /** The whole line, wrapped, when the pointer is over one that was cut. */
+    private void drawElidedTooltip(Painter painter) {
+        Elided under = null;
+        for (Elided one : elided) {
+            if (pointerX >= one.x() && pointerX <= one.x() + one.width()
+                    && pointerY >= one.y() && pointerY <= one.y() + one.height()) {
+                under = one;
+                break;
+            }
+        }
+        if (under == null) return;
+
+        int pad = 4;
+        // Never wider than the screen leaves room for, which is what makes the
+        // wrapping worth doing: a tooltip that runs off the edge has moved the
+        // problem rather than solved it.
+        int room = Math.max(80, Math.min(280, width - 2 * GUTTER - 2 * pad));
+        List<Component> lines = wrapped(painter, under.full(), room);
+
+        int textWidth = 0;
+        for (Component line : lines) textWidth = Math.max(textWidth, painter.textWidth(line));
+        int boxWidth = textWidth + 2 * pad;
+        int boxHeight = lines.size() * painter.lineHeight() + 2 * pad;
+
+        int x = Math.max(GUTTER, Math.min(pointerX + 10, width - GUTTER - boxWidth));
+        int y = pointerY + 14;
+        // Above the pointer when there is no room below, so the last line is
+        // never the one that falls off.
+        if (y + boxHeight > height - GUTTER) y = Math.max(GUTTER, pointerY - boxHeight - 6);
+
+        painter.rect(x, y, boxWidth, boxHeight, COLOR_DIALOG);
+        painter.rect(x, y, boxWidth, 1, COLOR_RULE);
+        painter.rect(x, y + boxHeight - 1, boxWidth, 1, COLOR_RULE);
+        painter.rect(x, y, 1, boxHeight, COLOR_RULE);
+        painter.rect(x + boxWidth - 1, y, 1, boxHeight, COLOR_RULE);
+        for (int i = 0; i < lines.size(); i++) {
+            painter.text(lines.get(i), x + pad, y + pad + i * painter.lineHeight(), COLOR_TEXT);
+        }
+    }
+
+    /**
+     * One line broken into as many as it takes.
+     *
+     * <p>By word, and by character when a single word is longer than the room
+     * — which an advancement id, having no spaces in it at all, always is.</p>
+     */
+    private List<Component> wrapped(Painter painter, Component text, int room) {
+        List<Component> out = new ArrayList<>();
+        StringBuilder line = new StringBuilder();
+        for (String word : text.getString().split(" ")) {
+            String candidate = line.isEmpty() ? word : line + " " + word;
+            if (painter.textWidth(Component.literal(candidate)) <= room) {
+                line.setLength(0);
+                line.append(candidate);
+                continue;
+            }
+            if (!line.isEmpty()) {
+                out.add(Component.literal(line.toString()));
+                line.setLength(0);
+            }
+            for (char c : word.toCharArray()) {
+                if (painter.textWidth(Component.literal(line.toString() + c)) > room
+                        && !line.isEmpty()) {
+                    out.add(Component.literal(line.toString()));
+                    line.setLength(0);
+                }
+                line.append(c);
+            }
+        }
+        if (!line.isEmpty()) out.add(Component.literal(line.toString()));
+        if (out.isEmpty()) out.add(Component.literal(""));
+        return out;
     }
 
     /**
@@ -2578,9 +2688,8 @@ public final class AdminPanel {
                                     .withStyle(ChatFormatting.ITALIC)
                             : when(entry),
                     editorFieldX, y, COLOR_COOLDOWN);
-            painter.text(trimmed(painter, Component.literal(entry.commands().get(0)),
-                            width - GUTTER - 26 - commandX),
-                    commandX, y, COLOR_TEXT);
+            elidedText(painter, Component.literal(entry.commands().get(0)), commandX, y,
+                    width - GUTTER - 26 - commandX, COLOR_TEXT);
         }
 
         drawScrollbar(painter, width - GUTTER - 24, editorFieldTop, contentBottom - 62,
@@ -2899,8 +3008,8 @@ public final class AdminPanel {
                 // The reading in the accent colour, the command in plain white:
                 // one glance finds the times, the next reads the command.
                 painter.text(at, indent, y, COLOR_COOLDOWN);
-                painter.text(trimmed(painter, Component.literal(command), detailX + detailWidth - commandX),
-                        commandX, y, COLOR_TEXT);
+                elidedText(painter, Component.literal(command), commandX, y,
+                        detailX + detailWidth - commandX, COLOR_TEXT);
                 y += LINE;
             }
         }
@@ -2924,9 +3033,8 @@ public final class AdminPanel {
             }
             if (first) painter.text(marker, indent, y, COLOR_COOLDOWN);
             first = false;
-            painter.text(trimmed(painter, Component.literal(command),
-                            detailX + detailWidth - commandX),
-                    commandX, y, COLOR_TEXT);
+            elidedText(painter, Component.literal(command), commandX, y,
+                    detailX + detailWidth - commandX, COLOR_TEXT);
             y += LINE;
         }
     }

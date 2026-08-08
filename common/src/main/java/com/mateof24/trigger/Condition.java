@@ -77,8 +77,22 @@ public interface Condition {
         return new Group(group.id(), group.mode(), group.count(), group.windowMillis(), kept);
     }
 
-    /** This tree with one condition added inside the group of that id. */
+    /**
+     * This tree with one condition added beside the node of that id.
+     *
+     * <p>The id may name a group, and then the condition joins it. It may also
+     * name a single watch that is standing in for a group — a rule made of one
+     * condition has no group in it at all, but the editor still draws it as
+     * one, and the id it offers is the watch's. That watch becomes a group of
+     * two rather than the request being refused, which is what used to happen:
+     * every branch built from the heading was a bare watch, so nothing could
+     * ever be added beside anything.</p>
+     */
     static Condition addInto(Condition node, String groupId, Condition added) {
+        if (node == null || groupId == null) return null;
+        if (groupId.equals(node.id()) && node instanceof Watch watch) {
+            return Group.of(Group.Mode.ALL, List.of(watch, added));
+        }
         if (!(node instanceof Group group)) return null;
         if (groupId.equals(group.id())) {
             List<Condition> children = new ArrayList<>(group.children());
@@ -89,7 +103,9 @@ public interface Condition {
         List<Condition> children = new ArrayList<>();
         boolean found = false;
         for (Condition child : group.children()) {
-            Condition grown = child instanceof Group ? addInto(child, groupId, added) : null;
+            // Watches too, not only groups: one of them may be the branch the
+            // editor drew, and it has to be allowed to become a real group.
+            Condition grown = addInto(child, groupId, added);
             if (grown != null) found = true;
             children.add(grown == null ? child : grown);
         }

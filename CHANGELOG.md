@@ -4,6 +4,12 @@
 
 ### Changed
 
+- **Breaking:** the FTB quest poller, the trigger registry and the trigger
+  evaluator are gone. They were the pre-5.0.0 engine, and nothing read what
+  they wrote: FTB quests and rewards are polled per player by the condition
+  engine, which respects who the condition is watching. Nothing in the API
+  referred to them.
+
 - **Breaking:** `TimerDefinition` carries `commandDelayTicks`, the pause a timer
   puts between its own commands, between `repeatCooldownTicks` and `nextTimer`.
   It reads -1 while the timer follows the server default rather than resolving
@@ -37,6 +43,8 @@
   explains itself; in the web panel it writes a sentence, in place, where the
   condition will land. Answering the last one adds it -- there is no summary
   page to press through.
+- A line too long for its row is cut short and carries the whole of it in a
+  tooltip, wrapped to stay on screen.
 - Typed values are checked as they are typed, on both surfaces and by the same
   rules: an id has to be an id, a selector a selector, and a list of names a
   list of names. Advancements, dimensions and the players online complete as

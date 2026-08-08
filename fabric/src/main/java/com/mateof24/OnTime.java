@@ -74,7 +74,6 @@ public class OnTime implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             com.mateof24.websocket.TimerWebSocketServer.getInstance().stop();
             com.mateof24.webpanel.TimerWebPanel.getInstance().stop();
-            com.mateof24.trigger.FTBQuestsPoller.resetAll();
             serverInstance = null;
 
             TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {

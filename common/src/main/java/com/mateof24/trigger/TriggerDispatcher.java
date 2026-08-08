@@ -32,9 +32,7 @@ public final class TriggerDispatcher {
 
         for (Timer timer : TimerManager.getInstance().timersView()) {
             for (TriggerRule rule : timer.rules()) {
-                Condition.Watch leaf = rule.singleLeaf();
-                if (leaf == null || leaf.kind() != kind || !leaf.isValid()) continue;
-                if (!matches(leaf, param)) continue;
+                if (rule.condition() == null) continue;
 
                 // A trigger that cannot act is not recorded at all, rather than
                 // recorded and dropped later: a start trigger on a running
@@ -43,13 +41,21 @@ public final class TriggerDispatcher {
                 if (rule.action() == Trigger.Action.FINISH && !timer.isRunning()) continue;
                 if (rule.action() == Trigger.Action.START && timer.isRunning()) continue;
 
-                if (!watches(server, timer, leaf, player)) continue;
+                // Every leaf, not one. This asked the rule for its single leaf
+                // and gave up when there were two, so a branch of "somebody
+                // dies AND somebody reaches the Nether" never heard about
+                // either half and could not fire at all.
+                for (Condition.Watch leaf : rule.condition().leaves()) {
+                    if (leaf.kind() != kind || !leaf.isValid()) continue;
+                    if (!matches(leaf, param)) continue;
+                    if (!watches(server, timer, leaf, player)) continue;
 
-                // Recorded, not fired. Whether it is enough is the engine's
-                // question now: one player dying says nothing about how many
-                // the rule was waiting for, and the tick is where the tree is
-                // read as a whole.
-                RuleEngine.recordEvent(timer, rule, leaf, player);
+                    // Recorded, not fired. Whether it is enough is the engine's
+                    // question: one player dying says nothing about how many
+                    // the rule was waiting for, and the tick is where the tree
+                    // is read as a whole.
+                    RuleEngine.recordEvent(timer, rule, leaf, player);
+                }
             }
         }
     }

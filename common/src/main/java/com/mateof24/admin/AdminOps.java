@@ -666,8 +666,16 @@ public final class AdminOps {
             if (grown == null) return Result.fail("No such group");
             replace(timer, host, new com.mateof24.trigger.TriggerRule(
                     host.id(), host.action(), grown, host.delayTicks(), host.once()));
+            // A branch of its own, and a real one: a rule whose condition is
+            // a bare watch draws as a branch but is not one, and nothing could
+            // be added beside it.
         } else if (!timer.addRule(com.mateof24.trigger.TriggerRule.of(
-                com.mateof24.trigger.Trigger.Action.parse(str(args, "action")), leaf))) {
+                com.mateof24.trigger.Trigger.Action.parse(str(args, "action")),
+                com.mateof24.trigger.Condition.Group.of(
+                        com.mateof24.trigger.Condition.Group.Mode.ANY,
+                        java.util.List.of(com.mateof24.trigger.Condition.Group.of(
+                                com.mateof24.trigger.Condition.Group.Mode.ALL,
+                                java.util.List.of(leaf))))))) {
             return Result.fail("That trigger cannot be used, or this timer has too many");
         }
         forget(name);
@@ -819,9 +827,7 @@ public final class AdminOps {
      */
     private static void forget(String name) {
         com.mateof24.trigger.RuleEngine.resetFor(name);
-        com.mateof24.trigger.TriggerRegistry.resetFor(name);
         com.mateof24.trigger.TriggerProgress.resetFor(name);
-        com.mateof24.trigger.FTBQuestsPoller.resetFor(name);
     }
 
 

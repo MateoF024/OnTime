@@ -105,7 +105,6 @@ public class OnTime {
     private void onServerStopping(ServerStoppingEvent event) {
         com.mateof24.websocket.TimerWebSocketServer.getInstance().stop();
         com.mateof24.webpanel.TimerWebPanel.getInstance().stop();
-        com.mateof24.trigger.FTBQuestsPoller.resetAll();
         serverInstance = null;
 
         TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {

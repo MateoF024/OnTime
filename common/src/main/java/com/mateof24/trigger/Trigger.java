@@ -52,9 +52,9 @@ public record Trigger(Kind kind, Action action, String value, int threshold, Who
      *
      * <p>{@link #polled} separates the two ways a trigger can come true, which
      * is the distinction the old code kept re-deriving: an event kind is
-     * pushed by something that happened and waits in {@link TriggerRegistry}
-     * to be consumed exactly once, while a polled kind is a question asked on
-     * a schedule whose answer can be true for as long as it likes.</p>
+     * pushed by something that happened and waits in the rule's own inbox to
+     * be read exactly once, while a polled kind is a question asked on a
+     * schedule whose answer can be true for as long as it likes.</p>
      */
     public enum Kind {
         PLAYER_JOIN(false, false),
