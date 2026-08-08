@@ -13,10 +13,10 @@
   dying and respawning leave nothing behind to ask about, so they are true for
   the one pass that reads them: two of those in one alternative have to land in
   the same tick.
-- **Breaking:** a condition no longer carries  and a group no longer
-  carries . The latch is what made an "and" mean "both happened
+- **Breaking:** a condition no longer carries `latched` and a group no longer
+  carries `windowMillis`. The latch is what made an "and" mean "both happened
   at some point"; the window was its bound and nothing ever set it. Both are
-  dropped from the stored shape and from .
+  dropped from the stored shape and from `Condition`.
 - **Breaking:** the FTB quest poller, the trigger registry and the trigger
   evaluator are gone. They were the pre-5.0.0 engine, and nothing read what
   they wrote: FTB quests and rewards are polled per player by the condition
