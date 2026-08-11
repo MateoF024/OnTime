@@ -29,12 +29,6 @@
   engine, which respects who the condition is watching. Nothing in the API
   referred to them.
 
-- **Breaking:** `TimerDefinition` carries `commandDelayTicks`, the pause a timer
-  puts between its own commands, between `repeatCooldownTicks` and `nextTimer`.
-  Always a real figure: a timer copies the server default when it is made and
-  owns it from then on, the way it owns its colours. Anything constructing the
-  record has to pass it.
-
 - The event feed is a real WebSocket. Browsers and the `ws` libraries of Node
   and Python can connect to it now; the plain TCP line protocol still works on
   the same port.
