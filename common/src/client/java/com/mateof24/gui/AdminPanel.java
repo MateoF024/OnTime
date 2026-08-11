@@ -173,6 +173,19 @@ public final class AdminPanel {
 
     /** The three boxes that say when a scheduled command fires. */
     private final List<EditBox> atFields = new ArrayList<>();
+
+    /**
+     * What has been typed into the boxes that are rebuilt on every layout.
+     *
+     * <p>A resize rebuilds every widget, and minimising the game is a resize.
+     * Anything kept only in the box itself was gone by the time the window
+     * came back — so it is kept here and put back as the box is made, which
+     * is what the trigger builder's boxes have always done.</p>
+     */
+    private final String[] atText = {"", "", ""};
+    private String commandText = "";
+    private String commandWaitText = "0";
+    private final List<String> dialogText = new ArrayList<>();
     private static final String[] AT_UNITS = {"hours", "minutes", "seconds"};
     /** Answers a dialog collects by cycling rather than typing. */
     private String dialogMode = "shared";
@@ -257,7 +270,12 @@ public final class AdminPanel {
             // panel six pixels and made the two edges disagree; the mark now
             // sits on the row's own left edge instead.
             listX = GUTTER;
-            listWidth = (int) ((width - 3 * GUTTER) * 0.56f);
+            // A little under half, not a little over: the right column
+            // carries the whole of a timer and the left carries a name and
+            // three buttons, so the pixels are worth more on the right. The
+            // gaps between everything on the left are constants, so narrowing
+            // this narrows the rows rather than spreading them.
+            listWidth = (int) ((width - 3 * GUTTER) * 0.52f);
             detailX = listX + listWidth + GUTTER;
             detailWidth = width - GUTTER - detailX;
             listTop = contentTop;
@@ -1674,6 +1692,9 @@ public final class AdminPanel {
                     Component.translatable("ontime.gui.editor.command." + AT_UNITS[i]));
             box.setHint(Component.translatable("ontime.gui.editor.command." + AT_UNITS[i]));
             box.setMaxLength(4);
+            box.setValue(atText[i]);
+            final int slot = i;
+            box.setResponder(text -> atText[slot] = text);
             host.addWidget(box);
             assist.add(box, FieldAssist.intBetween(0, 9999));
             atFields.add(box);
@@ -1687,7 +1708,11 @@ public final class AdminPanel {
         // No hint saying to leave the slash off, and no completion list of our
         // own: it is the command block's field now, and the first thing it
         // does is offer every command the server knows.
-        command.setResponder(text -> host.refreshCommandField());
+        command.setValue(commandText);
+        command.setResponder(text -> {
+            commandText = text;
+            host.refreshCommandField();
+        });
         host.addWidget(command);
         host.bindCommandField(command);
         commandBox = command;
@@ -1697,7 +1722,8 @@ public final class AdminPanel {
         commandWait = new EditBox(host.font(), editorFieldX, y + 22, 44, 18,
                 Component.translatable("ontime.gui.editor.command.delay"));
         commandWait.setMaxLength(5);
-        commandWait.setValue("0");
+        commandWait.setValue(commandWaitText);
+        commandWait.setResponder(text -> commandWaitText = text);
         host.addWidget(commandWait);
         assist.add(commandWait, FieldAssist.intBetween(0, 72000),
                 FieldAssist.Source.NONE,
@@ -1717,6 +1743,11 @@ public final class AdminPanel {
                     if (at > 0) args.addProperty("atSeconds", at);
                     send("timer.addCommand", args);
                     awaitingApply = true;
+                    // Emptied only once it has gone somewhere, so a rebuild in
+                    // between never looks like a successful add.
+                    commandText = "";
+                    commandWaitText = "0";
+                    for (int i = 0; i < atText.length; i++) atText[i] = "";
                 })
                 .bounds(width - GUTTER - 48, y, 48, 18)
                 .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.command.add.tip")))
@@ -1957,6 +1988,9 @@ public final class AdminPanel {
      */
     private void openDialog(String kind) {
         confirmOp = kind;
+        // A fresh dialog starts from its suggestion; only a rebuild of the one
+        // already open keeps what was typed over it.
+        dialogText.clear();
         dialogMode = "shared";
         dialogCountUp = false;
         dialogGlobal = true;
@@ -2067,7 +2101,12 @@ public final class AdminPanel {
     private EditBox field(int x, int y, int width, String hintKey, String initial) {
         EditBox box = new EditBox(host.font(), x, y, width, 18, Component.translatable(hintKey));
         box.setMaxLength(64);
-        box.setValue(initial);
+        // The suggestion only the first time. After that it is whatever was
+        // typed over it, which a rebuild must not throw away.
+        int slot = dialogFields.size();
+        while (dialogText.size() <= slot) dialogText.add(null);
+        box.setValue(dialogText.get(slot) == null ? initial : dialogText.get(slot));
+        box.setResponder(text -> dialogText.set(slot, text));
         box.setHint(Component.translatable(hintKey));
         assist.add(box, text -> true);
         return box;
@@ -2337,7 +2376,7 @@ public final class AdminPanel {
         // Kept inside the list column so the divider between the columns can
         // run past them instead of through them.
         int available = listX + listWidth - GUTTER;
-        int tabWidth = Math.min(110, (available - 2 * (tabs.length - 1)) / tabs.length);
+        int tabWidth = Math.min(100, (available - 2 * (tabs.length - 1)) / tabs.length);
         for (int i = 0; i < tabs.length; i++) {
             AdminModel.Tab tab = tabs[i];
             Button button = Button.builder(
@@ -2560,78 +2599,21 @@ public final class AdminPanel {
         }
     }
 
-    /** The whole line, wrapped, when the pointer is over one that was cut. */
+    /**
+     * The whole of a line that had to be cut, as vanilla's own tooltip.
+     *
+     * <p>Handed to the game rather than drawn here: it wraps, it stays on
+     * screen, and it looks like every other tooltip because it is one. The
+     * box this used to draw got all three of those approximately right.</p>
+     */
     private void drawElidedTooltip(Painter painter) {
-        Elided under = null;
         for (Elided one : elided) {
             if (pointerX >= one.x() && pointerX <= one.x() + one.width()
                     && pointerY >= one.y() && pointerY <= one.y() + one.height()) {
-                under = one;
-                break;
+                painter.tooltip(one.full(), pointerX, pointerY);
+                return;
             }
         }
-        if (under == null) return;
-
-        int pad = 4;
-        // Never wider than the screen leaves room for, which is what makes the
-        // wrapping worth doing: a tooltip that runs off the edge has moved the
-        // problem rather than solved it.
-        int room = Math.max(80, Math.min(280, width - 2 * GUTTER - 2 * pad));
-        List<Component> lines = wrapped(painter, under.full(), room);
-
-        int textWidth = 0;
-        for (Component line : lines) textWidth = Math.max(textWidth, painter.textWidth(line));
-        int boxWidth = textWidth + 2 * pad;
-        int boxHeight = lines.size() * painter.lineHeight() + 2 * pad;
-
-        int x = Math.max(GUTTER, Math.min(pointerX + 10, width - GUTTER - boxWidth));
-        int y = pointerY + 14;
-        // Above the pointer when there is no room below, so the last line is
-        // never the one that falls off.
-        if (y + boxHeight > height - GUTTER) y = Math.max(GUTTER, pointerY - boxHeight - 6);
-
-        painter.rect(x, y, boxWidth, boxHeight, COLOR_DIALOG);
-        painter.rect(x, y, boxWidth, 1, COLOR_RULE);
-        painter.rect(x, y + boxHeight - 1, boxWidth, 1, COLOR_RULE);
-        painter.rect(x, y, 1, boxHeight, COLOR_RULE);
-        painter.rect(x + boxWidth - 1, y, 1, boxHeight, COLOR_RULE);
-        for (int i = 0; i < lines.size(); i++) {
-            painter.text(lines.get(i), x + pad, y + pad + i * painter.lineHeight(), COLOR_TEXT);
-        }
-    }
-
-    /**
-     * One line broken into as many as it takes.
-     *
-     * <p>By word, and by character when a single word is longer than the room
-     * — which an advancement id, having no spaces in it at all, always is.</p>
-     */
-    private List<Component> wrapped(Painter painter, Component text, int room) {
-        List<Component> out = new ArrayList<>();
-        StringBuilder line = new StringBuilder();
-        for (String word : text.getString().split(" ")) {
-            String candidate = line.isEmpty() ? word : line + " " + word;
-            if (painter.textWidth(Component.literal(candidate)) <= room) {
-                line.setLength(0);
-                line.append(candidate);
-                continue;
-            }
-            if (!line.isEmpty()) {
-                out.add(Component.literal(line.toString()));
-                line.setLength(0);
-            }
-            for (char c : word.toCharArray()) {
-                if (painter.textWidth(Component.literal(line.toString() + c)) > room
-                        && !line.isEmpty()) {
-                    out.add(Component.literal(line.toString()));
-                    line.setLength(0);
-                }
-                line.append(c);
-            }
-        }
-        if (!line.isEmpty()) out.add(Component.literal(line.toString()));
-        if (out.isEmpty()) out.add(Component.literal(""));
-        return out;
     }
 
     /**
@@ -3085,6 +3067,15 @@ public final class AdminPanel {
      */
     private record DetailLine(int indent, Component text, int colour, boolean heading) {}
 
+    /**
+     * Where a line of the detail column sits, and where its tree arm reaches.
+     *
+     * <p>The same two steps the trigger page uses, so a command hanging off
+     * "At the end" and a condition hanging off an alternative line up.</p>
+     */
+    private static final int SECTION_INDENT = 6;
+    private static final int BRANCH_INDENT = 16;
+
     /** How far the scrolling half has been moved, in lines. */
     private int runDetailScroll = 0;
 
@@ -3110,7 +3101,7 @@ public final class AdminPanel {
             out.add(new DetailLine(0,
                     Component.translatable("ontime.gui.detail.audience_heading"), COLOR_TEXT, true));
             for (String name : row.audienceNames()) {
-                out.add(new DetailLine(4, Component.literal(name), COLOR_TEXT, false));
+                out.add(new DetailLine(BRANCH_INDENT, Component.literal(name), COLOR_TEXT, false));
             }
         }
 
@@ -3120,31 +3111,29 @@ public final class AdminPanel {
             out.add(new DetailLine(0,
                     Component.translatable("ontime.gui.detail.commands_heading"), COLOR_TEXT, true));
 
-            // The time column is as wide as the widest reading, so short and
-            // long ones share an edge instead of each starting wherever they
-            // happen to.
+            // A time reading, and the commands that fire at it hanging off
+            // it — the same shape the triggers have, so the column reads as
+            // one diagram rather than as two lists that happen to be stacked.
             Component onFinish = Component.translatable("ontime.gui.detail.on_finish")
                     .copy().withStyle(ChatFormatting.ITALIC);
-            int timeWidth = painter.textWidth(onFinish);
-            for (AdminModel.Scheduled entry : timer.scheduled()) {
-                timeWidth = Math.max(timeWidth, painter.textWidth(atLabel(entry)));
-            }
-            int commandIndent = 4 + timeWidth + 10;
 
+            Long at = null;
             for (AdminModel.Scheduled entry : timer.scheduled()) {
-                Component at = atLabel(entry);
+                if (at == null || at != entry.atSeconds()) {
+                    at = entry.atSeconds();
+                    out.add(new DetailLine(SECTION_INDENT, atLabel(entry), COLOR_COOLDOWN, false));
+                }
                 for (String command : entry.commands()) {
-                    out.add(new DetailLine(4, at, COLOR_COOLDOWN, false));
-                    out.add(new DetailLine(commandIndent, withWait(command, entry.delayTicks()),
+                    out.add(new DetailLine(BRANCH_INDENT, withWait(command, entry.delayTicks()),
                             COLOR_TEXT, false));
                 }
             }
             boolean first = true;
             for (AdminModel.Scheduled entry : timer.finishCommands()) {
+                if (first) out.add(new DetailLine(SECTION_INDENT, onFinish, COLOR_COOLDOWN, false));
+                first = false;
                 for (String command : entry.commands()) {
-                    if (first) out.add(new DetailLine(4, onFinish, COLOR_COOLDOWN, false));
-                    first = false;
-                    out.add(new DetailLine(commandIndent, withWait(command, entry.delayTicks()),
+                    out.add(new DetailLine(BRANCH_INDENT, withWait(command, entry.delayTicks()),
                             COLOR_TEXT, false));
                 }
             }
@@ -3169,7 +3158,8 @@ public final class AdminPanel {
                         case CONDITION -> COLOR_TEXT;
                         default -> COLOR_MUTED_TEXT;
                     };
-                    out.add(new DetailLine(4 + line.depth() * 8, line.text(), colour, false));
+                    out.add(new DetailLine(SECTION_INDENT + line.depth() * 10,
+                            line.text(), colour, false));
                 }
             }
         }
@@ -3219,6 +3209,37 @@ public final class AdminPanel {
             if (rule.startsIt() == starts && !rule.groups().isEmpty()) return true;
         }
         return false;
+    }
+
+    /**
+     * The arms that join a line to the one it belongs to.
+     *
+     * <p>The same drawing the trigger page does, against the same two indents:
+     * a spine down from every origin — a heading, a time reading, an
+     * alternative — and a stub into each line that hangs off it.</p>
+     */
+    private void drawDetailTree(Painter painter, List<DetailLine> all, int top, int last) {
+        int spine = detailX + SECTION_INDENT + 4;
+        for (int i = runDetailScroll; i < last; i++) {
+            DetailLine line = all.get(i);
+            int y = top + (i - runDetailScroll) * LINE;
+            if (line.indent() >= BRANCH_INDENT) {
+                treeLine(painter, spine, y + 4, detailX + BRANCH_INDENT - 2 - spine, 1);
+                continue;
+            }
+            if (line.heading() || line.text().getString().isEmpty()) continue;
+
+            // Down to the last line hanging off this origin, and no further.
+            int end = -1;
+            for (int j = i + 1; j < last; j++) {
+                if (all.get(j).indent() < BRANCH_INDENT) break;
+                end = j;
+            }
+            if (end < 0) continue;
+            int from = y + LINE - 3;
+            int endY = top + (end - runDetailScroll) * LINE + 4;
+            treeLine(painter, spine, from, 1, endY - from);
+        }
     }
 
     /**

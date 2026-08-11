@@ -84,8 +84,10 @@
 - The trigger page draws its tree: a spine down each heading and a stub into
   every row under it, redrawn as conditions are added and removed. A spine
   never crosses between the two headings.
-- A line too long for its row is cut short and carries the whole of it in a
-  tooltip, wrapped to stay on screen.
+- A line too long for its row is cut short and carries the whole of it in
+  vanilla's own tooltip.
+- The execution panel draws commands as a tree too: a time reading, or "At
+  the end", with the commands that fire at it hanging off it.
 - Typed values are checked as they are typed, on both surfaces and by the same
   rules: an id has to be an id, a selector a selector, and a list of names a
   list of names. Advancements, dimensions and the players online complete as

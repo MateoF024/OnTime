@@ -62,6 +62,7 @@ public class AdminScreen extends Screen implements PanelHost {
         super.render(graphics, mouseX, mouseY, partialTick);
         panel.drawContent(painter);
         // Over everything, the way it is over the chat line.
+        commandField.tick();
         if (commandField.suggestions() != null) {
             commandField.suggestions().render(graphics, mouseX, mouseY);
         }
@@ -182,6 +183,12 @@ public class AdminScreen extends Screen implements PanelHost {
         @Override
         public void text(Component text, int x, int y, int argb) {
             graphics.drawString(font(), text, x, y, argb, true);
+        }
+
+        @Override
+        public void tooltip(Component text, int mouseX, int mouseY) {
+            // Drawn there and then in this era; the later ones queue it.
+            Tooltips.show(graphics, font(), text, mouseX, mouseY);
         }
 
         @Override

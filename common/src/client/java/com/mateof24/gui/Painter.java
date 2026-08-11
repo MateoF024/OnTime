@@ -49,6 +49,16 @@ public interface Painter {
     int lineHeight();
 
     /**
+     * Vanilla's own tooltip, at the pointer, for this frame.
+     *
+     * <p>Not a box drawn here: the game already knows how to wrap one, where
+     * to put it so it stays on screen, and what it should look like. A
+     * hand-drawn lookalike gets all three subtly wrong and has to be kept in
+     * step with the game besides.</p>
+     */
+    void tooltip(Component text, int mouseX, int mouseY);
+
+    /**
      * Scales everything drawn until {@link #popScale()}, about a fixed point.
      *
      * <p>The only call here that needs the pose stack, and the one place the

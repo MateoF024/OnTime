@@ -65,25 +65,50 @@ public final class CommandField {
         if (box == null) {
             suggestions = null;
             bound = null;
+            showing = false;
             return;
         }
         if (box == bound && suggestions != null) return;
 
         Minecraft minecraft = Minecraft.getInstance();
-        // The same ten arguments the command block passes: a command with no
-        // leading slash, seven rows of suggestions, and the popup below the
-        // field rather than above it.
+        // The command block's arguments, with one changed: it anchors its
+        // popup below the field because its field is near the top of the
+        // screen. This one sits at the foot of the page, so the popup goes
+        // above it, the way the chat line's does.
         suggestions = new CommandSuggestions(minecraft, screen, box, minecraft.font,
-                true, true, 0, 7, false, 0xD0000000);
-        suggestions.setAllowSuggestions(true);
-        suggestions.updateCommandInfo();
+                true, true, 0, 7, true, 0xD0000000);
+        suggestions.setAllowSuggestions(false);
         bound = box;
     }
 
     /** Recomputes the completions. Called from the box's own responder. */
     public void refresh() {
-        if (suggestions != null) suggestions.updateCommandInfo();
+        if (suggestions != null && bound != null && bound.isFocused()) {
+            suggestions.updateCommandInfo();
+        }
     }
+
+    /**
+     * Follows the focus, once a frame.
+     *
+     * <p>A list offered to a box nobody has clicked in is a list in the way:
+     * opening the page put every command on screen before anybody had asked
+     * for one. It appears when the box is focused and goes when it is not.</p>
+     */
+    public void tick() {
+        if (suggestions == null || bound == null) return;
+        boolean focused = bound.isFocused();
+        if (focused == showing) return;
+        showing = focused;
+        suggestions.setAllowSuggestions(focused);
+        if (focused) {
+            suggestions.updateCommandInfo();
+        } else {
+            suggestions.hide();
+        }
+    }
+
+    private boolean showing;
 
     /**
      * The vanilla control, for the screen to render and feed input to.
@@ -98,6 +123,11 @@ public final class CommandField {
 
     public boolean isVisible() {
         return suggestions != null && suggestions.isVisible();
+    }
+
+    /** True while the box it belongs to has the caret. */
+    public boolean isFocused() {
+        return bound != null && bound.isFocused();
     }
 
     // The dispatcher's own type argument is the client suggestion provider on

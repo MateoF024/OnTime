@@ -153,6 +153,12 @@ public class PositionScreen extends Screen {
         }
 
         @Override
+        public void tooltip(Component text, int mouseX, int mouseY) {
+            // Drawn there and then in this era; the later ones queue it.
+            Tooltips.show(graphics, font, text, mouseX, mouseY);
+        }
+
+        @Override
         public void flatText(String text, int x, int y, int argb) {
             graphics.drawString(font, text, x, y, argb, false);
         }
