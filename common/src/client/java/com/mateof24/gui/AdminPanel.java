@@ -574,29 +574,12 @@ public final class AdminPanel {
             host.addWidget(button);
         }
 
-        // Apply and Discard live with the pages they act on, and they are
-        // called what they are called everywhere else in the panel.
-        AdminModel.TimerRow selected = model.timer(editor.timerName());
-        boolean dirty = editor.isDirty(selected);
-        Button apply = Button.builder(Component.translatable("ontime.gui.settings.apply"),
-                        b -> saveEditor())
-                .bounds(railX, contentBottom - 44, RAIL_WIDTH, 20)
-                .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.save.tip")))
-                .build();
-        apply.active = dirty;
-        applyButton = apply;
-        host.addWidget(apply);
-
-        Button discard = Button.builder(Component.translatable("ontime.gui.settings.discard"), b -> {
-                    editor.discard();
-                    model.clearMessage();
-                    init();
-                })
-                .bounds(railX, contentBottom - 20, RAIL_WIDTH, 20)
-                .build();
-        discard.active = dirty;
-        discardButton = discard;
-        host.addWidget(discard);
+        // No Apply and no Discard. Both pages here are lists, and a list acts
+        // the moment a button on it is pressed: there is nothing pending to
+        // apply and nothing to throw away. They belong to the column beside
+        // the list, which is where the values are.
+        applyButton = null;
+        discardButton = null;
 
         editorFieldX = railX + RAIL_WIDTH + GUTTER + 6;
         editorFieldTop = advancedTop();
@@ -769,24 +752,6 @@ public final class AdminPanel {
     private EditBox triggerValue;
     private EditBox triggerScore;
     private EditBox triggerTarget;
-
-
-    /**
-     * A button that walks a list, forwards on left click and back on right.
-     *
-     * <p>Right-click-to-reverse is how every other cycling control in this
-     * panel works, and these four were added without it — with ten trigger
-     * kinds, overshooting by one meant nine more clicks.</p>
-     */
-    private void cycler(Component label, int x, int y, int width, String tooltipKey,
-                        int size, java.util.function.IntConsumer set, int current) {
-        Button button = Button.builder(label, b -> { set.accept((current + 1) % size); init(); })
-                .bounds(x, y, width, 18)
-                .tooltip(Tooltip.create(Component.translatable(tooltipKey)))
-                .build();
-        host.addWidget(button);
-        cycleBack.put(button, () -> { set.accept((current - 1 + size) % size); init(); });
-    }
 
 
     // ------------------------------------------------------------------
@@ -1344,15 +1309,6 @@ public final class AdminPanel {
         closeBuilder();
     }
 
-    private static int parseIntOr(EditBox box, int fallback) {
-        if (box == null) return fallback;
-        try {
-            return Integer.parseInt(box.getValue().trim());
-        } catch (NumberFormatException e) {
-            return fallback;
-        }
-    }
-
     /** The two headings, their branches, and what is inside each one. */
     private void drawTriggerRows(Painter painter, AdminModel.TimerRow timer) {
         if (builderStep >= 0) {
@@ -1525,19 +1481,6 @@ public final class AdminPanel {
         return count;
     }
 
-    /**
-     * The one line a page shows when it holds nothing.
-     *
-     * <p>Centred in the page rather than parked in its top-left corner, where
-     * it read as a stray label belonging to something else.</p>
-     */
-    private void centred(Painter painter, Component text) {
-        int left = editorFieldX;
-        int right = width - GUTTER;
-        painter.text(text, left + (right - left - painter.textWidth(text)) / 2,
-                editorFieldTop + (contentBottom - editorFieldTop) / 2 - 4, COLOR_MUTED_TEXT);
-    }
-
     private static Component describeTrigger(AdminModel.TimerRow.Trigger trigger) {
         Component kind = Component.translatable("ontime.trigger.kind." + trigger.kind());
         Component who = describeWho(trigger);
@@ -1571,15 +1514,6 @@ public final class AdminPanel {
             return fallback;
         }
     }
-
-    private static double decimalOr(String text, double fallback) {
-        try {
-            return Double.parseDouble(text.trim());
-        } catch (RuntimeException e) {
-            return fallback;
-        }
-    }
-
 
     /** True when the server default is CUSTOM, which is the only time the row applies. */
     private boolean defaultsAreCustom() {
@@ -1661,13 +1595,54 @@ public final class AdminPanel {
     }
 
 
+    /**
+     * One line of the commands page.
+     *
+     * <p>A time reading is a line of its own, and the commands that fire at it
+     * hang off it — the same shape the triggers have. Every row used to repeat
+     * the reading beside the command, so five commands at the end said "At the
+     * end" five times and nothing said they were one batch.</p>
+     *
+     * @param index which entry the remove button takes, or -1 on a reading
+     */
+    private record CommandLine(int index, int indent, Component text, int colour) {}
+
+    private List<CommandLine> commandLines(AdminModel.TimerRow timer) {
+        List<CommandLine> out = new ArrayList<>();
+        if (timer == null) return out;
+        List<AdminModel.Scheduled> entries = timer.commandList();
+
+        Long at = null;
+        boolean finishSeen = false;
+        for (int i = 0; i < entries.size(); i++) {
+            AdminModel.Scheduled entry = entries.get(i);
+            if (entry.atSeconds() < 0) {
+                if (!finishSeen) {
+                    finishSeen = true;
+                    out.add(new CommandLine(-1, SECTION_INDENT,
+                            Component.translatable("ontime.gui.detail.on_finish")
+                                    .copy().withStyle(ChatFormatting.ITALIC), COLOR_COOLDOWN));
+                }
+            } else if (at == null || at != entry.atSeconds()) {
+                at = entry.atSeconds();
+                out.add(new CommandLine(-1, SECTION_INDENT, when(entry), COLOR_COOLDOWN));
+            }
+            for (String command : entry.commands()) {
+                out.add(new CommandLine(i, BRANCH_INDENT,
+                        withWait(command, entry.delayTicks()), COLOR_TEXT));
+            }
+        }
+        return out;
+    }
+
     private void buildCommandRows(AdminModel.TimerRow timer, int bottom) {
-        List<AdminModel.Scheduled> entries = timer == null ? List.of() : timer.commandList();
+        List<CommandLine> entries = commandLines(timer);
         editorRowsShown = Math.max(1, (bottom - editorFieldTop) / 20);
         detailScroll = Math.max(0, Math.min(Math.max(0, entries.size() - editorRowsShown), detailScroll));
 
         for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
-            final int index = detailScroll + i;
+            final int index = entries.get(detailScroll + i).index();
+            if (index < 0) continue;
             int y = editorFieldTop + i * 20;
             host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.command.remove"),
                             b -> {
@@ -1765,34 +1740,36 @@ public final class AdminPanel {
     private EditBox commandWait;
     private int commandWaitLabelY = -1;
 
-    /** Same rules as the defaults form; only the source of the value differs. */
+    /**
+     * The arms joining each command to the reading it fires at.
+     *
+     * <p>The same drawing the trigger page and the execution column do, so a
+     * command under a time and a condition under an alternative are the same
+     * picture in three places.</p>
+     */
+    private void drawCommandTree(Painter painter, List<CommandLine> lines, int last) {
+        for (int i = detailScroll; i < last; i++) {
+            if (lines.get(i).index() >= 0) continue;
 
-    /** Same rules as the defaults form; only the source of the value differs. */
-    private void registerDisplayField(EditBox box, SettingsForm.Row row, Tooltip tip) {
-        switch (row.kind()) {
-            case COLOR -> assist.add(box, FieldAssist.hexColor(), FieldAssist.Source.NONE, tip,
-                    () -> {
-                        Integer color = SettingsForm.colorOf(box.getValue());
-                        return color == null ? 0xFFFFFFFF : 0xFF000000 | color;
-                    });
-            case STRING -> assist.add(box, FieldAssist.id(), FieldAssist.Source.SOUNDS, tip, null);
-            case INT -> assist.add(box, FieldAssist.intBetween(displayFloor(row.displayKey()),
-                    Integer.MAX_VALUE), FieldAssist.Source.NONE, tip, null);
-            case FLOAT -> assist.add(box, FieldAssist.decimalBetween(
-                    "scale".equals(row.displayKey()) ? 0.1f : 0f,
-                    "scale".equals(row.displayKey()) ? 5f
-                            : "soundPitch".equals(row.displayKey()) ? 2f : 1f),
-                    FieldAssist.Source.NONE, tip, null);
-            default -> { }
+            int spine = editorFieldX + SECTION_INDENT + 4;
+            int end = -1;
+            for (int j = i + 1; j < last; j++) {
+                if (lines.get(j).index() < 0) break;
+                end = j;
+            }
+            if (end < 0) continue;
+
+            int from = editorFieldTop + (i - detailScroll) * 20 + 18;
+            int endY = editorFieldTop + (end - detailScroll) * 20 + 9;
+            treeLine(painter, spine, from, 1, endY - from);
+            for (int j = i + 1; j <= end; j++) {
+                treeLine(painter, spine, editorFieldTop + (j - detailScroll) * 20 + 9,
+                        editorFieldX + BRANCH_INDENT - 2 - spine, 1);
+            }
         }
     }
 
-    private static long displayFloor(String key) {
-        return switch (key) {
-            case "x", "y" -> Integer.MIN_VALUE;
-            default -> 0;
-        };
-    }
+    /** Same rules as the defaults form; only the source of the value differs. */
 
     // ---- the settings form ----
 
@@ -2189,14 +2166,6 @@ public final class AdminPanel {
         return index < dialogFields.size() ? dialogFields.get(index).getValue().trim() : "";
     }
 
-    private int numberIn(int index) {
-        try {
-            return Integer.parseInt(value(index));
-        } catch (NumberFormatException e) {
-            return 0;
-        }
-    }
-
     /**
      * Sends everything the editor changed, then stays where it is.
      *
@@ -2292,7 +2261,11 @@ public final class AdminPanel {
     private void buildHeader() {
         int doneWidth = 54;
         int doneX = width - GUTTER - doneWidth;
-        host.addWidget(Button.builder(Component.translatable("ontime.gui.exit"), b -> {
+        // Inside the advanced editor there is no Exit at all: Back stands
+        // where it stood, so a reflex press leaves the page rather than the
+        // whole panel.
+        boolean inAdvanced = model.tab() == AdminModel.Tab.TIMERS && editor.advanced();
+        if (!inAdvanced) host.addWidget(Button.builder(Component.translatable("ontime.gui.exit"), b -> {
                     // Closing on top of unapplied edits throws them away in
                     // silence. Asking costs one click and is the only way the
                     // answer is the operator's rather than the panel's.
@@ -2306,8 +2279,8 @@ public final class AdminPanel {
                 .bounds(doneX, 5, doneWidth, 20)
                 .build());
 
-        if (model.tab() == AdminModel.Tab.TIMERS && editor.advanced()) {
-            int backWidth = 50;
+        if (inAdvanced) {
+            int backWidth = doneWidth;
             host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.back"), b -> {
                         // Back to the list, not out of the timer: what was
                         // typed here is still pending, and the column beside
@@ -2316,7 +2289,7 @@ public final class AdminPanel {
                         detailScroll = 0;
                         init();
                     })
-                    .bounds(doneX - 6 - backWidth, 5, backWidth, 20)
+                    .bounds(doneX, 5, backWidth, 20)
                     .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.back.tip")))
                     .build());
         }
@@ -2778,39 +2751,22 @@ public final class AdminPanel {
         if (commandAdd != null && commandBox != null) {
             commandAdd.active = CommandField.parses(commandBox.getValue());
         }
-        List<AdminModel.Scheduled> entries = timer == null ? List.of() : timer.commandList();
+        List<CommandLine> entries = commandLines(timer);
         if (entries.isEmpty()) {
             painter.text(Component.translatable("ontime.gui.editor.command.none"),
                     editorFieldX, editorFieldTop + 4, COLOR_TEXT);
             return;
         }
-
-        // As wide as the widest reading and no wider. Sizing it to the longest
-        // label instead left a hand's width of nothing between the two.
-        int timeWidth = 0;
-        for (AdminModel.Scheduled entry : entries) {
-            if (entry.atSeconds() >= 0) timeWidth = Math.max(timeWidth, painter.textWidth(when(entry)));
-        }
-        timeWidth = Math.max(timeWidth, painter.textWidth(Component.translatable("ontime.gui.detail.on_finish")));
-        int commandX = editorFieldX + timeWidth + 10;
+        int last = Math.min(entries.size(), detailScroll + editorRowsShown);
+        drawCommandTree(painter, entries, last);
 
         for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
-            AdminModel.Scheduled entry = entries.get(detailScroll + i);
+            CommandLine line = entries.get(detailScroll + i);
+            int x = editorFieldX + line.indent();
             int y = editorFieldTop + i * 20 + 5;
             // The reading in the accent colour, the command in plain white:
             // one glance finds the times, the next reads the command.
-            painter.text(entry.atSeconds() < 0
-                            ? Component.translatable("ontime.gui.detail.on_finish").copy()
-                                    .withStyle(ChatFormatting.ITALIC)
-                            : when(entry),
-                    editorFieldX, y, COLOR_COOLDOWN);
-            if (entry.delayTicks() > 0) {
-                Component wait = Component.translatable("ontime.gui.editor.command.waits",
-                        entry.delayTicks());
-                painter.text(wait, width - GUTTER - 26 - painter.textWidth(wait), y, COLOR_MUTED_TEXT);
-            }
-            elidedText(painter, Component.literal(entry.commands().get(0)), commandX, y,
-                    width - GUTTER - 26 - commandX, COLOR_TEXT);
+            elidedText(painter, line.text(), x, y, width - GUTTER - 26 - x, line.colour());
         }
 
         drawScrollbar(painter, width - GUTTER - 24, editorFieldTop, contentBottom - 62,
@@ -3074,7 +3030,8 @@ public final class AdminPanel {
      * "At the end" and a condition hanging off an alternative line up.</p>
      */
     private static final int SECTION_INDENT = 6;
-    private static final int BRANCH_INDENT = 16;
+    private static final int INDENT_STEP = 10;
+    private static final int BRANCH_INDENT = SECTION_INDENT + INDENT_STEP;
 
     /** How far the scrolling half has been moved, in lines. */
     private int runDetailScroll = 0;
@@ -3100,6 +3057,7 @@ public final class AdminPanel {
         if (!row.audienceGlobal() && !row.audienceNames().isEmpty()) {
             out.add(new DetailLine(0,
                     Component.translatable("ontime.gui.detail.audience_heading"), COLOR_TEXT, true));
+            out.add(new DetailLine(0, Component.empty(), COLOR_TEXT, false));
             for (String name : row.audienceNames()) {
                 out.add(new DetailLine(BRANCH_INDENT, Component.literal(name), COLOR_TEXT, false));
             }
@@ -3110,6 +3068,7 @@ public final class AdminPanel {
             if (!out.isEmpty()) out.add(new DetailLine(0, Component.empty(), COLOR_TEXT, false));
             out.add(new DetailLine(0,
                     Component.translatable("ontime.gui.detail.commands_heading"), COLOR_TEXT, true));
+            out.add(new DetailLine(0, Component.empty(), COLOR_TEXT, false));
 
             // A time reading, and the commands that fire at it hanging off
             // it — the same shape the triggers have, so the column reads as
@@ -3152,6 +3111,7 @@ public final class AdminPanel {
                 out.add(new DetailLine(0,
                         Component.translatable("ontime.gui.detail.triggers_heading"),
                         COLOR_TEXT, true));
+                out.add(new DetailLine(0, Component.empty(), COLOR_TEXT, false));
                 for (TriggerLine line : tree) {
                     int colour = switch (line.row()) {
                         case SECTION -> line.startsIt() ? COLOR_RUNNING : COLOR_ERROR;
@@ -3190,13 +3150,16 @@ public final class AdminPanel {
         runDetailScroll = Math.max(0, Math.min(Math.max(0, all.size() - runDetailRows), runDetailScroll));
         if (all.isEmpty()) return;
 
+        int last = Math.min(all.size(), runDetailScroll + runDetailRows);
+        drawDetailTree(painter, all, top, last);
+
         for (int i = 0; i < runDetailRows && runDetailScroll + i < all.size(); i++) {
             DetailLine line = all.get(runDetailScroll + i);
             int y = top + i * LINE;
             elidedText(painter, line.text(), detailX + line.indent(), y,
-                    detailX + detailWidth - 6 - (detailX + line.indent()), line.colour());
+                    detailX + detailWidth - 8 - (detailX + line.indent()), line.colour());
             if (line.heading()) {
-                painter.rect(detailX, y + LINE - 1, detailWidth - 6, 1, COLOR_RULE);
+                painter.rect(detailX, y + LINE - 1, detailWidth - 8, 1, COLOR_RULE);
             }
         }
         drawScrollbar(painter, detailX + detailWidth - 3, top, top + runDetailRows * LINE,
@@ -3219,26 +3182,35 @@ public final class AdminPanel {
      * alternative — and a stub into each line that hangs off it.</p>
      */
     private void drawDetailTree(Painter painter, List<DetailLine> all, int top, int last) {
-        int spine = detailX + SECTION_INDENT + 4;
         for (int i = runDetailScroll; i < last; i++) {
             DetailLine line = all.get(i);
-            int y = top + (i - runDetailScroll) * LINE;
-            if (line.indent() >= BRANCH_INDENT) {
-                treeLine(painter, spine, y + 4, detailX + BRANCH_INDENT - 2 - spine, 1);
-                continue;
-            }
             if (line.heading() || line.text().getString().isEmpty()) continue;
 
-            // Down to the last line hanging off this origin, and no further.
+            int y = top + (i - runDetailScroll) * LINE;
+            int spine = detailX + line.indent() + 4;
+
+            // Everything under this one, until something at the same level or
+            // shallower — that is where this branch of the tree ends. A blank
+            // line ends it too: it is the gap between two sections.
             int end = -1;
             for (int j = i + 1; j < last; j++) {
-                if (all.get(j).indent() < BRANCH_INDENT) break;
-                end = j;
+                DetailLine below = all.get(j);
+                if (below.heading() || below.text().getString().isEmpty()) break;
+                if (below.indent() <= line.indent()) break;
+                if (below.indent() == line.indent() + INDENT_STEP) end = j;
             }
             if (end < 0) continue;
+
+            // The spine down to the last child, and a stub into each one.
             int from = y + LINE - 3;
             int endY = top + (end - runDetailScroll) * LINE + 4;
             treeLine(painter, spine, from, 1, endY - from);
+            for (int j = i + 1; j <= end; j++) {
+                if (all.get(j).indent() != line.indent() + INDENT_STEP) continue;
+                int childY = top + (j - runDetailScroll) * LINE + 4;
+                treeLine(painter, spine, childY,
+                        detailX + all.get(j).indent() - 2 - spine, 1);
+            }
         }
     }
 
@@ -3473,9 +3445,9 @@ public final class AdminPanel {
         return total;
     }
 
+    /** Rows the page has, readings included, which is what the wheel measures. */
     private int commandCount() {
-        AdminModel.TimerRow timer = model.timer(editor.timerName());
-        return timer == null ? 0 : timer.commandList().size();
+        return commandLines(model.timer(editor.timerName())).size();
     }
 
     private void clampScroll() {

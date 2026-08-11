@@ -110,15 +110,19 @@ public final class TimerEditor {
         }
 
         // ---- everything else ----
+        // Titles, repeating and handing over are values like any other, and
+        // they sit with the rest of the timer's values rather than behind a
+        // second screen. What is left in the advanced editor is the two things
+        // that are lists rather than forms.
         for (String slot : List.of("above", "below", "left", "right")) {
-            out.add(new Field(Section.TITLES, "titles", "title." + slot, Kind.TEXT, "title." + slot));
+            out.add(new Field(Section.QUICK, "titles", "title." + slot, Kind.TEXT, "title." + slot));
         }
 
-        out.add(new Field(Section.REPEAT, "repeat", "repeat", Kind.BOOL, "repeat"));
-        out.add(new Field(Section.REPEAT, "repeat", "repeatCount", Kind.INT, "repeat_count"));
-        out.add(new Field(Section.REPEAT, "repeat", "repeatCooldown", Kind.INT, "repeat_cooldown"));
-        out.add(new Field(Section.REPEAT, "sequence", "nextTimer", Kind.TEXT, "next_timer"));
-        out.add(new Field(Section.REPEAT, "sequence", "sequenceCooldown", Kind.INT, "sequence_cooldown"));
+        out.add(new Field(Section.QUICK, "repeat", "repeat", Kind.BOOL, "repeat"));
+        out.add(new Field(Section.QUICK, "repeat", "repeatCount", Kind.INT, "repeat_count"));
+        out.add(new Field(Section.QUICK, "repeat", "repeatCooldown", Kind.INT, "repeat_cooldown"));
+        out.add(new Field(Section.QUICK, "sequence", "nextTimer", Kind.TEXT, "next_timer"));
+        out.add(new Field(Section.QUICK, "sequence", "sequenceCooldown", Kind.INT, "sequence_cooldown"));
 
         // Nothing for TRIGGERS: it is a list, not a form, so AdminPanel draws
         // it the way it draws the command list.
@@ -188,7 +192,7 @@ public final class TimerEditor {
 
     // ---- state ----
 
-    private Section section = Section.TITLES;
+    private Section section = Section.COMMANDS;
     private boolean advanced = false;
     private String timerName = null;
     private boolean creating = false;
@@ -199,7 +203,7 @@ public final class TimerEditor {
         timerName = name;
         creating = false;
         advanced = false;
-        section = Section.TITLES;
+        section = Section.COMMANDS;
         pending.clear();
     }
 
@@ -214,7 +218,7 @@ public final class TimerEditor {
         timerName = null;
         creating = true;
         advanced = false;
-        section = Section.TITLES;
+        section = Section.COMMANDS;
         pending.clear();
         pending.put("hours", "0");
         pending.put("minutes", "1");
@@ -243,7 +247,7 @@ public final class TimerEditor {
 
     /** The pages the advanced editor offers: everything that is not QUICK. */
     public static List<Section> advancedSections() {
-        return List.of(Section.TITLES, Section.COMMANDS, Section.REPEAT, Section.TRIGGERS);
+        return List.of(Section.COMMANDS, Section.TRIGGERS);
     }
 
     /** True while the advanced editor is the thing on screen. */

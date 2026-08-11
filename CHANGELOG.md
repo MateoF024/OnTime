@@ -80,8 +80,15 @@
   never crosses between the two headings.
 - A line too long for its row is cut short and carries the whole of it in
   vanilla's own tooltip.
-- The execution panel draws commands as a tree too: a time reading, or "At
-  the end", with the commands that fire at it hanging off it.
+- Commands are drawn as a tree wherever they are listed: a time reading, or
+  "At the end", with the commands that fire at it hanging off it. Every row
+  used to repeat the reading beside the command, so five commands at the end
+  said "At the end" five times and nothing said they were one batch.
+- The advanced editor is the two things that are lists: commands and
+  triggers. Titles, repeating and handing over are values like any other and
+  sit with the rest of them in the column beside the list, which is also the
+  only place with an Apply. Inside the advanced editor there is no Exit at
+  all -- Back stands where it stood.
 - Typed values are checked as they are typed, on both surfaces and by the same
   rules: an id has to be an id, a selector a selector, and a list of names a
   list of names. Advancements, dimensions and the players online complete as
