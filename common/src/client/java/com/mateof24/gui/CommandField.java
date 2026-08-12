@@ -71,12 +71,12 @@ public final class CommandField {
         if (box == bound && suggestions != null) return;
 
         Minecraft minecraft = Minecraft.getInstance();
-        // The command block's arguments, with one changed: it anchors its
-        // popup below the field because its field is near the top of the
-        // screen. This one sits at the foot of the page, so the popup goes
-        // above it, the way the chat line's does.
+        // The command block's own arguments, unchanged. Its field sits near
+        // the top of the screen and the popup opens below it, which is where
+        // this field sits too now — it moved above the list it adds to, so
+        // the list it offers no longer covers what you are adding to.
         suggestions = new CommandSuggestions(minecraft, screen, box, minecraft.font,
-                true, true, 0, 7, true, 0xD0000000);
+                true, true, 0, 7, false, 0xD0000000);
         suggestions.setAllowSuggestions(false);
         bound = box;
     }

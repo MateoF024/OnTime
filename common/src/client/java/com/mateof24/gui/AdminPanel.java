@@ -1635,15 +1635,27 @@ public final class AdminPanel {
         return out;
     }
 
+    /**
+     * How much room the boxes take at the top of the commands page.
+     *
+     * <p>The command on a line of its own, then the four numbers under it,
+     * each with its name above it. It sat at the foot before, which put the
+     * completion list over the tree it was meant to be adding to.</p>
+     */
+    private static final int COMMAND_FORM_HEIGHT = 62;
+
     private void buildCommandRows(AdminModel.TimerRow timer, int bottom) {
+        buildCommandForm(timer);
+
+        int listTop = editorFieldTop + COMMAND_FORM_HEIGHT;
         List<CommandLine> entries = commandLines(timer);
-        editorRowsShown = Math.max(1, (bottom - editorFieldTop) / 20);
+        editorRowsShown = Math.max(1, (contentBottom - listTop) / 20);
         detailScroll = Math.max(0, Math.min(Math.max(0, entries.size() - editorRowsShown), detailScroll));
 
         for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
             final int index = entries.get(detailScroll + i).index();
             if (index < 0) continue;
-            int y = editorFieldTop + i * 20;
+            int y = listTop + i * 20;
             host.addWidget(Button.builder(Component.translatable("ontime.gui.editor.command.remove"),
                             b -> {
                                 JsonObject args = new JsonObject();
@@ -1656,33 +1668,27 @@ public final class AdminPanel {
                     .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.command.remove.tip")))
                     .build());
         }
+    }
 
-        // The adding row, at the foot and always there. Three boxes rather
-        // than one: nobody should have to work out what an hour and thirty
-        // seven minutes is in seconds to schedule a command there.
-        int y = bottom + 6;
-        int unit = 34;
-        for (int i = 0; i < 3; i++) {
-            EditBox box = new EditBox(host.font(), editorFieldX + i * (unit + 3), y, unit, 18,
-                    Component.translatable("ontime.gui.editor.command." + AT_UNITS[i]));
-            box.setHint(Component.translatable("ontime.gui.editor.command." + AT_UNITS[i]));
-            box.setMaxLength(4);
-            box.setValue(atText[i]);
-            final int slot = i;
-            box.setResponder(text -> atText[slot] = text);
-            host.addWidget(box);
-            assist.add(box, FieldAssist.intBetween(0, 9999));
-            atFields.add(box);
-        }
+    /**
+     * The boxes that add a command, above the list they add to.
+     *
+     * <p>The command on a line of its own because a command is long, then the
+     * four numbers under it, each with its whole name above it rather than a
+     * letter inside it. A box with its own name written in it is empty and
+     * looks filled.</p>
+     */
+    private void buildCommandForm(AdminModel.TimerRow timer) {
+        int y = editorFieldTop;
+        int addWidth = 48;
+        int right = width - GUTTER;
 
-        int commandX = editorFieldX + 3 * (unit + 3) + 6;
-        EditBox command = new EditBox(host.font(), commandX, y,
-                width - GUTTER - 54 - commandX,
-                18, Component.translatable("ontime.gui.editor.command.text"));
+        EditBox command = new EditBox(host.font(), editorFieldX, y,
+                right - addWidth - 6 - editorFieldX, 18,
+                Component.translatable("ontime.gui.editor.command.text"));
         command.setMaxLength(256);
-        // No hint saying to leave the slash off, and no completion list of our
-        // own: it is the command block's field now, and the first thing it
-        // does is offer every command the server knows.
+        // No hint and no completion list of our own: it is the command block's
+        // field, and the first thing it does is offer every command there is.
         command.setValue(commandText);
         command.setResponder(text -> {
             commandText = text;
@@ -1692,18 +1698,31 @@ public final class AdminPanel {
         host.bindCommandField(command);
         commandBox = command;
 
-        // What waits after this one before the next in the same batch. Beside
-        // the command, because that is whose pause it is.
-        commandWait = new EditBox(host.font(), editorFieldX, y + 22, 44, 18,
+        // Names above, boxes below, all four on one line.
+        int boxY = y + 33;
+        int unit = 52;
+        int gap = 8;
+        for (int i = 0; i < 3; i++) {
+            EditBox box = new EditBox(host.font(), editorFieldX + i * (unit + gap), boxY, unit, 18,
+                    Component.translatable("ontime.gui.editor.field." + AT_UNITS[i]));
+            box.setMaxLength(4);
+            box.setValue(atText[i]);
+            final int slot = i;
+            box.setResponder(text -> atText[slot] = text);
+            host.addWidget(box);
+            assist.add(box, FieldAssist.intBetween(0, 9999));
+            atFields.add(box);
+        }
+
+        commandWait = new EditBox(host.font(), editorFieldX + 3 * (unit + gap), boxY, unit, 18,
                 Component.translatable("ontime.gui.editor.command.delay"));
         commandWait.setMaxLength(5);
         commandWait.setValue(commandWaitText);
         commandWait.setResponder(text -> commandWaitText = text);
         host.addWidget(commandWait);
-        assist.add(commandWait, FieldAssist.intBetween(0, 72000),
-                FieldAssist.Source.NONE,
+        assist.add(commandWait, FieldAssist.intBetween(0, 72000), FieldAssist.Source.NONE,
                 Tooltip.create(Component.translatable("ontime.gui.editor.command.delay.tip")), null);
-        commandWaitLabelY = y + 22;
+        commandFormLabelY = y + 22;
 
         Button add = Button.builder(Component.translatable("ontime.gui.editor.command.add"), b -> {
                     if (timer == null || command.getValue().isBlank()) return;
@@ -1724,7 +1743,7 @@ public final class AdminPanel {
                     commandWaitText = "0";
                     for (int i = 0; i < atText.length; i++) atText[i] = "";
                 })
-                .bounds(width - GUTTER - 48, y, 48, 18)
+                .bounds(right - addWidth, y, addWidth, 18)
                 .tooltip(Tooltip.create(Component.translatable("ontime.gui.editor.command.add.tip")))
                 .build();
         // Dead until the dispatcher would accept it, so a typo is refused here
@@ -1734,11 +1753,27 @@ public final class AdminPanel {
         host.addWidget(add);
     }
 
+    /** Where the four names are drawn, kept from the build pass. */
+    private int commandFormLabelY = -1;
+
+
     /** Kept from the build pass, because typing does not lay the page out again. */
     private Button commandAdd;
     private EditBox commandBox;
     private EditBox commandWait;
-    private int commandWaitLabelY = -1;
+
+    /** The whole name of each box, above it, in the reading order of the row. */
+    private void drawCommandFormLabels(Painter painter) {
+        if (commandFormLabelY < 0) return;
+        int unit = 52;
+        int gap = 8;
+        for (int i = 0; i < 3; i++) {
+            painter.text(Component.translatable("ontime.gui.editor.field." + AT_UNITS[i]),
+                    editorFieldX + i * (unit + gap), commandFormLabelY, COLOR_TEXT);
+        }
+        painter.text(Component.translatable("ontime.gui.editor.command.delay"),
+                editorFieldX + 3 * (unit + gap), commandFormLabelY, COLOR_TEXT);
+    }
 
     /**
      * The arms joining each command to the reading it fires at.
@@ -1748,6 +1783,7 @@ public final class AdminPanel {
      * picture in three places.</p>
      */
     private void drawCommandTree(Painter painter, List<CommandLine> lines, int last) {
+        int listTop = editorFieldTop + COMMAND_FORM_HEIGHT;
         for (int i = detailScroll; i < last; i++) {
             if (lines.get(i).index() >= 0) continue;
 
@@ -1759,11 +1795,11 @@ public final class AdminPanel {
             }
             if (end < 0) continue;
 
-            int from = editorFieldTop + (i - detailScroll) * 20 + 18;
-            int endY = editorFieldTop + (end - detailScroll) * 20 + 9;
+            int from = listTop + (i - detailScroll) * 20 + 18;
+            int endY = listTop + (end - detailScroll) * 20 + 9;
             treeLine(painter, spine, from, 1, endY - from);
             for (int j = i + 1; j <= end; j++) {
-                treeLine(painter, spine, editorFieldTop + (j - detailScroll) * 20 + 9,
+                treeLine(painter, spine, listTop + (j - detailScroll) * 20 + 9,
                         editorFieldX + BRANCH_INDENT - 2 - spine, 1);
             }
         }
@@ -2753,29 +2789,27 @@ public final class AdminPanel {
         }
         List<CommandLine> entries = commandLines(timer);
         if (entries.isEmpty()) {
+            drawCommandFormLabels(painter);
             painter.text(Component.translatable("ontime.gui.editor.command.none"),
-                    editorFieldX, editorFieldTop + 4, COLOR_TEXT);
+                    editorFieldX, editorFieldTop + COMMAND_FORM_HEIGHT + 4, COLOR_MUTED_TEXT);
             return;
         }
         int last = Math.min(entries.size(), detailScroll + editorRowsShown);
         drawCommandTree(painter, entries, last);
+        drawCommandFormLabels(painter);
 
         for (int i = 0; i < editorRowsShown && detailScroll + i < entries.size(); i++) {
             CommandLine line = entries.get(detailScroll + i);
             int x = editorFieldX + line.indent();
-            int y = editorFieldTop + i * 20 + 5;
+            int y = editorFieldTop + COMMAND_FORM_HEIGHT + i * 20 + 5;
             // The reading in the accent colour, the command in plain white:
             // one glance finds the times, the next reads the command.
             elidedText(painter, line.text(), x, y, width - GUTTER - 26 - x, line.colour());
         }
 
-        drawScrollbar(painter, width - GUTTER - 24, editorFieldTop, contentBottom - 62,
-                entries.size(), editorRowsShown, detailScroll);
+        drawScrollbar(painter, width - GUTTER - 24, editorFieldTop + COMMAND_FORM_HEIGHT,
+                contentBottom, entries.size(), editorRowsShown, detailScroll);
 
-        if (commandWaitLabelY > 0) {
-            painter.text(Component.translatable("ontime.gui.editor.command.delay").copy().append(":"),
-                    editorFieldX + 48, commandWaitLabelY + 5, COLOR_MUTED_TEXT);
-        }
     }
 
     /** A scheduled command's clock reading. */
@@ -3327,6 +3361,19 @@ public final class AdminPanel {
      */
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (assist.mouseClicked(mouseX, mouseY)) return true;
+
+        // A click anywhere but in the command box lets it go, even when it
+        // lands on nothing at all: vanilla only moves focus between widgets,
+        // so clicking bare background left the caret — and the completion
+        // list — exactly where they were.
+        if (commandBox != null && commandBox.isFocused()
+                && !(mouseX >= commandBox.getX()
+                        && mouseX < commandBox.getX() + commandBox.getWidth()
+                        && mouseY >= commandBox.getY()
+                        && mouseY < commandBox.getY() + commandBox.getHeight())) {
+            commandBox.setFocused(false);
+        }
+
         if (button != 1) return false;
 
         // Right-click walks a cycle the other way. A button that only goes

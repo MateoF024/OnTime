@@ -80,6 +80,10 @@
   never crosses between the two headings.
 - A line too long for its row is cut short and carries the whole of it in
   vanilla's own tooltip.
+- The boxes that add a command sit above the list they add to: the command
+  across the whole line, the four numbers under it, each with its whole name
+  written above rather than a letter inside. A box with its own name in it
+  is empty and looks filled.
 - Commands are drawn as a tree wherever they are listed: a time reading, or
   "At the end", with the commands that fire at it hanging off it. Every row
   used to repeat the reading beside the command, so five commands at the end
