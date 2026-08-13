@@ -74,7 +74,8 @@
       "trg.v.ftb_reward": "Reward id", "trg.v.scoreboard": "Objective",
       "trg.groupAll": "all of these hold at once", "trg.groupAny": "any of these holds",
       "trg.groupAtLeast": "at least %s of these hold",
-      "trg.orGroup": "or", "trg.startsIt": "Starts it", "trg.endsIt": "Ends it",
+      "trg.orGroup": "or", "trg.and": "and",
+      "trg.startsIt": "Starts it", "trg.endsIt": "Ends it",
       "group.server": "Server", "group.web": "Web", "group.reset": "Reset",
       "reset.what": "Every setting above, back to what the mod ships with",
       "reset.do": "Restore defaults", "reset.title": "Restore every default?",
@@ -148,7 +149,8 @@
       "trg.v.ftb_reward": "Id de la recompensa", "trg.v.scoreboard": "Objetivo",
       "trg.groupAll": "todas se cumplen a la vez", "trg.groupAny": "se cumple alguna",
       "trg.groupAtLeast": "se cumplen al menos %s",
-      "trg.orGroup": "o", "trg.startsIt": "Lo arranca", "trg.endsIt": "Lo termina",
+      "trg.orGroup": "o", "trg.and": "y",
+      "trg.startsIt": "Lo arranca", "trg.endsIt": "Lo termina",
       "group.server": "Servidor", "group.web": "Web", "group.reset": "Restablecer",
       "reset.what": "Todos los ajustes de arriba, a los que trae el mod",
       "reset.do": "Restaurar valores", "reset.title": "¿Restaurar todos los valores?",
@@ -395,7 +397,7 @@
       startTicking();
     }
     if (tab === "timers") {
-      const key = filter + " " + JSON.stringify(state.timers || []);
+      const key = filter + "\u0000" + JSON.stringify(state.timers || []);
       if (key !== drawnTimers) { drawnTimers = key; renderTimers(); }
     }
     if (tab === "settings") {
@@ -1028,6 +1030,19 @@
   }
 
 
+  /**
+   * One alternative written as a line: everything in it, joined by what its
+   * group means. A lone condition is an alternative of one.
+   */
+  function describeAlternative(group) {
+    if (group.node !== "group") return describeTrigger(group);
+    const parts = (group.children || []).map(describeAlternative);
+    if (group.mode === "at_least") {
+      return t("trg.groupAtLeast", group.count ?? 1) + ": " + parts.join(", ");
+    }
+    return parts.join(" " + t(group.mode === "any" ? "trg.orGroup" : "trg.and") + " ");
+  }
+
   /** The groups of a rule. A rule that is one plain condition counts as one. */
   function groupsOf(rule) {
     const root = rule.condition;
@@ -1505,7 +1520,22 @@
         // Nothing empty and nothing unparseable leaves this dialog. Sending
         // it earned an "Unknown preset" from the server, which told the person
         // reading it nothing about which box was wrong.
-        const bad = $$("#modal-body [data-key]").filter(i => !parses(i) || i.value.trim() === "");
+        //
+        // Asked of what Apply is about to send, and not of everything on
+        // screen that happens to carry a key. Every box in the dialog did:
+        // the four titles, which are blank on a timer that has none; the next
+        // timer, same; and the three units and the text of the command adder,
+        // which are blank until somebody adds a command. So Apply marked
+        // fourteen boxes red and refused on a timer nobody had touched, which
+        // is every timer.
+        const sent = [
+          "hours", "minutes", "seconds", "silent",
+          "repeat", "repeatCount", "repeatCooldown", "nextTimer", "sequenceCooldown",
+          ...DISPLAY_KEYS.flatMap(([, keys]) => keys.map(([key]) => "d:" + key)),
+          ...["above", "below", "left", "right"].map(slot => "t:" + slot)
+        ];
+        const bad = sent.map(get).filter(i =>
+          i && (!parses(i) || (i.value.trim() === "" && !i.dataset.optional)));
         if (bad.length) {
           bad.forEach(i => i.classList.add("bad"));
           bad[0].focus();
@@ -1612,14 +1642,15 @@
         [t("group.sequence"), timer.nextTimer || t("none")]
       ]);
 
-      const shown = (timer.rules || [])
-        .filter(rule => rule.condition && rule.condition.node !== "group")
-        .map(rule => ({ ...rule.condition, action: rule.action }));
-      facts(t("group.triggers"), shown.length
-        ? shown.map(trigger => [
-            t(trigger.action === "start" ? "startIt" : "finish"),
-            describeTrigger(trigger), true])
-        : [[t("trg.none"), "", true]]);
+      // Every alternative of every rule. The filter here used to drop any rule
+      // whose condition was a group, and after conditions became combinable a
+      // group is what a rule normally is -- so a timer that starts on two
+      // things at once reported that nothing starts it.
+      const shown = (timer.rules || []).flatMap(rule =>
+        groupsOf(rule).map(group => [
+          t(rule.action === "start" ? "startIt" : "finish"),
+          describeAlternative(group), true]));
+      facts(t("group.triggers"), shown.length ? shown : [[t("trg.none"), "", true]]);
 
       const commands = timer.commandList || [];
       {
@@ -1639,7 +1670,11 @@
           at.textContent = entry.at === undefined ? t("cmd.end") : clock(entry.at * 20);
           const text = document.createElement("span");
           text.className = "cmd-text";
-          text.textContent = entry.command;
+          // The same line the editor draws. Left out here, a command with a
+          // pause read as one without.
+          text.textContent = entry.delay > 0
+            ? entry.command + "   " + t("cmd.waits", entry.delay)
+            : entry.command;
           row.append(at, text, document.createElement("span"));
           into.append(row);
         }
