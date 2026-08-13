@@ -20,26 +20,22 @@
 
   const STRINGS = {
     en: {
-      admin: "Administration", "tab.runs": "In progress", "tab.timers": "Timers",
+      "tab.runs": "In progress", "tab.timers": "Timers",
       "tab.settings": "Settings", apply: "Apply", discard: "Discard", cancel: "Cancel",
-      save: "Save", close: "Close", "runs.title": "Executions in progress",
+      save: "Save", close: "Close", add: "Add", "runs.title": "Executions in progress",
       "runs.stopAll": "Stop all", "runs.empty": "No timers are running",
       "runs.seenBy": "Seen by", "runs.everyone": "Everyone", "runs.nobody": "Nobody",
-      "runs.players": "%s players", "timers.title": "Timers", "timers.new": "New",
+      "runs.players": "%s players", "timers.new": "New",
       "timers.search": "Search", "timers.empty": "No timers exist yet",
       "timers.noMatch": "Nothing matches that", "settings.title": "Server defaults",
       pause: "Pause", resume: "Resume", reset: "Reset", stop: "Stop", start: "Start",
-      clone: "Clone", "delete": "Delete", edit: "Edit", advanced: "Advanced",
-      "state.running": "Running", "state.paused": "Paused", "state.cooldown": "In cooldown",
+      clone: "Clone", "delete": "Delete", "state.running": "Running", "state.paused": "Paused", "state.cooldown": "In cooldown",
       "confirm.stopAll": "Stop every execution?",
       "confirm.stopAll.body": "%s execution(s) will be stopped.",
       "confirm.delete": "Delete '%s'?",
       "confirm.delete.body": "This permanently deletes the timer and stops every execution of it. It cannot be undone.",
       "dialog.new": "New timer", "dialog.clone": "Copy '%s'", "dialog.start": "Start '%s'",
-      "dialog.edit": "Edit '%s'", "field.name": "Name", "field.newName": "New name",
-      "field.hours": "Hours", "field.minutes": "Minutes", "field.seconds": "Seconds",
-      "field.direction": "Direction", "field.finishCommand": "Command when it ends (optional)",
-      "field.audience": "Audience", "field.mode": "Mode",
+      "dialog.edit": "Edit '%s'", "field.hours": "Hours", "field.minutes": "Minutes", "field.seconds": "Seconds",
       "field.playerNames": "Player names, separated by commas",
       countdown: "Countdown", countup: "Count up", shared: "Shared", each: "One each",
       "group.identity": "The timer", "group.display": "Where it draws",
@@ -47,7 +43,7 @@
       "group.repeat": "Repeating", "group.sequence": "Handing over",
       "group.triggers": "What starts or ends it", "group.commands": "Commands",
       "trg.none": "Nothing starts or ends this timer early",
-      "trg.add": "Add", "trg.value": "Id", "trg.score": "Score",
+      "trg.value": "Id", "trg.score": "Score",
       "trg.target": "Score holder, or * for anyone",
       "trg.expr": "Expression",
       "trg.player_join": "A player is online", "trg.player_leave": "A player leaves",
@@ -63,7 +59,6 @@
       "trg.s.audience": "the timer's audience", "trg.s.everyone": "anybody on the server",
       "trg.s.players": "these players", "trg.s.selector": "a selector",
       "trg.names": "Names, separated by commas", "trg.selector": "@a[team=red]",
-      "trg.addCond": "Add", "trg.addToBranch": "Add",
       "trg.dropBranch": "Remove this alternative", "trg.dropGroup": "Remove this bracket",
       "trg.startsWhen": "Starts it when...", "trg.endsWhen": "Ends it when...",
       "trg.noStart": "Nothing starts it early", "trg.noFinish": "Nothing ends it early",
@@ -76,16 +71,14 @@
       "trg.groupAtLeast": "at least %s of these hold",
       "trg.orGroup": "or", "trg.and": "and",
       "trg.startsIt": "Starts it", "trg.endsIt": "Ends it",
-      "group.server": "Server", "group.web": "Web", "group.reset": "Reset",
+      "group.server": "Server", "group.web": "Web", "group.reset": "Back to defaults",
       "reset.what": "Every setting above, back to what the mod ships with",
       "reset.do": "Restore defaults", "reset.title": "Restore every default?",
       "reset.body": "Applied at once, and it cannot be undone. Timers that already exist keep their own values.",
-      "cmd.add": "Add", "cmd.none": "This timer runs no commands", "cmd.end": "At the end",
+      "cmd.none": "This timer runs no commands", "cmd.end": "At the end",
       "cmd.wait": "Wait", "cmd.waits": "then waits %s",
       "cmd.text": "Command, without the leading slash",
-      on: "On", off: "Off", finish: "Finish it", startIt: "Start it", none: "Off",
-      "trigger.join": "A player joins", "trigger.leave": "A player leaves",
-      "trigger.death": "A player dies", "trigger.respawn": "A player respawns",
+      on: "On", off: "Off", finish: "Finish it", startIt: "Start it", none: "None",
       connected: "Connected", offline: "Reconnecting", badValue: "Check the values in red",
       "default": "Default", "runs.of": "of %s",
       "lead.runs": "%s running right now",
@@ -127,29 +120,49 @@
       "hint.length": "How long it runs for, added up.",
       "hint.finishCommand": "Runs when the timer reaches its end. Optional; more can be added later.",
       "hint.audience": "Who sees this execution.",
-      "hint.mode": "One clock everybody shares, or a clock each."
+      "hint.mode": "One clock everybody shares, or a clock each.",
+
+      "label.position": "Position", "label.customX": "Custom X",
+      "label.customY": "Custom Y", "label.scale": "Scale",
+      "label.hideOnCooldown": "Hide during cooldown",
+      "label.colorHigh": "Plenty left", "label.colorMid": "Running low",
+      "label.colorLow": "Almost out",
+      "label.thresholdMid": "Running low below (%)",
+      "label.thresholdLow": "Almost out below (%)",
+      "label.soundId": "Tick sound", "label.soundVolume": "Tick volume",
+      "label.soundPitch": "Tick pitch",
+      "label.maxTimerSeconds": "Longest timer (s)",
+      "label.confirmRunThreshold": "Confirm above N executions",
+      "label.webSocketEnabled": "WebSocket", "label.webSocketPort": "WebSocket port",
+      "label.webPanelPort": "Web panel port",
+      "label.silent": "Silent", "label.repeat": "Repeat",
+      "label.repeatCount": "How many more times",
+      "label.repeatCooldown": "Pause between repeats (s)",
+      "label.nextTimer": "Hands over to",
+      "label.sequenceCooldown": "Pause before that one (s)",
+      "label.above": "Above", "label.below": "Below",
+      "label.left": "Left", "label.right": "Right",
+      "label.name": "Name", "label.dest": "New name",
+      "label.countUp": "Direction", "label.finishCommand": "Command when it ends",
+      "label.audience": "Audience", "label.mode": "Mode", "label.players": "Players"
     },
     es: {
-      admin: "Administración", "tab.runs": "En curso", "tab.timers": "Contadores",
+      "tab.runs": "En curso", "tab.timers": "Contadores",
       "tab.settings": "Ajustes", apply: "Aplicar", discard: "Descartar", cancel: "Cancelar",
-      save: "Guardar", close: "Cerrar", "runs.title": "Ejecuciones en curso",
+      save: "Guardar", close: "Cerrar", add: "Añadir", "runs.title": "Ejecuciones en curso",
       "runs.stopAll": "Parar todo", "runs.empty": "No hay contadores en marcha",
       "runs.seenBy": "Lo ven", "runs.everyone": "Todos", "runs.nobody": "Nadie",
-      "runs.players": "%s jugadores", "timers.title": "Contadores", "timers.new": "Nuevo",
+      "runs.players": "%s jugadores", "timers.new": "Nuevo",
       "timers.search": "Buscar", "timers.empty": "Todavía no hay contadores",
       "timers.noMatch": "Nada coincide con eso", "settings.title": "Valores por defecto",
       pause: "Pausar", resume: "Reanudar", reset: "Reiniciar", stop: "Parar", start: "Arrancar",
-      clone: "Clonar", "delete": "Borrar", edit: "Editar", advanced: "Avanzado",
-      "state.running": "En marcha", "state.paused": "En pausa", "state.cooldown": "En cooldown",
+      clone: "Clonar", "delete": "Borrar", "state.running": "En marcha", "state.paused": "En pausa", "state.cooldown": "En cooldown",
       "confirm.stopAll": "¿Parar todas las ejecuciones?",
       "confirm.stopAll.body": "Se pararán %s ejecución(es).",
       "confirm.delete": "¿Borrar '%s'?",
       "confirm.delete.body": "Esto elimina el contador de forma permanente y detiene todas sus ejecuciones. No se puede deshacer.",
       "dialog.new": "Contador nuevo", "dialog.clone": "Copiar '%s'", "dialog.start": "Arrancar '%s'",
-      "dialog.edit": "Editar '%s'", "field.name": "Nombre", "field.newName": "Nombre nuevo",
-      "field.hours": "Horas", "field.minutes": "Minutos", "field.seconds": "Segundos",
-      "field.direction": "Sentido", "field.finishCommand": "Comando al terminar (opcional)",
-      "field.audience": "Audiencia", "field.mode": "Modo",
+      "dialog.edit": "Editar '%s'", "field.hours": "Horas", "field.minutes": "Minutos", "field.seconds": "Segundos",
       "field.playerNames": "Nombres de jugador, separados por comas",
       countdown: "Cuenta atrás", countup: "Cuenta adelante", shared: "Compartido",
       each: "Uno por jugador",
@@ -158,7 +171,7 @@
       "group.repeat": "Repetición", "group.sequence": "Cesión del turno",
       "group.triggers": "Qué lo arranca o lo termina", "group.commands": "Comandos",
       "trg.none": "Nada arranca ni termina este contador antes de tiempo",
-      "trg.add": "Añadir", "trg.value": "Id", "trg.score": "Puntuación",
+      "trg.value": "Id", "trg.score": "Puntuación",
       "trg.target": "Titular de la puntuación, o * para cualquiera",
       "trg.expr": "Expresión",
       "trg.player_join": "Un jugador está conectado", "trg.player_leave": "Sale un jugador",
@@ -174,7 +187,6 @@
       "trg.s.audience": "la audiencia del contador", "trg.s.everyone": "cualquiera del servidor",
       "trg.s.players": "estos jugadores", "trg.s.selector": "un selector",
       "trg.names": "Nombres, separados por comas", "trg.selector": "@a[team=red]",
-      "trg.addCond": "Añadir", "trg.addToBranch": "Añadir",
       "trg.dropBranch": "Quitar esta alternativa", "trg.dropGroup": "Quitar este bloque",
       "trg.startsWhen": "Lo arranca cuando...", "trg.endsWhen": "Lo termina cuando...",
       "trg.noStart": "Nada lo arranca antes de tiempo",
@@ -192,12 +204,10 @@
       "reset.what": "Todos los ajustes de arriba, a los que trae el mod",
       "reset.do": "Restaurar valores", "reset.title": "¿Restaurar todos los valores?",
       "reset.body": "Se aplica al momento y no se puede deshacer. Los contadores ya creados conservan los suyos.",
-      "cmd.add": "Añadir", "cmd.none": "Este contador no ejecuta ningún comando",
+      "cmd.none": "Este contador no ejecuta ningún comando",
       "cmd.wait": "Espera", "cmd.waits": "luego espera %s",
       "cmd.end": "Al final", "cmd.text": "Comando, sin la barra inicial",
       on: "Sí", off: "No", finish: "Terminarlo", startIt: "Arrancarlo", none: "Nada",
-      "trigger.join": "Entra un jugador", "trigger.leave": "Sale un jugador",
-      "trigger.death": "Muere un jugador", "trigger.respawn": "Reaparece un jugador",
       connected: "Conectado", offline: "Reconectando", badValue: "Revisa los valores en rojo",
       "default": "Por defecto", "runs.of": "de %s",
       "lead.runs": "%s en marcha ahora mismo",
@@ -236,7 +246,31 @@
       "hint.length": "Lo que dura, todo sumado.",
       "hint.finishCommand": "Se ejecuta cuando el contador llega al final. Opcional; puedes añadir más después.",
       "hint.audience": "Quién ve esta ejecución.",
-      "hint.mode": "Un reloj que todos comparten, o un reloj para cada uno."
+      "hint.mode": "Un reloj que todos comparten, o un reloj para cada uno.",
+
+      "label.position": "Posición", "label.customX": "X personalizada",
+      "label.customY": "Y personalizada", "label.scale": "Escala",
+      "label.hideOnCooldown": "Ocultar en cooldown",
+      "label.colorHigh": "Queda mucho", "label.colorMid": "Queda poco",
+      "label.colorLow": "Casi nada",
+      "label.thresholdMid": "Queda poco por debajo de (%)",
+      "label.thresholdLow": "Casi nada por debajo de (%)",
+      "label.soundId": "Sonido del tic", "label.soundVolume": "Volumen del tic",
+      "label.soundPitch": "Tono del tic",
+      "label.maxTimerSeconds": "Contador más largo (s)",
+      "label.confirmRunThreshold": "Confirmar a partir de N ejecuciones",
+      "label.webSocketEnabled": "WebSocket", "label.webSocketPort": "Puerto del WebSocket",
+      "label.webPanelPort": "Puerto del panel web",
+      "label.silent": "Silencioso", "label.repeat": "Repetir",
+      "label.repeatCount": "Cuántas veces más",
+      "label.repeatCooldown": "Pausa entre repeticiones (s)",
+      "label.nextTimer": "Cede el turno a",
+      "label.sequenceCooldown": "Pausa antes de ése (s)",
+      "label.above": "Arriba", "label.below": "Abajo",
+      "label.left": "Izquierda", "label.right": "Derecha",
+      "label.name": "Nombre", "label.dest": "Nombre nuevo",
+      "label.countUp": "Sentido", "label.finishCommand": "Comando al terminar",
+      "label.audience": "Audiencia", "label.mode": "Modo", "label.players": "Jugadores"
     }
   };
 
@@ -717,15 +751,36 @@
     ["sound", [["soundId", "text"], ["soundVolume", "float"], ["soundPitch", "float"]]]
   ];
 
-  /** A field's own name, without the prefix that says which form it is in. */
+  /**
+   * What a field is called, in the language the panel is in.
+   *
+   * <p>One name per idea, and not one per screen: the settings a timer takes a
+   * copy of are the same idea in Settings and in the editor, so they answer to
+   * the same key. They used to answer to two -- "Position Preset" in one and
+   * "Position" in the other -- because the two forms spell the key
+   * differently.</p>
+   *
+   * <p>Falling back to the key with its camel case broken up, which is
+   * English. Every field has a name below, so the fallback should never show;
+   * it is there so that adding a field spells it out rather than throwing.</p>
+   */
+  const LABELS = {
+    positionPreset: "position", "d:preset": "position",
+    timerX: "customX", "d:x": "customX",
+    timerY: "customY", "d:y": "customY",
+    timerScale: "scale", "d:scale": "scale",
+    "d:colorHigh": "colorHigh", "d:colorMid": "colorMid", "d:colorLow": "colorLow",
+    "d:thresholdMid": "thresholdMid", "d:thresholdLow": "thresholdLow",
+    timerSoundId: "soundId", "d:soundId": "soundId",
+    timerSoundVolume: "soundVolume", "d:soundVolume": "soundVolume",
+    timerSoundPitch: "soundPitch", "d:soundPitch": "soundPitch",
+    "t:above": "above", "t:below": "below", "t:left": "left", "t:right": "right",
+  };
+
   const label = key => {
-    const bare = key.replace(/^[a-z]:/, "");
-    const named = {
-      preset: "position", x: "customX", y: "customY", scale: "scale",
-      soundId: "tickSound", soundVolume: "soundVolume", soundPitch: "soundPitch",
-      hideOnCooldown: "hideDuringCooldown",
-      above: "above", below: "below", left: "left", right: "right"
-    }[bare] || bare;
+    const named = LABELS[key] || key.replace(/^[a-z]:/, "");
+    const written = t("label." + named);
+    if (written !== "label." + named) return written;
     return named
       .replace(/([A-Z])/g, " $1")
       .replace(/^./, c => c.toUpperCase())
@@ -867,6 +922,13 @@
     const list = document.createElement("ul");
     list.className = "suggest";
     list.hidden = true;
+    // The box keeps the focus and the arrows move a highlight inside a list
+    // it never enters, so the list has to say what it is for that to be
+    // followable by anything but the eye.
+    list.setAttribute("role", "listbox");
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-expanded", "false");
 
     wrap.append(ghost, input, list);
 
@@ -908,13 +970,27 @@
       }
     };
 
+    // Anchored to the window means nothing moves it when the sheet under it
+    // scrolls -- it would hang in the air over whatever slid beneath. Only
+    // listened to while it is up, and let go the moment it is not.
+    const follow = () => { if (!list.hidden) place(); };
+
     const draw = () => {
       list.replaceChildren();
+      const was = list.hidden;
       list.hidden = offers.length === 0;
+      if (was !== list.hidden) {
+        const how = list.hidden ? "removeEventListener" : "addEventListener";
+        window[how]("scroll", follow, true);
+        window[how]("resize", follow);
+      }
       if (!list.hidden) place();
+      input.setAttribute("aria-expanded", String(!list.hidden));
       offers.forEach((offer, i) => {
         const item = document.createElement("li");
         item.className = i === picked ? "on" : "";
+        item.setAttribute("role", "option");
+        item.setAttribute("aria-selected", String(i === picked));
         const word = document.createElement("span");
         word.textContent = offer.text;
         item.append(word);
@@ -983,8 +1059,12 @@
         // plain Enter and the dialog can have it.
         if (picked >= 0) { e.preventDefault(); take(picked); }
       } else if (e.key === "Escape") {
-        // The list only. Escape again is the dialog's, which is how every
-        // other box here behaves.
+        // The list only. A dialog closes itself on Escape and the browser is
+        // the one doing it, so stopping the event travelling is not enough --
+        // the default action has to go as well, or putting the list away took
+        // the whole dialog with it. Escape again is then the dialog's, which
+        // is how every other box here behaves.
+        e.preventDefault();
         e.stopPropagation();
         offers = [];
         draw();
@@ -1126,8 +1206,7 @@
       const scope = field("audience", "bool", "true");
       const select = $("select", scope);
       select.replaceChildren(new Option(t("runs.everyone"), "global"),
-        new Option(t("field.playerNames"), "players"));
-      $("label", scope).textContent = t("field.audience");
+        new Option(t("label.players"), "players"));
       select.onchange = () => {
         audience = select.value;
         names.hidden = audience === "global";
@@ -1135,14 +1214,15 @@
       body.append(scope);
 
       const names = field("players", "text", "");
-      $("label", names).textContent = t("field.playerNames");
+      // The comma is a thing about what to type, so it goes in the box rather
+      // than in the name of the box.
+      $("input", names).placeholder = t("field.playerNames");
       names.hidden = true;
       body.append(names);
 
       const modeField = field("mode", "bool", "true");
       const modeSelect = $("select", modeField);
       modeSelect.replaceChildren(new Option(t("shared"), "shared"), new Option(t("each"), "each"));
-      $("label", modeField).textContent = t("field.mode");
       modeSelect.onchange = () => { mode = modeSelect.value; };
       body.append(modeField);
     }, [
@@ -1165,9 +1245,7 @@
 
   function cloneDialog(timer) {
     modal(t("dialog.clone", timer.name), body => {
-      const name = field("dest", "text", timer.name + "2");
-      $("label", name).textContent = t("field.newName");
-      body.append(name);
+      body.append(field("dest", "text", timer.name + "2"));
     }, [
       [t("cancel"), "", null],
       [t("clone"), "primary", () =>
@@ -1210,7 +1288,6 @@
       const dir = field("countUp", "bool", "false");
       const select = $("select", dir);
       select.replaceChildren(new Option(t("countdown"), "false"), new Option(t("countup"), "true"));
-      $("label", dir).textContent = t("field.direction");
       body.append(dir);
       // Optional, and the only chance to say it without a second visit to the
       // editor. Left empty the timer runs nothing, which is a real answer.
@@ -1221,7 +1298,7 @@
       const finish = document.createElement("div");
       finish.className = "field";
       const finishLabel = document.createElement("label");
-      finishLabel.textContent = t("field.finishCommand");
+      finishLabel.textContent = label("finishCommand");
       const { wrap: finishBox, input: finishInput } = commandField();
       finishInput.dataset.key = "finishCommand";
       finishInput.dataset.optional = "1";
@@ -1407,7 +1484,7 @@
       const add = document.createElement("button");
       add.type = "button";
       add.className = "btn small";
-      add.textContent = t("trg.addToBranch");
+      add.textContent = t("add");
       add.onclick = () => openComposer(box, add, timer, rule.action, group.id);
 
       const drop = document.createElement("button");
@@ -1551,7 +1628,7 @@
     const add = document.createElement("button");
     add.type = "button";
     add.className = "primary small";
-    add.textContent = t("trg.add");
+    add.textContent = t("add");
 
     // What each box has to hold, given what has been chosen so far.
     const valueShape = () => {
@@ -1715,7 +1792,7 @@
           const add = document.createElement("button");
           add.type = "button";
           add.className = "btn small";
-          add.textContent = t("trg.addCond");
+          add.textContent = t("add");
           add.onclick = () => openComposer(section, null, timer, action, null);
           head.append(what, add);
           section.append(head);
@@ -1808,7 +1885,7 @@
         const add = document.createElement("button");
         add.type = "button";
         add.className = "primary small";
-        add.textContent = t("cmd.add");
+        add.textContent = t("add");
         add.onclick = async () => {
           if (!command.value.trim()) return;
           const n = key => parseInt($(`#modal-body [data-key='${key}']`).value, 10) || 0;
@@ -1940,9 +2017,9 @@
       };
 
       facts(t("group.identity"), [
-        [t("field.direction"), t(run.countUp ? "countup" : "countdown"), true],
-        [t("field.mode"), t(run.mode === "EACH" ? "each" : "shared")],
-        [t("field.audience"), audienceOf(run)],
+        [label("countUp"), t(run.countUp ? "countup" : "countdown"), true],
+        [label("mode"), t(run.mode === "EACH" ? "each" : "shared")],
+        [label("audience"), audienceOf(run)],
         ["ID", run.runId.slice(0, 8)]
       ]);
 
