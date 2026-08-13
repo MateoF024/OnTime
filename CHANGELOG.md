@@ -49,6 +49,19 @@
 
 ### Fixed
 
+- Escape steps back one thing rather than closing the panel: a warning answers
+  itself with Cancel, the advanced editor goes back to the list, and a tab with
+  unapplied changes asks the same question the Exit button asks. It used to
+  take the whole panel with it, unapplied changes and all.
+- Applying no longer makes the value flicker. What was typed stayed on screen
+  until the server's answer arrived; it was being dropped the instant the
+  request was sent, so the old figure came back for the moment in between.
+- The trigger state file only ever grew. Anything remembered about a timer that
+  no longer exists is dropped when the file is written and again when it is
+  read, so a file left behind by an earlier version is cleaned on first load.
+- The button that opens the placement screen says the same thing in the timer
+  editor as in the settings, from one key.
+
 - A warning is the dimming and its words, with no panel drawn on top. The
   screen behind it is already dimmed to near black, so the box was a second
   frame around something already separate — and its edges were what the text

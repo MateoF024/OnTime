@@ -284,6 +284,11 @@ public final class AdminPanel {
             // fields keep showing what was there before the click, for good,
             // because this tab deliberately ignores every other snapshot.
             awaitingApply = false;
+            // Now, and not before: this is the snapshot that carries what was
+            // sent, so letting go of the typed values shows the same figures
+            // rather than the ones they replaced.
+            settings.discard();
+            if (!editor.isCreating()) editor.discard();
             init();
         }
     }
@@ -681,6 +686,9 @@ public final class AdminPanel {
                     "ontime.gui.editor.field." + field.label() + ".tip"));
 
             if (field.kind() == TimerEditor.Kind.PICKER) {
+                // The same button as the one on the settings tab, so it says
+                // the same thing: one key, not one per place it appears.
+                tip = Tooltip.create(Component.translatable("ontime.gui.settings.custom_position.tip"));
                 host.addWidget(Button.builder(
                                 Component.translatable("ontime.gui.settings.custom_position.edit"),
                                 b -> {
@@ -2328,10 +2336,13 @@ public final class AdminPanel {
             editor.open(name);
             model.select(name);
             detailScroll = 0;
-        } else {
-            editor.discard();
         }
+        // What was typed stays on screen until the server's answer arrives
+        // carrying it. Dropping it here showed the old value again for the
+        // moment in between, so applying a change made it flicker back to
+        // what it had been and then forward again.
         awaitingApply = !ops.isEmpty();
+        if (ops.isEmpty()) editor.discard();
         init();
     }
 
@@ -3491,7 +3502,44 @@ public final class AdminPanel {
         // What separates "typed something" from "looked at it". Tab counts:
         // it is how a suggestion is taken, and taking one is a decision.
         if (commandBox != null && commandBox.isFocused()) commandTyped = true;
-        return assist.keyPressed(keyCode);
+        if (assist.keyPressed(keyCode)) return true;
+        return keyCode == ESCAPE && escape();
+    }
+
+    private static final int ESCAPE = 256;
+
+    /**
+     * What Escape undoes, in the order a step is undone.
+     *
+     * <p>Vanilla's Escape closes the screen, full stop. Here that meant a
+     * warning answered itself by taking the whole panel with it, and a tab
+     * full of unapplied changes threw them away without a word — the one thing
+     * the Exit button exists to prevent.</p>
+     *
+     * @return true when it handled the key, which stops the screen closing
+     */
+    private boolean escape() {
+        // A warning is the topmost thing on screen, so it is the first to go,
+        // and going means Cancel.
+        if (confirmOp != null) {
+            closeDialog();
+            return true;
+        }
+        // Then the page inside the panel, which is what Back does.
+        if (model.tab() == AdminModel.Tab.TIMERS && editor.advanced()) {
+            editor.setAdvanced(false);
+            detailScroll = 0;
+            init();
+            return true;
+        }
+        // And only then the panel itself — with the same question the Exit
+        // button asks, because it is the same act.
+        if (settings.isDirty(model) || editor.isDirty(model.timer(editor.timerName()))) {
+            confirmOp = CONFIRM_EXIT;
+            init();
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -3698,8 +3746,10 @@ public final class AdminPanel {
         if (!result.rejected().isEmpty()) {
             model.setMessage(String.join(", ", result.rejected()), true);
         }
-        settings.discard();
+        // Kept until the answer lands, for the reason the editor keeps its
+        // own: the value on screen is the one being applied.
         awaitingApply = !result.requests().isEmpty();
+        if (result.requests().isEmpty()) settings.discard();
         init();
     }
 

@@ -184,6 +184,11 @@ public final class RuleEngine {
      * arms fresh — which is what editing it is supposed to do anyway.</p>
      */
     public static com.google.gson.JsonObject toJson() {
+        // Whatever belongs to a timer that no longer exists goes now. Every
+        // path that deletes a timer is supposed to call resetFor, and one that
+        // forgets leaves its keys here for ever — the file only ever grew.
+        forgetDeleted();
+
         com.google.gson.JsonObject json = new com.google.gson.JsonObject();
         com.google.gson.JsonObject armed = new com.google.gson.JsonObject();
         states.forEach((key, state) -> armed.add(key, state.toJson()));
@@ -202,6 +207,8 @@ public final class RuleEngine {
     public static void loadFrom(com.google.gson.JsonObject json) {
         resetAll();
         if (json == null) return;
+        // The same sweep on the way in, so a file written by a version that
+        // did not prune is cleaned the first time it is read.
         if (json.has("armed") && json.get("armed").isJsonObject()) {
             com.google.gson.JsonObject armed = json.getAsJsonObject("armed");
             for (String key : armed.keySet()) {
@@ -219,6 +226,27 @@ public final class RuleEngine {
                 spent.add(element.getAsString());
             }
         }
+        forgetDeleted();
+    }
+
+    /**
+     * Drops everything remembered about a timer that is no longer there.
+     *
+     * <p>Keys are {@code "<timer name> <rule id>"}, and a rule id never has a
+     * space in it, so the name is everything up to the last one — which is
+     * what lets a timer called "Round two" be matched.</p>
+     */
+    private static void forgetDeleted() {
+        TimerManager manager = TimerManager.getInstance();
+        states.keySet().removeIf(key -> isGone(manager, key));
+        pendingDelay.keySet().removeIf(key -> isGone(manager, key));
+        spent.removeIf(key -> isGone(manager, key));
+    }
+
+    private static boolean isGone(TimerManager manager, String key) {
+        int split = key.lastIndexOf(' ');
+        if (split <= 0) return true;
+        return manager.getTimer(key.substring(0, split)).isEmpty();
     }
 
     public static void resetAll() {
