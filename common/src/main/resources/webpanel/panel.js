@@ -1053,13 +1053,17 @@
         const how = list.hidden ? "removeEventListener" : "addEventListener";
         window[how]("scroll", follow, true);
         window[how]("resize", follow);
-        // It is placed against the window, so it belongs to the document and
-        // not to the box: inside the sheet it would be clipped by it, and
-        // inside a dialog it would be thrown away with the dialog. Put there
-        // while it is up and taken away when it is not, so nothing is left
-        // behind by a form that has been rebuilt.
+        // Placed against the window, so it cannot live inside the sheet: that
+        // sheet scrolls, and anything positioned inside a scrolling box is
+        // clipped by it. It goes to the dialog it belongs to, or to the page
+        // when there is no dialog.
+        //
+        // The dialog and not the document: a dialog is drawn in the top layer,
+        // above everything the page can put anywhere, so a list left on the
+        // body was painted underneath it. Which is why the composer offered
+        // dimensions and none of them could be seen.
         if (list.hidden) list.remove();
-        else document.body.append(list);
+        else (input.closest("dialog") || document.body).append(list);
       }
       input.setAttribute("aria-expanded", String(!list.hidden));
       if (!list.hidden) place();
@@ -2096,7 +2100,8 @@
         // The one command you always know at creation, saving a second visit.
         group("commands", s => {
           const row = document.createElement("div");
-          row.className = "field";
+          // A command is a line of text, not a value: it gets the width.
+          row.className = "field wide";
           const lab = document.createElement("label");
           lab.textContent = label("finishCommand");
           const { wrap, input } = commandField();

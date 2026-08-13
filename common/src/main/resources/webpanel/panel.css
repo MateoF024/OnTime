@@ -528,16 +528,43 @@ input::placeholder { color: var(--muted); }
 }
 .sheet > .body { padding: 6px 18px 14px; }
 
+/*
+ * A setting: what it is called, what it says, and the control.
+ *
+ * The name and the explanation are one thing between them, and the control is
+ * centred against both -- not against the name alone. Centred on the name, a
+ * two-line explanation hung below everything and opened a gap before the next
+ * setting that belonged to nothing, which reads as bad spacing rather than as
+ * a sentence about the setting above it.
+ */
 .field {
   display: grid;
   grid-template-columns: 1fr minmax(150px, 260px);
+  grid-template-areas:
+    "name control"
+    "hint control";
   align-items: center;
-  gap: 14px;
-  padding: 9px 0;
+  gap: 4px 14px;
+  padding: 11px 0;
   border-bottom: 1px solid var(--line-soft);
 }
 .field:last-child { border-bottom: 0; }
-.field > label { font-size: 14px; color: var(--text-2); }
+.field > label { grid-area: name; align-self: end; font-size: 14px; color: var(--text-2); }
+/* Whatever the control turns out to be -- a box, a select, a swatch and its
+   hex, a button -- it is the one child that is neither the name nor the
+   sentence, and it stands against the pair of them. */
+.field > :not(label):not(.hint) { grid-area: control; align-self: center; }
+
+/*
+ * A control too wide to live in that column: a command, which is a line of
+ * text and not a value. The name goes above it, the way the in-game editor
+ * puts a label over its field, and the box has the whole width.
+ */
+.field.wide {
+  grid-template-columns: 1fr;
+  grid-template-areas: "name" "control" "hint";
+}
+.field.wide > label { align-self: start; }
 .field .units { display: flex; gap: 6px; }
 .field .units > input { width: 100%; min-width: 0; text-align: center; }
 
@@ -549,9 +576,9 @@ input::placeholder { color: var(--muted); }
  * on purpose: it explains the name, and the control keeps its own lane.
  */
 .field > .hint {
-  grid-column: 1;
-  margin-top: -3px;
-  max-width: 64ch;
+  grid-area: hint;
+  align-self: start;
+  max-width: 72ch;
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--muted);
@@ -577,7 +604,7 @@ input::placeholder { color: var(--muted); }
   .nav-item[aria-selected="true"]::before { display: none; }
   .rail-foot { margin: 0 0 0 auto; grid-auto-flow: column; align-items: center; }
   .content { padding: 22px 16px 48px; }
-  .field { grid-template-columns: 1fr; gap: 7px; }
+  .field { grid-template-columns: 1fr; grid-template-areas: "name" "control" "hint"; gap: 7px; }
 }
 
 /* ====================================================================== */
@@ -678,6 +705,12 @@ dialog[open] { animation: pop .2s var(--ease); }
   margin-left: 4px;
 }
 .cmd-under > .cmd-row { grid-template-columns: 1fr auto; }
+
+/* A condition is text and the button that takes it away -- no moment in front
+   of it. Left on the three-column grid the commands use, the text was squeezed
+   into the 84px meant for a clock and the button stretched across everything
+   the text was not using. */
+.trg-group .cmd-row { grid-template-columns: 1fr auto; }
 /* The moment a command runs at. Blue, which is the colour the game paints
    a moment with, and italic for the one that has no clock time. */
 .cmd-at { font-size: 13px; color: var(--accent); }
