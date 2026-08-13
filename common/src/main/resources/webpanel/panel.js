@@ -818,6 +818,19 @@
   const hintKey = key => "hint." + (HINTS[key] || key.replace(/^[a-z]:/, ""));
 
   /**
+   * Which boxes complete, and from what.
+   *
+   * <p>Decided in one table for the same reason the labels and the hints are:
+   * the sound a timer plays and the sound the server hands new timers are the
+   * same idea, so they complete from the same list without anybody having to
+   * remember to wire the second one.</p>
+   */
+  const COMPLETES = {
+    timerSoundId: sounds, "d:soundId": sounds,
+    nextTimer: () => (state.timers || []).map(x => x.name),
+  };
+
+  /**
    * The explanation, as a line under the field.
    *
    * <p>Where the game has to hide this behind a hover -- there is no room on a
@@ -908,6 +921,7 @@
     }
     input.dataset.key = key;
     input.dataset.kind = kind;
+    if (COMPLETES[key]) suggestFrom(input, COMPLETES[key]);
     input.addEventListener("input", () => {
       input.classList.toggle("bad", !parses(input));
       if (onInput) onInput();
@@ -928,69 +942,88 @@
   }
 
   /**
-   * A box for a command, with the server answering what comes next.
+   * The five selectors and the keys one can be narrowed by.
    *
-   * <p>In game this is the command block's own field and the game completes
-   * it. A browser has no dispatcher, so the same question goes over the wire
-   * to the one that does. Nothing here knows a thing about Minecraft commands,
-   * which is the point: the list is always whatever this server actually has,
-   * datapacks and other mods included.</p>
-   *
-   * <p>The text itself is drawn twice — a layer underneath carrying the
-   * colour, and the real box on top with its own text made invisible. It is
-   * the only way a plain input can show half a line in red, and the red half
-   * is the half brigadier could not read.</p>
+   * <p>Written out rather than read from anywhere: the parser that knows them
+   * wants a live command source and a whole context, which a text box has
+   * neither of. The list is small and the game fixes it, not any pack. The
+   * same list FieldAssist keeps in game, for the same reason.</p>
    */
-  function commandField(value = "") {
-    const wrap = document.createElement("div");
-    wrap.className = "cmd-field";
+  const SELECTOR_WORDS = ["@a", "@e", "@p", "@r", "@s",
+    "advancements=", "distance=", "dx=", "dy=", "dz=", "gamemode=", "level=",
+    "limit=", "name=", "nbt=", "predicate=", "scores=", "sort=", "tag=",
+    "team=", "type=", "x=", "y=", "z=", "x_rotation=", "y_rotation="];
 
-    const ghost = document.createElement("div");
-    ghost.className = "cmd-ghost";
-    ghost.setAttribute("aria-hidden", "true");
+  /** Sounds are the one list the board does not carry; asked for once. */
+  let soundIds = null;
 
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = value;
-    input.spellcheck = false;
-    input.autocomplete = "off";
-    input.placeholder = t("cmd.text");
+  async function sounds() {
+    if (soundIds) return soundIds;
+    try {
+      const answer = await api("/api/suggest?kind=sounds");
+      soundIds = answer.list || [];
+    } catch (ignored) {
+      soundIds = [];
+    }
+    return soundIds;
+  }
 
+  /**
+   * Matching as a command argument matches.
+   *
+   * <p>Text with no namespace is matched against the path, which is what lets
+   * "bell" find "minecraft:block.note_block.bell" -- the same rule the game
+   * follows, and the reason a list of a thousand sounds is usable at all.</p>
+   */
+  function matching(all, typed) {
+    const needle = typed.trim().toLowerCase();
+    if (!needle) return all.slice(0, 60);
+    const bare = !needle.includes(":");
+    return all.filter(one => {
+      const id = one.toLowerCase();
+      if (id.startsWith(needle)) return true;
+      return bare && (id.split(":")[1] || id).includes(needle);
+    }).slice(0, 60);
+  }
+
+  /**
+   * The list under a box, and everything that happens to it.
+   *
+   * <p>Given to any box that has something to offer. What differs between one
+   * and the next is only {@code ask} -- what could come next, and which part
+   * of the text it would replace. The keyboard, the scrolling, the placing and
+   * the taking are the same everywhere, which is why they live here and not in
+   * each caller.</p>
+   *
+   * @param ask   text -> {suggestions, start, end, cursor}
+   * @param paint optional: draws the text underneath, for a box that colours
+   */
+  let suggestCount = 0;
+
+  function attachSuggest(input, ask, paint) {
     const list = document.createElement("ul");
     list.className = "suggest";
     list.hidden = true;
-    // The box keeps the focus and the arrows move a highlight inside a list
-    // it never enters, so the list has to say what it is for that to be
+    // The box keeps the focus and the arrows move a highlight inside a list it
+    // never enters, so the list has to say what it is for that to be
     // followable by anything but the eye.
     list.setAttribute("role", "listbox");
+    list.setAttribute("id", "suggest-" + (++suggestCount));
     input.setAttribute("role", "combobox");
     input.setAttribute("aria-autocomplete", "list");
     input.setAttribute("aria-expanded", "false");
-
-    wrap.append(ghost, input, list);
+    // The list is not beside the box in the document -- it is placed against
+    // the window -- so this is the only thing tying the two together, for a
+    // screen reader and for anything else that has to ask which list is whose.
+    input.setAttribute("aria-controls", list.getAttribute("id"));
+    input.spellcheck = false;
+    input.autocomplete = "off";
 
     let offers = [];
     let range = { start: 0, end: 0 };
     let picked = -1;
     let timer = 0;
     let asked = 0;
-
-    /** Repaints the layer underneath: what parsed, and what did not. */
-    const paint = cursor => {
-      const text = input.value;
-      ghost.replaceChildren();
-      const cut = Math.max(0, Math.min(cursor ?? text.length, text.length));
-      const good = document.createElement("span");
-      good.textContent = text.slice(0, cut);
-      ghost.append(good);
-      if (cut < text.length) {
-        const bad = document.createElement("span");
-        bad.className = "unparsed";
-        bad.textContent = text.slice(cut);
-        ghost.append(bad);
-      }
-      ghost.scrollLeft = input.scrollLeft;
-    };
 
     /** Under the box, or over it when the box is near the bottom of the page. */
     const place = () => {
@@ -1020,9 +1053,16 @@
         const how = list.hidden ? "removeEventListener" : "addEventListener";
         window[how]("scroll", follow, true);
         window[how]("resize", follow);
+        // It is placed against the window, so it belongs to the document and
+        // not to the box: inside the sheet it would be clipped by it, and
+        // inside a dialog it would be thrown away with the dialog. Put there
+        // while it is up and taken away when it is not, so nothing is left
+        // behind by a form that has been rebuilt.
+        if (list.hidden) list.remove();
+        else document.body.append(list);
       }
-      if (!list.hidden) place();
       input.setAttribute("aria-expanded", String(!list.hidden));
+      if (!list.hidden) place();
       offers.forEach((offer, i) => {
         const item = document.createElement("li");
         item.className = i === picked ? "on" : "";
@@ -1071,39 +1111,46 @@
       if (!offer) return;
       const text = input.value;
       input.value = text.slice(0, range.start) + offer.text + text.slice(range.end);
-      input.setSelectionRange(input.value.length, input.value.length);
+      if (input.setSelectionRange) {
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
       offers = [];
       picked = -1;
       draw();
-      ask();
+      // What was taken may itself be half of something: one argument of a
+      // command, one name of a list.
+      run();
+      input.dispatchEvent({ type: "input", target: input });
     };
 
-    async function ask() {
+    async function run() {
       const mine = ++asked;
       try {
-        const answer = await api("/api/suggest?q=" + encodeURIComponent(input.value));
+        const answer = await ask(input.value);
         // Answers do not come back in order, and an older one landing last
         // would offer completions for text that is no longer there.
         if (mine < asked) return;
         offers = answer.suggestions || [];
-        range = { start: answer.start ?? input.value.length, end: answer.end ?? input.value.length };
+        range = {
+          start: answer.start ?? input.value.length,
+          end: answer.end ?? input.value.length,
+        };
         picked = offers.length ? 0 : -1;
-        paint(answer.cursor);
+        if (paint) paint(answer.cursor);
         draw();
       } catch (ignored) {
-        // No suggestions is a field that still works.
+        // No suggestions is a box that still works.
         offers = [];
         draw();
       }
     }
 
     input.addEventListener("input", () => {
-      paint();
+      if (paint) paint();
       clearTimeout(timer);
-      timer = setTimeout(ask, 120);
+      timer = setTimeout(run, 120);
     });
-    input.addEventListener("scroll", () => { ghost.scrollLeft = input.scrollLeft; });
-    input.addEventListener("focus", ask);
+    input.addEventListener("focus", run);
     input.addEventListener("blur", () => {
       offers = [];
       draw();
@@ -1113,10 +1160,10 @@
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         // Stops at the ends rather than wrapping round. Coming back to the top
-        // from the bottom of a list that is taller than its box looks exactly
-        // like a list that scrolled, except nothing moved.
-        const step = e.key === "ArrowDown" ? 1 : -1;
-        picked = Math.max(0, Math.min(offers.length - 1, picked + step));
+        // from the bottom of a list taller than its box looks exactly like a
+        // list that scrolled, except nothing moved.
+        picked = Math.max(0, Math.min(offers.length - 1,
+          picked + (e.key === "ArrowDown" ? 1 : -1)));
         highlight();
       } else if (e.key === "Tab" || e.key === "Enter") {
         // Enter takes the highlighted one; with nothing highlighted it is a
@@ -1126,8 +1173,8 @@
         // The list only. A dialog closes itself on Escape and the browser is
         // the one doing it, so stopping the event travelling is not enough --
         // the default action has to go as well, or putting the list away took
-        // the whole dialog with it. Escape again is then the dialog's, which
-        // is how every other box here behaves.
+        // the whole dialog with it. Escape again is then the dialog's, which is
+        // how every other box here behaves.
         e.preventDefault();
         e.stopPropagation();
         offers = [];
@@ -1135,6 +1182,88 @@
       }
     });
 
+    return list;
+  }
+
+  /**
+   * A box that completes from a list of ids.
+   *
+   * <p>{@code source} is asked each time rather than read once: what exists is
+   * not fixed. The timers are whatever the board says right now, the players
+   * are whoever is online, and a datapack can add an advancement while the
+   * page is open.</p>
+   *
+   * @param words true when the box holds several comma-separated things, so
+   *              only the one under the cursor is completed
+   */
+  function suggestFrom(input, source, words = false) {
+    const at = () => {
+      if (!words) return [0, input.value.length];
+      const text = input.value;
+      const from = text.lastIndexOf(",") + 1;
+      const lead = text.slice(from).length - text.slice(from).trimStart().length;
+      return [from + lead, text.length];
+    };
+    attachSuggest(input, async () => {
+      const [from, to] = at();
+      const all = await source();
+      return {
+        suggestions: matching(all, input.value.slice(from, to)).map(text => ({ text })),
+        start: from,
+        end: to,
+      };
+    });
+    return input;
+  }
+
+  /**
+   * A box for a command, with the server answering what comes next.
+   *
+   * <p>In game this is the command block's own field and the game completes
+   * it. A browser has no dispatcher, so the same question goes over the wire
+   * to the one that does. Nothing here knows a thing about Minecraft commands,
+   * which is the point: the list is always whatever this server actually has,
+   * datapacks and other mods included.</p>
+   *
+   * <p>The text itself is drawn twice — a layer underneath carrying the colour,
+   * and the real box on top with its own text made invisible. It is the only
+   * way a plain input can show half a line in red, and the red half is the half
+   * brigadier could not read.</p>
+   */
+  function commandField(value = "") {
+    const wrap = document.createElement("div");
+    wrap.className = "cmd-field";
+
+    const ghost = document.createElement("div");
+    ghost.className = "cmd-ghost";
+    ghost.setAttribute("aria-hidden", "true");
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = value;
+    input.placeholder = t("cmd.text");
+
+    /** Repaints the layer underneath: what parsed, and what did not. */
+    const paint = cursor => {
+      const text = input.value;
+      ghost.replaceChildren();
+      const cut = Math.max(0, Math.min(cursor ?? text.length, text.length));
+      const good = document.createElement("span");
+      good.textContent = text.slice(0, cut);
+      ghost.append(good);
+      if (cut < text.length) {
+        const bad = document.createElement("span");
+        bad.className = "unparsed";
+        bad.textContent = text.slice(cut);
+        ghost.append(bad);
+      }
+      ghost.scrollLeft = input.scrollLeft;
+    };
+
+    attachSuggest(input, text => api("/api/suggest?q=" + encodeURIComponent(text)), paint);
+    input.addEventListener("scroll", () => { ghost.scrollLeft = input.scrollLeft; });
+
+    wrap.append(ghost, input);
     paint();
     return { wrap, input };
   }
@@ -1350,6 +1479,7 @@
       // The comma is a thing about what to type, so it goes in the box rather
       // than in the name of the box.
       $("input", names).placeholder = t("field.playerNames");
+      suggestFrom($("input", names), () => (state.players || []).map(p => p.name), true);
       names.hidden = true;
       body.append(names);
 
@@ -1661,7 +1791,10 @@
     head.className = "trg-say-head";
     const what = document.createElement("span");
     what.className = "trg-when " + (action === "start" ? "starts" : "ends");
-    what.textContent = t(action === "start" ? "trg.startsIt" : "trg.endsIt");
+    // The whole phrase, which is what the builder line says in game. The short
+    // form belongs to the run summary, where it labels a row rather than
+    // opening a sentence.
+    what.textContent = t(action === "start" ? "trg.startsWhen" : "trg.endsWhen");
     const where = document.createElement("span");
     where.className = "trg-say-where";
     where.textContent = groupId ? t("trg.say.here") : t("trg.say.newRule");
@@ -1692,12 +1825,27 @@
 
     const subject = document.createElement("input");
     subject.type = "text";
+    // Names or a selector, depending on what has been chosen above it, so the
+    // list is asked for at the moment it is opened rather than fixed here.
+    suggestFrom(subject,
+      () => scope.value === "selector"
+        ? SELECTOR_WORDS
+        : (state.players || []).map(p => p.name),
+      true);
 
     const kind = document.createElement("select");
     for (const name of TRIGGER_KINDS) kind.append(new Option(t("trg." + name), name));
 
     const value = document.createElement("input");
     value.type = "text";
+    // An advancement or a dimension: both arrive with every snapshot and the
+    // panel had never once read them. The other kinds are ids no list here can
+    // know -- an objective, a quest, an expression -- and they get none.
+    suggestFrom(value, () => {
+      if (kind.value === "advancement") return state.advancements || [];
+      if (kind.value === "dimension_change") return state.dimensions || [];
+      return [];
+    });
 
     const atLeast = word("\u2265");
     const score = document.createElement("input");

@@ -15,6 +15,7 @@ import com.mateof24.compat.VanillaCompat;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
 
 import java.io.IOException;
@@ -317,6 +318,26 @@ public class TimerWebPanel {
     private void serveSuggest(HttpExchange ex) throws IOException {
         if (!authorized(ex)) return;
         MinecraftServer server = mcServer;
+
+        // One list, asked for once and kept: every sound event the game knows.
+        // The board carries the advancements, the dimensions, the players and
+        // the timers already, and the selectors are fixed by the game -- this
+        // is the only one of the six the panel cannot work out for itself, and
+        // it is far too long to repeat in a snapshot four times a second.
+        if ("sounds".equals(queryParam(ex, "kind"))) {
+            JsonObject list = new JsonObject();
+            JsonArray ids = new JsonArray();
+            list.add("list", ids);
+            // Not named: this is ResourceLocation up to 1.21.11 and Identifier
+            // from 26.1, and all that is wanted of it is how it prints.
+            for (Object id : BuiltInRegistries.SOUND_EVENT.keySet()) {
+                ids.add(String.valueOf(id));
+            }
+            ex.getResponseHeaders().set("Cache-Control", "private, max-age=3600");
+            send(ex, 200, "application/json", list.toString().getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+
         String query = queryParam(ex, "q");
         if (query == null) query = "";
         // Nothing sensible completes past this, and it caps what one request
