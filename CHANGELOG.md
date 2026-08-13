@@ -59,8 +59,10 @@
 - The trigger state file only ever grew. Anything remembered about a timer that
   no longer exists is dropped when the file is written and again when it is
   read, so a file left behind by an earlier version is cleaned on first load.
-- The button that opens the placement screen says the same thing in the timer
-  editor as in the settings, from one key.
+- Every tooltip follows one convention: no colour at the front, grey for the
+  qualifier, yellow for a value you type or pick, red only where something is
+  destroyed. A button that appears in two places says the same thing from one
+  key -- fourteen keys held a sentence that was already written elsewhere.
 
 - A warning is the dimming and its words, with no panel drawn on top. The
   screen behind it is already dimmed to near black, so the box was a second

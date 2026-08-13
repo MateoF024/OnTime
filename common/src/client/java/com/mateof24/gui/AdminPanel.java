@@ -682,8 +682,7 @@ public final class AdminPanel {
             TimerEditor.Field field = entry.field();
             int y = editorFieldTop + i * SETTING_HEIGHT;
             String value = editor.displayed(timer, field);
-            Tooltip tip = Tooltip.create(Component.translatable(
-                    "ontime.gui.editor.field." + field.label() + ".tip"));
+            Tooltip tip = Tooltip.create(Component.translatable(fieldTipKey(field.label())));
 
             if (field.kind() == TimerEditor.Kind.PICKER) {
                 // The same button as the one on the settings tab, so it says
@@ -776,6 +775,26 @@ public final class AdminPanel {
      */
     private static Component labelled(String key) {
         return Component.translatable(key).copy().append(":");
+    }
+
+    /**
+     * Which tooltip a field shows.
+     *
+     * <p>Three fields share one, and one whole family of them shares the
+     * settings tab's: a timer's copy of a default is the same setting, so it
+     * had the same sentence written twice — once here and once there, drifting
+     * apart the moment either was edited.</p>
+     */
+    private static String fieldTipKey(String label) {
+        // A timer's copy of a server default. Same setting, same words.
+        if (label.startsWith("config.")) {
+            return "ontime.config." + label.substring("config.".length()) + ".tooltip";
+        }
+        // Three boxes that add up to one length.
+        if (label.equals("hours") || label.equals("minutes") || label.equals("seconds")) {
+            return "ontime.gui.editor.field.length.tip";
+        }
+        return "ontime.gui.editor.field." + label + ".tip";
     }
 
     /** Green when it starts or is on, red when it ends or is off. */
