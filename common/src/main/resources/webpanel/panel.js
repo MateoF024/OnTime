@@ -835,6 +835,166 @@
     return wrap;
   }
 
+  /**
+   * A box for a command, with the server answering what comes next.
+   *
+   * <p>In game this is the command block's own field and the game completes
+   * it. A browser has no dispatcher, so the same question goes over the wire
+   * to the one that does. Nothing here knows a thing about Minecraft commands,
+   * which is the point: the list is always whatever this server actually has,
+   * datapacks and other mods included.</p>
+   *
+   * <p>The text itself is drawn twice — a layer underneath carrying the
+   * colour, and the real box on top with its own text made invisible. It is
+   * the only way a plain input can show half a line in red, and the red half
+   * is the half brigadier could not read.</p>
+   */
+  function commandField(value = "") {
+    const wrap = document.createElement("div");
+    wrap.className = "cmd-field";
+
+    const ghost = document.createElement("div");
+    ghost.className = "cmd-ghost";
+    ghost.setAttribute("aria-hidden", "true");
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = value;
+    input.spellcheck = false;
+    input.autocomplete = "off";
+    input.placeholder = t("cmd.text");
+
+    const list = document.createElement("ul");
+    list.className = "suggest";
+    list.hidden = true;
+
+    wrap.append(ghost, input, list);
+
+    let offers = [];
+    let range = { start: 0, end: 0 };
+    let picked = -1;
+    let timer = 0;
+    let asked = 0;
+
+    /** Repaints the layer underneath: what parsed, and what did not. */
+    const paint = cursor => {
+      const text = input.value;
+      ghost.replaceChildren();
+      const cut = Math.max(0, Math.min(cursor ?? text.length, text.length));
+      const good = document.createElement("span");
+      good.textContent = text.slice(0, cut);
+      ghost.append(good);
+      if (cut < text.length) {
+        const bad = document.createElement("span");
+        bad.className = "unparsed";
+        bad.textContent = text.slice(cut);
+        ghost.append(bad);
+      }
+      ghost.scrollLeft = input.scrollLeft;
+    };
+
+    /** Under the box, or over it when the box is near the bottom of the page. */
+    const place = () => {
+      const box = input.getBoundingClientRect();
+      list.style.left = box.left + "px";
+      list.style.width = box.width + "px";
+      const below = window.innerHeight - box.bottom;
+      if (below < 180 && box.top > below) {
+        list.style.top = "auto";
+        list.style.bottom = (window.innerHeight - box.top + 4) + "px";
+      } else {
+        list.style.bottom = "auto";
+        list.style.top = (box.bottom + 4) + "px";
+      }
+    };
+
+    const draw = () => {
+      list.replaceChildren();
+      list.hidden = offers.length === 0;
+      if (!list.hidden) place();
+      offers.forEach((offer, i) => {
+        const item = document.createElement("li");
+        item.className = i === picked ? "on" : "";
+        const word = document.createElement("span");
+        word.textContent = offer.text;
+        item.append(word);
+        if (offer.tip) {
+          const tip = document.createElement("em");
+          tip.textContent = offer.tip;
+          item.append(tip);
+        }
+        // Pressed rather than clicked: a click lands after the box has already
+        // lost focus, and losing focus is what puts the list away.
+        item.onmousedown = e => { e.preventDefault(); take(i); };
+        list.append(item);
+      });
+    };
+
+    const take = i => {
+      const offer = offers[i];
+      if (!offer) return;
+      const text = input.value;
+      input.value = text.slice(0, range.start) + offer.text + text.slice(range.end);
+      input.setSelectionRange(input.value.length, input.value.length);
+      offers = [];
+      picked = -1;
+      draw();
+      ask();
+    };
+
+    async function ask() {
+      const mine = ++asked;
+      try {
+        const answer = await api("/api/suggest?q=" + encodeURIComponent(input.value));
+        // Answers do not come back in order, and an older one landing last
+        // would offer completions for text that is no longer there.
+        if (mine < asked) return;
+        offers = answer.suggestions || [];
+        range = { start: answer.start ?? input.value.length, end: answer.end ?? input.value.length };
+        picked = offers.length ? 0 : -1;
+        paint(answer.cursor);
+        draw();
+      } catch (ignored) {
+        // No suggestions is a field that still works.
+        offers = [];
+        draw();
+      }
+    }
+
+    input.addEventListener("input", () => {
+      paint();
+      clearTimeout(timer);
+      timer = setTimeout(ask, 120);
+    });
+    input.addEventListener("scroll", () => { ghost.scrollLeft = input.scrollLeft; });
+    input.addEventListener("focus", ask);
+    input.addEventListener("blur", () => {
+      offers = [];
+      draw();
+    });
+    input.addEventListener("keydown", e => {
+      if (list.hidden) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        picked = (picked + (e.key === "ArrowDown" ? 1 : offers.length - 1)) % offers.length;
+        draw();
+      } else if (e.key === "Tab" || e.key === "Enter") {
+        // Enter takes the highlighted one; with nothing highlighted it is a
+        // plain Enter and the dialog can have it.
+        if (picked >= 0) { e.preventDefault(); take(picked); }
+      } else if (e.key === "Escape") {
+        // The list only. Escape again is the dialog's, which is how every
+        // other box here behaves.
+        e.stopPropagation();
+        offers = [];
+        draw();
+      }
+    });
+
+    paint();
+    return { wrap, input };
+  }
+
   /** Whether what is typed can be used, asked before anything is sent. */
   function parses(input) {
     const value = input.value.trim();
@@ -1054,8 +1214,18 @@
       body.append(dir);
       // Optional, and the only chance to say it without a second visit to the
       // editor. Left empty the timer runs nothing, which is a real answer.
-      const finish = field("finishCommand", "text", "");
-      $("label", finish).textContent = t("field.finishCommand");
+      //
+      // The same box as the adder, completions and all: there is no reason the
+      // first command a timer gets should be typed more blindly than its
+      // second.
+      const finish = document.createElement("div");
+      finish.className = "field";
+      const finishLabel = document.createElement("label");
+      finishLabel.textContent = t("field.finishCommand");
+      const { wrap: finishBox, input: finishInput } = commandField();
+      finishInput.dataset.key = "finishCommand";
+      finishInput.dataset.optional = "1";
+      finish.append(finishLabel, finishBox, hint("finishCommand"));
       body.append(finish);
     }, [
       [t("cancel"), "", null],
@@ -1602,9 +1772,7 @@
           input.dataset.key = key;
           cells.append(input);
         }
-        const command = document.createElement("input");
-        command.type = "text";
-        command.placeholder = t("cmd.text");
+        const { wrap: commandBox, input: command } = commandField();
         command.dataset.key = "cc";
 
         // What waits after this one before the next in the same batch. Beside
@@ -1631,7 +1799,7 @@
             if (fresh) editDialog(fresh);
           }
         };
-        adder.append(cells, command, wait, add);
+        adder.append(cells, commandBox, wait, add);
         s.append(adder);
       });
     }, [

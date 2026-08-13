@@ -1,13 +1,20 @@
 package com.mateof24.webpanel;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.brigadier.ParseResults;
+import com.mojang.brigadier.context.ParsedCommandNode;
+import com.mojang.brigadier.suggestion.Suggestion;
+import com.mojang.brigadier.suggestion.Suggestions;
 import com.mateof24.OnTimeConstants;
 import com.mateof24.admin.AdminOps;
 import com.mateof24.config.ModConfig;
 import com.mateof24.event.TimerEventBus;
+import com.mateof24.compat.VanillaCompat;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.MinecraftServer;
 
 import java.io.IOException;
@@ -22,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The web panel: HTTP, routes and a live stream. Nothing else.
@@ -103,6 +111,7 @@ public class TimerWebPanel {
             httpServer.createContext("/api/state", this::serveState);
             httpServer.createContext("/api/action", this::serveAction);
             httpServer.createContext("/api/lang", this::serveLang);
+            httpServer.createContext("/api/suggest", this::serveSuggest);
             httpServer.createContext("/events", this::serveEvents);
             httpServer.start();
             running = true;
@@ -289,6 +298,77 @@ public class TimerWebPanel {
         if (!authorized(ex)) return;
         JsonObject answer = new JsonObject();
         answer.addProperty("language", Locale.getDefault().getLanguage());
+        send(ex, 200, "application/json", answer.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * What the server would offer somebody typing this command.
+     *
+     * <p>The in-game field is the command block's own, and it is the game that
+     * answers it. A browser has no dispatcher, so this is the same question
+     * asked over the wire: brigadier parses the text against a level-4 source
+     * and says what could come next, where the word being completed starts,
+     * and how far the whole thing parsed before it gave up.</p>
+     *
+     * <p>Answered on the server thread. Completion reads the world — which
+     * players are on, which objectives exist, which functions are loaded — and
+     * the HTTP pool is not the thread allowed to look.</p>
+     */
+    private void serveSuggest(HttpExchange ex) throws IOException {
+        if (!authorized(ex)) return;
+        MinecraftServer server = mcServer;
+        String query = queryParam(ex, "q");
+        if (query == null) query = "";
+        // Nothing sensible completes past this, and it caps what one request
+        // can ask the dispatcher to chew on.
+        if (query.length() > 256) query = query.substring(0, 256);
+
+        JsonObject answer = new JsonObject();
+        JsonArray offers = new JsonArray();
+        JsonArray parsed = new JsonArray();
+        answer.add("suggestions", offers);
+        answer.add("parsed", parsed);
+
+        if (server == null) {
+            send(ex, 200, "application/json", answer.toString().getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+
+        final String text = query;
+        try {
+            server.submit(() -> {
+                CommandSourceStack source = VanillaCompat.createCommandSource(
+                        server, server.overworld(), "OnTime web panel");
+                ParseResults<CommandSourceStack> results =
+                        server.getCommands().getDispatcher().parse(text, source);
+                // How far it got. Everything from here on is what the field
+                // paints red, the same as the game does.
+                answer.addProperty("cursor", results.getReader().getCursor());
+                for (ParsedCommandNode<CommandSourceStack> node : results.getContext().getNodes()) {
+                    JsonObject range = new JsonObject();
+                    range.addProperty("start", node.getRange().getStart());
+                    range.addProperty("end", node.getRange().getEnd());
+                    parsed.add(range);
+                }
+                Suggestions suggestions = server.getCommands().getDispatcher()
+                        .getCompletionSuggestions(results).join();
+                answer.addProperty("start", suggestions.getRange().getStart());
+                answer.addProperty("end", suggestions.getRange().getEnd());
+                for (Suggestion suggestion : suggestions.getList()) {
+                    JsonObject one = new JsonObject();
+                    one.addProperty("text", suggestion.getText());
+                    if (suggestion.getTooltip() != null) {
+                        one.addProperty("tip", suggestion.getTooltip().getString());
+                    }
+                    offers.add(one);
+                }
+                return null;
+            }).get(2, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            // A suggestion nobody gets is a field that still works. Never a 500:
+            // the panel would show an error toast on every keystroke.
+            OnTimeConstants.LOGGER.debug("Could not complete '{}'", text, e);
+        }
         send(ex, 200, "application/json", answer.toString().getBytes(StandardCharsets.UTF_8));
     }
 
