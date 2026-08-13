@@ -64,7 +64,7 @@
       "trg.s.players": "these players", "trg.s.selector": "a selector",
       "trg.names": "Names, separated by commas", "trg.selector": "@a[team=red]",
       "trg.addCond": "Add", "trg.addToBranch": "Add",
-      "trg.dropBranch": "Remove this alternative",
+      "trg.dropBranch": "Remove this alternative", "trg.dropGroup": "Remove this bracket",
       "trg.startsWhen": "Starts it when...", "trg.endsWhen": "Ends it when...",
       "trg.noStart": "Nothing starts it early", "trg.noFinish": "Nothing ends it early",
       "trg.say.when": "when", "trg.say.here": "joins this alternative",
@@ -175,7 +175,7 @@
       "trg.s.players": "estos jugadores", "trg.s.selector": "un selector",
       "trg.names": "Nombres, separados por comas", "trg.selector": "@a[team=red]",
       "trg.addCond": "Añadir", "trg.addToBranch": "Añadir",
-      "trg.dropBranch": "Quitar esta alternativa",
+      "trg.dropBranch": "Quitar esta alternativa", "trg.dropGroup": "Quitar este bloque",
       "trg.startsWhen": "Lo arranca cuando...", "trg.endsWhen": "Lo termina cuando...",
       "trg.noStart": "Nada lo arranca antes de tiempo",
       "trg.noFinish": "Nada lo termina antes de tiempo",
@@ -1348,10 +1348,23 @@
     return [root];
   }
 
-  /** One alternative: what has to hold together, and the way to add to it. */
-  function groupBlock(timer, rule, group) {
+  /**
+   * One alternative, drawn as what it is: a tree.
+   *
+   * <p>A group holds conditions and it can hold groups, so this draws itself
+   * again for each one it finds. The old version walked one level and skipped
+   * anything deeper with a bare {@code continue}: a nested group was not shown
+   * as wrong, or as anything -- it simply was not on the page, while the
+   * conditions inside it went on deciding when the timer ran.</p>
+   *
+   * <p>Nesting and indentation, not drawn lines. The game paints its tree
+   * because it has nothing else to put a thing inside a thing with; HTML does,
+   * and a rule down the left says where each level begins. Same structure,
+   * deliberately not the same picture.</p>
+   */
+  function groupBlock(timer, rule, group, depth = 0) {
     const box = document.createElement("div");
-    box.className = "trg-group";
+    box.className = "trg-group" + (depth ? " nested" : "");
 
     const head = document.createElement("div");
     head.className = "trg-group-head";
@@ -1363,7 +1376,10 @@
 
     const conditions = group.node === "group" ? (group.children || []) : [group];
     for (const condition of conditions) {
-      if (condition.node === "group") continue;
+      if (condition.node === "group") {
+        box.append(groupBlock(timer, rule, condition, depth + 1));
+        continue;
+      }
       const row = document.createElement("div");
       row.className = "cmd-row";
       const text = document.createElement("span");
@@ -1372,7 +1388,7 @@
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "danger small";
-      remove.textContent = "\u00d7";
+      remove.textContent = "×";
       remove.onclick = () => act("timer.removeCondition",
         { name: timer.name, conditionId: condition.id })
         .then(ok => ok && reopen(timer.name));
@@ -1385,21 +1401,27 @@
     // far bottom of the sheet, which nothing on screen ever mentioned: there
     // was no way to tell where the next condition was going to land.
     if (group.node === "group") {
-      const drop = document.createElement("button");
-      drop.type = "button";
-      drop.className = "danger small";
-      drop.textContent = t("trg.dropBranch");
-      drop.onclick = () => act("timer.removeCondition",
-        { name: timer.name, conditionId: group.id })
-        .then(ok => ok && reopen(timer.name));
-      box.append(drop);
+      const foot = document.createElement("div");
+      foot.className = "trg-group-foot";
 
       const add = document.createElement("button");
       add.type = "button";
       add.className = "btn small";
       add.textContent = t("trg.addToBranch");
       add.onclick = () => openComposer(box, add, timer, rule.action, group.id);
-      box.append(add);
+
+      const drop = document.createElement("button");
+      drop.type = "button";
+      drop.className = "danger small";
+      // What it takes away depends on where it is: the whole alternative at
+      // the top, and only this bracket of it further in.
+      drop.textContent = t(depth ? "trg.dropGroup" : "trg.dropBranch");
+      drop.onclick = () => act("timer.removeCondition",
+        { name: timer.name, conditionId: group.id })
+        .then(ok => ok && reopen(timer.name));
+
+      foot.append(add, drop);
+      box.append(foot);
     }
     return box;
   }

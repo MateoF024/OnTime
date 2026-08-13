@@ -905,16 +905,38 @@ dialog[open] { animation: pop .2s var(--ease); }
 }
 .trg-rule-head { margin-bottom: 8px; }
 
+/*
+ * An alternative, and whatever is bracketed inside it.
+ *
+ * The rule down the left is the whole of the tree drawing: a level begins
+ * where a rule begins, and one inside another is one step further in. The
+ * game has to paint corners and stems because it cannot put a box inside a
+ * box; here that is the only thing there is, so the picture is not needed.
+ */
 .trg-group {
   border-left: 2px solid var(--line);
   padding: 4px 0 4px 10px;
   margin-left: 4px;
+}
+/* Deeper in, and said by the eye before it is read. */
+.trg-group.nested {
+  margin: 6px 0 6px 6px;
+  border-left-color: var(--accent);
+  border-left-style: dashed;
 }
 .trg-group-head {
   font-size: 12px;
   color: var(--muted);
   letter-spacing: .03em;
   margin-bottom: 4px;
+}
+/* Add and remove, together at the foot of the level they act on. Loose in the
+   box they sat wherever the last condition left them. */
+.trg-group-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 /* The seam between two groups, which is where the "or" lives. */
