@@ -90,7 +90,44 @@
       "default": "Default", "runs.of": "of %s",
       "lead.runs": "%s running right now",
       "lead.timers": "%s defined on this server",
-      "lead.settings": "What a new timer starts with, and what the server itself does"
+      "lead.settings": "What a new timer starts with, and what the server itself does",
+
+      // The explanation layer. Same ideas the in-game tooltips carry, written
+      // for a surface with room to show them: no colour codes, and a backtick
+      // around a value to type or pick.
+      "hint.position": "Where the counter sits. Pick `CUSTOM` to place it yourself.",
+      "hint.customPosition": "The spot `CUSTOM` puts the counter in.",
+      "hint.scale": "How big the counter is drawn, from `0.1` to `5.0`.",
+      "hint.hideOnCooldown": "A counter waiting out a repeat disappears instead of sitting there stopped.",
+      "hint.colorHigh": "Colour while plenty of time is left.",
+      "hint.colorMid": "Colour between the two thresholds.",
+      "hint.colorLow": "Colour once it is nearly out.",
+      "hint.thresholdMid": "Below this percentage the middle colour takes over.",
+      "hint.thresholdLow": "Below this percentage the last colour takes over.",
+      "hint.soundId": "Sound played each second, for example `minecraft:block.note_block.hat`.",
+      "hint.soundVolume": "How loud that sound is, from `0.0` to `1.0`.",
+      "hint.soundPitch": "How high that sound is, from `0.5` to `2.0`.",
+      "hint.maxTimerSeconds": "The longest a timer may be, in seconds.",
+      "hint.confirmRunThreshold": "Ask before creating this many executions at once. `0` always asks, `-1` never does.",
+      "hint.webSocketEnabled": "Whether the event feed accepts connections.",
+      "hint.webSocketPort": "Port the event feed listens on. Applies next start.",
+      "hint.webPanelPort": "Port this panel listens on. Applies next start.",
+      "hint.silent": "No tick sound from this timer, whatever the settings say.",
+      "hint.repeat": "Start again on its own when it ends.",
+      "hint.repeatCount": "How many more times. `-1` for always.",
+      "hint.repeatCooldown": "Seconds of pause before it starts again. `0` for none.",
+      "hint.nextTimer": "A timer to hand over to when this one ends. It cannot be itself.",
+      "hint.sequenceCooldown": "Seconds of pause before that one starts. `0` for none.",
+      "hint.titleAbove": "Text drawn over the counter. Plain text or tellraw JSON.",
+      "hint.titleBelow": "Text drawn under the counter. Plain text or tellraw JSON.",
+      "hint.titleSide": "Text drawn beside the counter.",
+      "hint.name": "Letters, digits and `_ . + -`, up to 32 characters.",
+      "hint.newName": "The copy needs a name of its own.",
+      "hint.countUp": "Counts down to zero, or up to its length.",
+      "hint.length": "How long it runs for, added up.",
+      "hint.finishCommand": "Runs when the timer reaches its end. Optional; more can be added later.",
+      "hint.audience": "Who sees this execution.",
+      "hint.mode": "One clock everybody shares, or a clock each."
     },
     es: {
       admin: "Administración", "tab.runs": "En curso", "tab.timers": "Contadores",
@@ -165,7 +202,41 @@
       "default": "Por defecto", "runs.of": "de %s",
       "lead.runs": "%s en marcha ahora mismo",
       "lead.timers": "%s definidos en este servidor",
-      "lead.settings": "Con qué arranca un contador nuevo, y qué hace el servidor"
+      "lead.settings": "Con qué arranca un contador nuevo, y qué hace el servidor",
+
+      "hint.position": "Dónde se sitúa el contador. Elige `CUSTOM` para colocarlo tú.",
+      "hint.customPosition": "El punto donde `CUSTOM` pone el contador.",
+      "hint.scale": "Tamaño del contador, de `0.1` a `5.0`.",
+      "hint.hideOnCooldown": "Un contador esperando una repetición desaparece en vez de quedarse ahí parado.",
+      "hint.colorHigh": "Color mientras queda tiempo de sobra.",
+      "hint.colorMid": "Color entre los dos umbrales.",
+      "hint.colorLow": "Color cuando ya casi no queda.",
+      "hint.thresholdMid": "Por debajo de este porcentaje entra el color intermedio.",
+      "hint.thresholdLow": "Por debajo de este porcentaje entra el último color.",
+      "hint.soundId": "Sonido que suena cada segundo, por ejemplo `minecraft:block.note_block.hat`.",
+      "hint.soundVolume": "Volumen de ese sonido, de `0.0` a `1.0`.",
+      "hint.soundPitch": "Tono de ese sonido, de `0.5` a `2.0`.",
+      "hint.maxTimerSeconds": "Lo más largo que puede ser un contador, en segundos.",
+      "hint.confirmRunThreshold": "Preguntar antes de crear tantas ejecuciones de golpe. `0` pregunta siempre, `-1` nunca.",
+      "hint.webSocketEnabled": "Si el canal de eventos acepta conexiones.",
+      "hint.webSocketPort": "Puerto del canal de eventos. Se aplica al reiniciar.",
+      "hint.webPanelPort": "Puerto de este panel. Se aplica al reiniciar.",
+      "hint.silent": "Este contador no suena, digan lo que digan los ajustes.",
+      "hint.repeat": "Vuelve a empezar solo cuando termina.",
+      "hint.repeatCount": "Cuántas veces más. `-1` para siempre.",
+      "hint.repeatCooldown": "Segundos de pausa antes de volver a empezar. `0` para ninguna.",
+      "hint.nextTimer": "Contador al que cede el turno cuando éste termina. No puede ser él mismo.",
+      "hint.sequenceCooldown": "Segundos de pausa antes de que arranque ése. `0` para ninguna.",
+      "hint.titleAbove": "Texto dibujado sobre el contador. Texto plano o JSON de tellraw.",
+      "hint.titleBelow": "Texto dibujado bajo el contador. Texto plano o JSON de tellraw.",
+      "hint.titleSide": "Texto dibujado al lado del contador.",
+      "hint.name": "Letras, dígitos y `_ . + -`, hasta 32 caracteres.",
+      "hint.newName": "La copia necesita un nombre propio.",
+      "hint.countUp": "Cuenta hacia cero, o hacia su duración.",
+      "hint.length": "Lo que dura, todo sumado.",
+      "hint.finishCommand": "Se ejecuta cuando el contador llega al final. Opcional; puedes añadir más después.",
+      "hint.audience": "Quién ve esta ejecución.",
+      "hint.mode": "Un reloj que todos comparten, o un reloj para cada uno."
     }
   };
 
@@ -661,6 +732,60 @@
       .trim();
   };
 
+  /**
+   * Which explanation a field carries, decided in one place.
+   *
+   * <p>One idea, one key, not one per screen: the settings a timer takes a
+   * copy of say the same thing in Settings and in the editor, so they share
+   * the line rather than keeping two that drift. The same decision the
+   * in-game panel makes in fieldTipKey, made once here.</p>
+   */
+  const HINTS = {
+    positionPreset: "position", "d:preset": "position",
+    timerX: "customPosition", timerY: "customPosition",
+    "d:x": "customPosition", "d:y": "customPosition",
+    timerScale: "scale", "d:scale": "scale",
+    colorHigh: "colorHigh", "d:colorHigh": "colorHigh",
+    colorMid: "colorMid", "d:colorMid": "colorMid",
+    colorLow: "colorLow", "d:colorLow": "colorLow",
+    thresholdMid: "thresholdMid", "d:thresholdMid": "thresholdMid",
+    thresholdLow: "thresholdLow", "d:thresholdLow": "thresholdLow",
+    timerSoundId: "soundId", "d:soundId": "soundId",
+    timerSoundVolume: "soundVolume", "d:soundVolume": "soundVolume",
+    timerSoundPitch: "soundPitch", "d:soundPitch": "soundPitch",
+    "t:above": "titleAbove", "t:below": "titleBelow",
+    "t:left": "titleSide", "t:right": "titleSide",
+    dest: "newName",
+  };
+
+  const hintKey = key => "hint." + (HINTS[key] || key.replace(/^[a-z]:/, ""));
+
+  /**
+   * The explanation, as a line under the field.
+   *
+   * <p>Where the game has to hide this behind a hover -- there is no room on a
+   * 320-pixel screen -- a browser can simply show it, so it does. Same idea,
+   * and deliberately not the same shape.</p>
+   *
+   * <p>Backticks mark a value to type or pick, which is what the game paints
+   * yellow. Written as text nodes either way: a hint is translated copy and
+   * must never be able to carry markup into the page.</p>
+   */
+  function hint(key) {
+    const text = t(hintKey(key));
+    if (text === hintKey(key)) return null;
+    const line = document.createElement("small");
+    line.className = "hint";
+    text.split(/`([^`]+)`/).forEach((part, i) => {
+      if (!part) return;
+      if (i % 2 === 0) return void line.append(document.createTextNode(part));
+      const code = document.createElement("code");
+      code.textContent = part;
+      line.append(code);
+    });
+    return line;
+  }
+
   function field(key, kind, value, onInput) {
     const wrap = document.createElement("div");
     wrap.className = "field";
@@ -705,6 +830,8 @@
       if (onInput) onInput();
     });
     wrap.append(input);
+    const explanation = hint(key);
+    if (explanation) wrap.append(explanation);
     return wrap;
   }
 
@@ -918,7 +1045,7 @@
         input.dataset.kind = "int";
         cells.append(input);
       }
-      row.append(lab, cells);
+      row.append(lab, cells, hint("length"));
       body.append(row);
       const dir = field("countUp", "bool", "false");
       const select = $("select", dir);
@@ -1329,7 +1456,7 @@
           input.dataset.kind = "int";
           cells.append(input);
         }
-        row.append(lab, cells);
+        row.append(lab, cells, hint("length"));
         s.append(row);
         const silent = field("silent", "bool", String(!!timer.silent));
         $("select", silent).replaceChildren(new Option(t("on"), "true"), new Option(t("off"), "false"));

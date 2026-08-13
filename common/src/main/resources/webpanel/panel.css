@@ -522,6 +522,32 @@ input::placeholder { color: var(--muted); }
 .field .units { display: flex; gap: 6px; }
 .field .units > input { width: 100%; min-width: 0; text-align: center; }
 
+/*
+ * The explanation, shown rather than hidden.
+ *
+ * The game has to keep this behind a hover; a browser has the room, so the
+ * line sits under the label it belongs to and is simply readable. Column one
+ * on purpose: it explains the name, and the control keeps its own lane.
+ */
+.field > .hint {
+  grid-column: 1;
+  margin-top: -3px;
+  max-width: 64ch;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.field > .hint code {
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .92em;
+  white-space: nowrap;
+}
+
 @media (max-width: 900px) {
   .shell { grid-template-columns: 1fr; }
   .rail {
