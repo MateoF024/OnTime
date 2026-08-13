@@ -3582,8 +3582,16 @@ public final class AdminPanel {
                         && mouseY < commandBox.getY() + commandBox.getHeight())) {
             // Nothing typed into it means nothing to keep: opening a box and
             // leaving it is not editing, and the completion list had been
-            // filling it in on the way past.
-            if (!commandTyped) commandText = "";
+            // filling it in on the way past. Typing and then deleting it all
+            // is the same thing -- what is left is an empty box either way.
+            if (!commandTyped || commandBox.getValue().isBlank()) {
+                commandText = "";
+                // The box as well as the variable. Letting go does not lay the
+                // page out again, so a box cleared only in the field it is
+                // read from went on showing the suggestion until something
+                // else rebuilt it -- which is why minimising the game fixed it.
+                commandBox.setValue("");
+            }
             commandTyped = false;
             host.clearFocus();
         }
