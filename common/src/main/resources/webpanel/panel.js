@@ -80,6 +80,7 @@
       "cmd.text": "Command, without the leading slash",
       on: "On", off: "Off", finish: "Finish it", startIt: "Start it", none: "None",
       connected: "Connected", offline: "Reconnecting", badValue: "Check the values in red",
+      applied: "%s change(s) applied", nothingToApply: "Nothing has changed",
       "default": "Default", "runs.of": "of %s",
       "lead.runs": "%s running right now",
       "lead.timers": "%s defined on this server",
@@ -209,6 +210,7 @@
       "cmd.end": "Al final", "cmd.text": "Comando, sin la barra inicial",
       on: "Sí", off: "No", finish: "Terminarlo", startIt: "Arrancarlo", none: "Nada",
       connected: "Conectado", offline: "Reconectando", badValue: "Revisa los valores en rojo",
+      applied: "%s cambio(s) aplicados", nothingToApply: "No hay nada que aplicar",
       "default": "Por defecto", "runs.of": "de %s",
       "lead.runs": "%s en marcha ahora mismo",
       "lead.timers": "%s definidos en este servidor",
@@ -849,6 +851,8 @@
     wrap.append(lab);
 
     let input;
+    /** Only a colour has one: the box beside the swatch. */
+    let hex = null;
     if (kind === "bool") {
       input = document.createElement("select");
       for (const [v, text] of [["true", t("on")], ["false", t("off")]]) {
@@ -872,6 +876,30 @@
       input.type = "color";
       input.value = typeof value === "number"
         ? "#" + (value & 0xFFFFFF).toString(16).padStart(6, "0") : (value || "#ffffff");
+      // A picker is the browser's advantage and the reason there is no colour
+      // wheel in game -- but a picker cannot be pasted into, and a colour is
+      // very often something one already has written down. So both, side by
+      // side, each following the other. The text does not need to wear the
+      // colour the way it does in game: the swatch beside it is the reference.
+      hex = document.createElement("input");
+      hex.type = "text";
+      hex.className = "hex";
+      hex.spellcheck = false;
+      hex.maxLength = 7;
+      hex.value = input.value.toUpperCase();
+      input.addEventListener("input", () => { hex.value = input.value.toUpperCase(); });
+      hex.addEventListener("input", () => {
+        const typed = hex.value.trim().replace(/^#/, "");
+        const ok = /^[0-9a-fA-F]{6}$/.test(typed);
+        hex.classList.toggle("bad", !ok && typed !== "");
+        if (ok) input.value = "#" + typed.toLowerCase();
+      });
+      // Tidied when it is let go, so a half-typed value does not stay on
+      // screen disagreeing with the swatch beside it.
+      hex.addEventListener("blur", () => {
+        hex.value = input.value.toUpperCase();
+        hex.classList.remove("bad");
+      });
     } else {
       input = document.createElement("input");
       input.type = kind === "int" || kind === "float" ? "number" : "text";
@@ -884,7 +912,16 @@
       input.classList.toggle("bad", !parses(input));
       if (onInput) onInput();
     });
-    wrap.append(input);
+    if (hex) {
+      // The two of them fill the lane the control sits in, which was a swatch
+      // and a wide stretch of nothing.
+      const pair = document.createElement("div");
+      pair.className = "colour";
+      pair.append(input, hex);
+      wrap.append(pair);
+    } else {
+      wrap.append(input);
+    }
     const explanation = hint(key);
     if (explanation) wrap.append(explanation);
     return wrap;
@@ -1006,6 +1043,29 @@
       });
     };
 
+    /**
+     * Moves the highlight, and the box with it.
+     *
+     * <p>Apart from draw() because drawing builds the rows again, and building
+     * them again puts the box back to the top: the arrows would have undone
+     * their own scrolling on every press.</p>
+     */
+    const highlight = () => {
+      [...list.children].forEach((row, i) => {
+        row.className = i === picked ? "on" : "";
+        row.setAttribute("aria-selected", String(i === picked));
+      });
+      const row = list.children[picked];
+      if (!row) return;
+      const top = row.offsetTop || 0;
+      const height = row.offsetHeight || 0;
+      if (top < list.scrollTop) {
+        list.scrollTop = top;
+      } else if (top + height > list.scrollTop + list.clientHeight) {
+        list.scrollTop = top + height - list.clientHeight;
+      }
+    };
+
     const take = i => {
       const offer = offers[i];
       if (!offer) return;
@@ -1052,8 +1112,12 @@
       if (list.hidden) return;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
-        picked = (picked + (e.key === "ArrowDown" ? 1 : offers.length - 1)) % offers.length;
-        draw();
+        // Stops at the ends rather than wrapping round. Coming back to the top
+        // from the bottom of a list that is taller than its box looks exactly
+        // like a list that scrolled, except nothing moved.
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        picked = Math.max(0, Math.min(offers.length - 1, picked + step));
+        highlight();
       } else if (e.key === "Tab" || e.key === "Enter") {
         // Enter takes the highlighted one; with nothing highlighted it is a
         // plain Enter and the dialog can have it.
@@ -1159,30 +1223,81 @@
     }, [[t("cancel"), "", null], [t("reset.do"), "danger", run]]);
   }
 
-  function markSettings() {
-    const bad = $$("#settings input").some(i => !parses(i));
-    $("#settings-apply").disabled = bad;
+  /** What Apply would send from the settings sheets, if pressed now. */
+  function settingsChanges() {
+    return $$("#settings [data-key]")
+      .map(input => [input.dataset.key, valueOf(input)])
+      .filter(([key, value]) => String(state.config[key]) !== String(value));
   }
 
+  /**
+   * The two buttons, in the state the page is actually in.
+   *
+   * <p>Both were always pressable. Discard with nothing to discard does
+   * nothing and says nothing, and Apply with nothing to apply looked exactly
+   * like Apply with everything to apply. The in-game panel settles this by
+   * greying the button out, and it settles it the same way here.</p>
+   */
+  function markSettings() {
+    const bad = $$("#settings input").some(i => !parses(i));
+    const changed = settingsChanges().length;
+    $("#settings-apply").disabled = busy || bad || changed === 0;
+    $("#settings-discard").disabled = busy || changed === 0;
+  }
+
+  /** True while something is on its way to the server. */
+  let busy = false;
+
   $("#settings-apply").onclick = async () => {
-    for (const input of $$("#settings [data-key]")) {
-      const key = input.dataset.key;
-      const value = valueOf(input);
-      if (String(state.config[key]) === String(value)) continue;
-      await act("config.set", { key, value });
+    const changes = settingsChanges();
+    if (!changes.length) return;
+    busy = true;
+    markSettings();
+    let done = 0;
+    for (const [key, value] of changes) {
+      if (await act("config.set", { key, value })) done++;
     }
+    busy = false;
+    // Said once, with a number, rather than a line per setting: the server
+    // answers routine changes with nothing at all, by design.
+    if (done) toast(t("applied", done));
+    markSettings();
   };
   $("#settings-discard").onclick = () => renderSettings();
 
   // --------------------------------------------------------------- modals
 
-  function modal(title, build, actions) {
+  /**
+   * What every box in the open dialog held when it opened.
+   *
+   * <p>Read off the page rather than out of the timer, so "changed" means what
+   * somebody looking at the dialog would call changed, and one place decides
+   * it for both the button and for what gets sent.</p>
+   */
+  let baseline = {};
+
+  const dirty = () => $$("#modal-body [data-key]")
+    .some(i => baseline[i.dataset.key] !== undefined && i.value !== baseline[i.dataset.key]);
+
+  /**
+   * @param watch true for a dialog whose last button applies changes, which
+   *              should be dead until there are changes to apply
+   */
+  function modal(title, build, actions, watch = false) {
     const dialog = $("#modal");
     $("#modal-title").textContent = title;
     const body = $("#modal-body");
+    const place = keepPlace ? body.scrollTop : 0;
     body.replaceChildren();
-    body.scrollTop = 0;
     build(body);
+    body.scrollTop = place;
+
+    baseline = {};
+    if (watch) {
+      for (const input of $$("#modal-body [data-key]")) {
+        baseline[input.dataset.key] = input.value;
+      }
+    }
     const menu = $("#modal-actions");
     menu.replaceChildren(...actions.map(([text, cls, fn]) => {
       const button = document.createElement("button");
@@ -1190,10 +1305,28 @@
       button.className = "btn " + cls;
       button.textContent = text;
       button.onclick = async () => {
-        if (!fn || (await fn()) !== false) dialog.close();
+        // Every button in the row, not just this one: a second press while the
+        // first is still going sends the whole form twice.
+        const all = [...menu.children];
+        all.forEach(b => { b.dataset.was = String(b.disabled); b.disabled = true; });
+        try {
+          if (!fn || (await fn()) !== false) dialog.close();
+        } finally {
+          all.forEach(b => { b.disabled = b.dataset.was === "true"; });
+        }
       };
       return button;
     }));
+
+    if (watch) {
+      // The last button is the one that applies; the others cancel or close,
+      // and those are always available.
+      const primary = menu.children[menu.children.length - 1];
+      const mark = () => { primary.disabled = !dirty(); };
+      body.addEventListener("input", mark);
+      body.addEventListener("change", mark);
+      mark();
+    }
     if (!dialog.open) dialog.showModal();
   }
 
@@ -1265,58 +1398,46 @@
     ]);
   }
 
+  /**
+   * A timer that does not exist yet, asked about the way an existing one is.
+   *
+   * <p>It used to ask four things and leave the rest for a second visit to the
+   * editor, which is not how the in-game panel does it: there the creation
+   * form draws every field a timer has. Two of them belong to creation alone
+   * -- the name, which nothing can change afterwards, and the first command,
+   * which saves that second visit.</p>
+   *
+   * <p>Made first and then adjusted, because everything but the four the
+   * server needs up front is an operation on a timer, and there is not one
+   * until it has been made.</p>
+   */
   function newDialog() {
     modal(t("dialog.new"), body => {
-      body.append(field("name", "text", ""));
-      const row = document.createElement("div");
-      row.className = "field";
-      const lab = document.createElement("label");
-      lab.textContent = t("field.hours") + " / " + t("field.minutes") + " / " + t("field.seconds");
-      const cells = document.createElement("div");
-      cells.className = "row";
-      for (const [key, value] of [["hours", 0], ["minutes", 1], ["seconds", 0]]) {
-        const input = document.createElement("input");
-        input.type = "number";
-        input.min = "0";
-        input.value = value;
-        input.dataset.key = key;
-        input.dataset.kind = "int";
-        cells.append(input);
-      }
-      row.append(lab, cells, hint("length"));
-      body.append(row);
-      const dir = field("countUp", "bool", "false");
-      const select = $("select", dir);
-      select.replaceChildren(new Option(t("countdown"), "false"), new Option(t("countup"), "true"));
-      body.append(dir);
-      // Optional, and the only chance to say it without a second visit to the
-      // editor. Left empty the timer runs nothing, which is a real answer.
-      //
-      // The same box as the adder, completions and all: there is no reason the
-      // first command a timer gets should be typed more blindly than its
-      // second.
-      const finish = document.createElement("div");
-      finish.className = "field";
-      const finishLabel = document.createElement("label");
-      finishLabel.textContent = label("finishCommand");
-      const { wrap: finishBox, input: finishInput } = commandField();
-      finishInput.dataset.key = "finishCommand";
-      finishInput.dataset.optional = "1";
-      finish.append(finishLabel, finishBox, hint("finishCommand"));
-      body.append(finish);
+      timerSheets(body, blankTimer(), true);
     }, [
       [t("cancel"), "", null],
       [t("save"), "primary", async () => {
         const get = key => $(`#modal-body [data-key='${key}']`);
+        const num = key => parseInt(get(key).value, 10) || 0;
+
         const name = get("name").value.trim();
+        if (!name) {
+          get("name").classList.add("bad");
+          get("name").focus();
+          toast(t("badValue"), true);
+          return false;
+        }
         const made = await act("timer.create", {
           name,
-          hours: parseInt(get("hours").value, 10) || 0,
-          minutes: parseInt(get("minutes").value, 10) || 0,
-          seconds: parseInt(get("seconds").value, 10) || 0,
+          hours: num("hours"), minutes: num("minutes"), seconds: num("seconds"),
           countUp: get("countUp").value === "true"
         });
         if (made === false) return false;
+
+        // Now that it exists, everything else the form asked about. The
+        // baseline these are measured against is what a new timer copies from
+        // the settings, so what goes is what was deliberately moved.
+        await applyTimer(name);
         const command = get("finishCommand").value.trim();
         if (command) await act("timer.addCommand", { name, command });
         return made;
@@ -1539,7 +1660,7 @@
     const head = document.createElement("div");
     head.className = "trg-say-head";
     const what = document.createElement("span");
-    what.className = "cmd-at" + (action === "start" ? "" : " end");
+    what.className = "trg-when " + (action === "start" ? "starts" : "ends");
     what.textContent = t(action === "start" ? "trg.startsIt" : "trg.endsIt");
     const where = document.createElement("span");
     where.className = "trg-say-where";
@@ -1692,22 +1813,71 @@
     (kind.hidden ? value : kind).focus();
   }
 
-  /** Reopens the editor on fresh data, which is how every list here refreshes. */
+  /**
+   * Reopens the editor on fresh data, which is how every list here refreshes.
+   *
+   * <p>Built again from the top, so without this the scroll went back to the
+   * top with it. The commands sheet is the last one in the dialog: adding a
+   * second command meant scrolling the whole editor a second time, and a third
+   * meant a third.</p>
+   */
+  let keepPlace = false;
+
   function reopen(name) {
     const fresh = state.timers.find(x => x.name === name);
-    if (fresh) editDialog(fresh);
+    if (!fresh) return;
+    keepPlace = true;
+    try {
+      editDialog(fresh);
+    } finally {
+      keepPlace = false;
+    }
   }
 
-  function editDialog(timer) {
+  /**
+   * Which server setting a timer's display value is copied from when it is
+   * made. What "unchanged" means for a timer that does not exist yet.
+   */
+  const COPIED_FROM = {
+    preset: "positionPreset", x: "timerX", y: "timerY", scale: "timerScale",
+    colorHigh: "colorHigh", colorMid: "colorMid", colorLow: "colorLow",
+    thresholdMid: "thresholdMid", thresholdLow: "thresholdLow",
+    soundId: "timerSoundId", soundVolume: "timerSoundVolume",
+    soundPitch: "timerSoundPitch",
+  };
+
+  /** A timer that does not exist yet, as it would be if it did. */
+  function blankTimer() {
+    const display = {};
+    for (const [key, setting] of Object.entries(COPIED_FROM)) {
+      display[key] = state.config[setting];
+    }
+    return {
+      name: "", targetTicks: 1200, silent: false, display, titles: {},
+      repeat: false, repeatCount: -1, repeatCooldownTicks: 0,
+      nextTimer: "", sequenceCooldownTicks: 0,
+    };
+  }
+
+  /**
+   * Every value a timer has, in the sheets it has them in.
+   *
+   * <p>One function for both dialogs, because creating a timer and editing one
+   * ask the same questions -- the in-game panel draws the same form for both.
+   * The only differences are the two that belong to creation alone: the name,
+   * which cannot be changed afterwards, and the first command, which is a
+   * shortcut past a second visit to the Commands sheet.</p>
+   */
+  function timerSheets(body, timer, creating) {
     const display = timer.display || {};
-    modal(t("dialog.edit", timer.name), body => {
-      const group = (name, build) => {
-        const sheeted = sheet(t("group." + name));
-        build(sheeted.body);
-        body.append(sheeted.section);
-      };
+    const group = (name, build) => {
+      const sheeted = sheet(t("group." + name));
+      build(sheeted.body);
+      body.append(sheeted.section);
+    };
 
       group("identity", s => {
+        if (creating) s.append(field("name", "text", ""));
         const row = document.createElement("div");
         row.className = "field";
         const lab = document.createElement("label");
@@ -1727,6 +1897,14 @@
         }
         row.append(lab, cells, hint("length"));
         s.append(row);
+        if (creating) {
+          // Only while creating. Nothing can turn a timer around afterwards,
+          // so on an existing one this is a control that does nothing.
+          const dir = field("countUp", "bool", "false");
+          $("select", dir).replaceChildren(
+            new Option(t("countdown"), "false"), new Option(t("countup"), "true"));
+          s.append(dir);
+        }
         const silent = field("silent", "bool", String(!!timer.silent));
         $("select", silent).replaceChildren(new Option(t("on"), "true"), new Option(t("off"), "false"));
         $("select", silent).value = String(!!timer.silent);
@@ -1766,6 +1944,78 @@
         s.append(field("sequenceCooldown", "int", Math.floor((timer.sequenceCooldownTicks || 0) / 20)));
       });
 
+      if (creating) {
+        // The one command you always know at creation, saving a second visit.
+        group("commands", s => {
+          const row = document.createElement("div");
+          row.className = "field";
+          const lab = document.createElement("label");
+          lab.textContent = label("finishCommand");
+          const { wrap, input } = commandField();
+          input.dataset.key = "finishCommand";
+          input.dataset.optional = "1";
+          row.append(lab, wrap, hint("finishCommand"));
+          s.append(row);
+        });
+      }
+  }
+
+  /**
+   * What Apply sends: the boxes that differ from the ones the dialog opened
+   * with, grouped the way the operations are.
+   *
+   * @return how many operations were accepted
+   */
+  async function applyTimer(name) {
+    const get = key => $(`#modal-body [data-key='${key}']`);
+    const num = key => parseInt(get(key).value, 10) || 0;
+    const moved = key => get(key) && get(key).value !== baseline[key];
+    let done = 0;
+
+    if (["hours", "minutes", "seconds"].some(moved)) {
+      if (await act("timer.setTime", { name, hours: num("hours"),
+        minutes: num("minutes"), seconds: num("seconds") })) done++;
+    }
+    if (moved("silent")) {
+      if (await act("timer.setSilent",
+        { name, silent: get("silent").value === "true" })) done++;
+    }
+    for (const [, keys] of DISPLAY_KEYS) {
+      for (const [key] of keys) {
+        if (!moved("d:" + key)) continue;
+        if (await act("timer.setDisplay",
+          { name, key, value: valueOf(get("d:" + key)) })) done++;
+      }
+    }
+    for (const slot of ["above", "below", "left", "right"]) {
+      if (!moved("t:" + slot)) continue;
+      if (await act("timer.setTitle",
+        { name, slot, text: get("t:" + slot).value })) done++;
+    }
+    if (["repeat", "repeatCount", "repeatCooldown"].some(moved)) {
+      if (await act("timer.setRepeat", {
+        name, repeat: get("repeat").value === "true",
+        count: num("repeatCount"), cooldownSeconds: num("repeatCooldown")
+      })) done++;
+    }
+    if (["nextTimer", "sequenceCooldown"].some(moved)) {
+      if (await act("timer.setSequence", {
+        name, next: get("nextTimer").value.trim(),
+        cooldownSeconds: num("sequenceCooldown")
+      })) done++;
+    }
+    return done;
+  }
+
+  function editDialog(timer) {
+    modal(t("dialog.edit", timer.name), body => {
+      const group = (name, build) => {
+        const sheeted = sheet(t("group." + name));
+        build(sheeted.body);
+        body.append(sheeted.section);
+      };
+      timerSheets(body, timer, false);
+
       // One list, the way the commands sheet works. There were three fixed
       // forms here -- a scoreboard block, an expression block and a select of
       // four game events -- so a timer could hold one of each and no more, and
@@ -1786,7 +2036,7 @@
           const head = document.createElement("div");
           head.className = "trg-section-head";
           const what = document.createElement("span");
-          what.className = "cmd-at" + (action === "start" ? "" : " end");
+          what.className = "trg-when " + (action === "start" ? "starts" : "ends");
           what.textContent = t(action === "start" ? "trg.startsWhen" : "trg.endsWhen");
 
           const add = document.createElement("button");
@@ -1823,6 +2073,9 @@
         }
       });
 
+      // The moment is said once and the commands hang under it, which is how
+      // the game draws the same list. Repeated beside every row, two commands
+      // running at the same instant read as two unrelated facts.
       group("commands", s => {
         const list = document.createElement("div");
         const entries = timer.commandList || [];
@@ -1832,12 +2085,26 @@
           p.textContent = t("cmd.none");
           list.append(p);
         }
+        let moment;
+        let under = null;
         entries.forEach((entry, index) => {
+          // A new heading when the moment changes, exactly as commandLines
+          // decides it in game: the end is its own moment, once.
+          if (under === null || entry.at !== moment) {
+            moment = entry.at;
+            const head = document.createElement("div");
+            head.className = "cmd-moment";
+            const at = document.createElement("span");
+            at.className = "cmd-at" + (entry.at === undefined ? " end" : "");
+            at.textContent = entry.at === undefined ? t("cmd.end") : clock(entry.at * 20);
+            head.append(at);
+            list.append(head);
+            under = document.createElement("div");
+            under.className = "cmd-under";
+            list.append(under);
+          }
           const row = document.createElement("div");
           row.className = "cmd-row";
-          const at = document.createElement("span");
-          at.className = "cmd-at" + (entry.at === undefined ? " end" : "");
-          at.textContent = entry.at === undefined ? t("cmd.end") : clock(entry.at * 20);
           const text = document.createElement("span");
           text.className = "cmd-text";
           text.textContent = entry.delay > 0
@@ -1850,12 +2117,11 @@
           remove.onclick = async () => {
             // Zero-based, exactly as the server counts them.
             if (await act("timer.removeCommand", { name: timer.name, index })) {
-              const fresh = state.timers.find(x => x.name === timer.name);
-              if (fresh) editDialog(fresh);
+              reopen(timer.name);
             }
           };
-          row.append(at, text, remove);
-          list.append(row);
+          row.append(text, remove);
+          under.append(row);
         });
         s.append(list);
 
@@ -1894,8 +2160,7 @@
           if (at > 0) args.atSeconds = at;
           args.delayTicks = parseInt(wait.value, 10) || 0;
           if (await act("timer.addCommand", args)) {
-            const fresh = state.timers.find(x => x.name === timer.name);
-            if (fresh) editDialog(fresh);
+            reopen(timer.name);
           }
         };
         adder.append(cells, commandBox, wait, add);
@@ -1905,11 +2170,6 @@
       [t("cancel"), "", null],
       [t("apply"), "primary", async () => {
         const get = key => $(`#modal-body [data-key='${key}']`);
-        const num = key => parseInt(get(key).value, 10) || 0;
-
-        await act("timer.setTime",
-          { name: timer.name, hours: num("hours"), minutes: num("minutes"), seconds: num("seconds") });
-        await act("timer.setSilent", { name: timer.name, silent: get("silent").value === "true" });
 
         // Nothing empty and nothing unparseable leaves this dialog. Sending
         // it earned an "Unknown preset" from the server, which told the person
@@ -1937,27 +2197,10 @@
           return false;
         }
 
-        for (const [, keys] of DISPLAY_KEYS) {
-          for (const [key, kind] of keys) {
-            const input = get("d:" + key);
-            const value = valueOf(input);
-            if (String(display[key]) === String(value)) continue;
-            await act("timer.setDisplay", { name: timer.name, key, value });
-          }
-        }
-        for (const slot of ["above", "below", "left", "right"]) {
-          await act("timer.setTitle", { name: timer.name, slot, text: get("t:" + slot).value });
-        }
-        await act("timer.setRepeat", {
-          name: timer.name, repeat: get("repeat").value === "true",
-          count: num("repeatCount"), cooldownSeconds: num("repeatCooldown")
-        });
-        await act("timer.setSequence", {
-          name: timer.name, next: get("nextTimer").value.trim(),
-          cooldownSeconds: num("sequenceCooldown")
-        });
+        const done = await applyTimer(timer.name);
+        toast(done ? t("applied", done) : t("nothingToApply"), false);
       }]
-    ]);
+    ], true);
   }
 
   /**

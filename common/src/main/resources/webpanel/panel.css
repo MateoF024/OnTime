@@ -454,6 +454,25 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
 input[type="color"]::-moz-color-swatch { border: none; border-radius: 3px; }
 input::placeholder { color: var(--muted); }
 
+/*
+ * A colour: the picker, and the value written out beside it.
+ *
+ * The picker is what a browser has and the game does not, so it stays -- but
+ * nothing can be pasted into one, and a colour is usually something already
+ * written down somewhere. The two follow each other. The text does not wear
+ * the colour the way the game makes it: the swatch next to it already is the
+ * reference, and a hex in its own colour is a hex you cannot always read.
+ */
+.colour { display: flex; align-items: center; gap: 8px; }
+.colour > input[type="color"] { flex: none; }
+.colour > .hex {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  text-transform: uppercase;
+}
+
 /* ====================================================================== */
 /* Empty states                                                           */
 /* ====================================================================== */
@@ -648,8 +667,31 @@ dialog[open] { animation: pop .2s var(--ease); }
   border-bottom: 1px solid var(--line-soft);
 }
 .cmd-row:last-of-type { border-bottom: 0; }
+
+/* The moment, said once, with its commands hanging under it -- the same rule
+   down the left the trigger tree uses. One idiom for structure, not two. */
+.cmd-moment { padding: 10px 0 2px; }
+.cmd-moment:first-child { padding-top: 0; }
+.cmd-under {
+  border-left: 2px solid var(--line);
+  padding-left: 10px;
+  margin-left: 4px;
+}
+.cmd-under > .cmd-row { grid-template-columns: 1fr auto; }
+/* The moment a command runs at. Blue, which is the colour the game paints
+   a moment with, and italic for the one that has no clock time. */
 .cmd-at { font-size: 13px; color: var(--accent); }
 .cmd-at.end { font-style: italic; color: var(--muted); font-family: inherit; }
+
+/*
+ * What starts a timer and what ends it, in the two colours that mean exactly
+ * that everywhere else in the mod: green for starts, light red for ends. They
+ * used to be the accent blue and plain grey, which said nothing and did not
+ * match the game.
+ */
+.trg-when { font-size: 13px; font-weight: 600; }
+.trg-when.starts { color: var(--ok); }
+.trg-when.ends { color: var(--bad); }
 .cmd-text {
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 12.5px;

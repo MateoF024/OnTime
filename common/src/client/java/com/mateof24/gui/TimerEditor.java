@@ -446,9 +446,11 @@ public final class TimerEditor {
      */
     public List<Op> build(AdminModel.TimerRow timer) {
         List<Op> ops = new ArrayList<>();
+        String name;
         if (creating) {
+            name = value(timer, "name");
             JsonObject args = new JsonObject();
-            args.addProperty("name", value(timer, "name"));
+            args.addProperty("name", name);
             args.addProperty("hours", number(timer, "hours"));
             args.addProperty("minutes", number(timer, "minutes"));
             args.addProperty("seconds", number(timer, "seconds"));
@@ -460,16 +462,27 @@ public final class TimerEditor {
             String finish = value(timer, "finishCommand");
             if (finish != null && !finish.isBlank()) {
                 JsonObject command = new JsonObject();
-                command.addProperty("name", value(timer, "name"));
+                command.addProperty("name", name);
                 command.addProperty("command", finish.trim());
                 ops.add(new Op("timer.addCommand", command));
             }
-            return ops;
+            // And on, rather than back. The creation form draws every field a
+            // timer has, and this used to return here with only four of them
+            // sent: colours, titles, repeating and the rest were asked for,
+            // typed in, and dropped without a word. They are applied to the
+            // timer that now exists, in the order the list is sent.
+            //
+            // "changed" against a timer that does not exist compares with what
+            // a new one copies from the settings, so what goes is exactly what
+            // was moved off the default.
+        } else {
+            if (timer == null) return ops;
+            name = timer.name();
         }
-        if (timer == null) return ops;
-        String name = timer.name();
 
-        if (changed(timer, "hours") || changed(timer, "minutes") || changed(timer, "seconds")) {
+        // Already carried by timer.create, where it is not optional.
+        if (!creating
+                && (changed(timer, "hours") || changed(timer, "minutes") || changed(timer, "seconds"))) {
             JsonObject args = named(name);
             args.addProperty("hours", number(timer, "hours"));
             args.addProperty("minutes", number(timer, "minutes"));
