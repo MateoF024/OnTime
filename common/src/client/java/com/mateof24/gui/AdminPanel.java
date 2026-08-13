@@ -65,7 +65,6 @@ public final class AdminPanel {
     /** Drawn over the world after the widgets, so it has to carry on its own. */
     private static final int COLOR_RULE = 0x70FFFFFF;
     private static final int COLOR_SCRIM = 0xC0000000;
-    private static final int COLOR_DIALOG = 0xF0141418;
 
     private static final int COLOR_TEXT = 0xFFFFFFFF;
     /** For the line under a dialog title: present, but not competing with it. */
@@ -475,6 +474,9 @@ public final class AdminPanel {
             host.addWidget(name);
 
             boolean running = row.runCount() > 0;
+            // Stopping from here ends every execution of this timer and
+            // stopping from the runs page ends one; they are the same warning
+            // with a different subject, so they are one warning.
             String[] ops = {running ? "stop" : "start", "clone", "delete"};
             for (int a = 0; a < ops.length; a++) {
                 String op = ops[a];
@@ -482,7 +484,7 @@ public final class AdminPanel {
                                 b -> {
                                     model.selectTimer(row.name());
                                     editor.open(row.name());
-                                    openDialog(op);
+                                    openDialog("stop".equals(op) ? "timer.stop" : op);
                                 })
                         .bounds(listX + nameWidth + 4 + a * (actionWidth + 4), y, actionWidth, ROW_HEIGHT)
                         .tooltip(Tooltip.create(Component.translatable(
@@ -535,14 +537,26 @@ public final class AdminPanel {
         applyButton = apply;
         host.addWidget(apply);
 
-        Button discard = Button.builder(Component.translatable("ontime.gui.settings.discard"), b -> {
-                    editor.discard();
-                    model.clearMessage();
-                    init();
-                })
+        // While a timer is being filled in there is nothing to discard back
+        // to: the button leaves the creation instead, which is why it is
+        // called Cancel there and is always available. Discarding an existing
+        // timer's edits only makes sense while there are any.
+        boolean creating = editor.isCreating();
+        Button discard = Button.builder(Component.translatable(creating
+                                ? "gui.cancel" : "ontime.gui.settings.discard"),
+                        b -> {
+                            if (creating) {
+                                editor.close();
+                                model.selectTimer(null);
+                            } else {
+                                editor.discard();
+                            }
+                            model.clearMessage();
+                            init();
+                        })
                 .bounds(startX + 2 * (buttonWidth + 6), footerY, buttonWidth, 20)
                 .build();
-        discard.active = editor.isDirty(timer);
+        discard.active = creating || editor.isDirty(timer);
         discardButton = discard;
         host.addWidget(discard);
 
@@ -2022,7 +2036,7 @@ public final class AdminPanel {
 
     // ---- the confirmation ----
 
-    private static final int DIALOG_WIDTH = 280;
+    private static final int DIALOG_WIDTH = 360;
     private static final int DIALOG_HEIGHT = 88;
 
     private int dialogX() { return (width - DIALOG_WIDTH) / 2; }
@@ -2036,6 +2050,45 @@ public final class AdminPanel {
      * them happens on a single click: the dialog is the pause in which the
      * name is typed, or the audience chosen, or the mind changed.</p>
      */
+    /** Both ways of stopping: one execution, or every execution of a timer. */
+    private boolean isStopConfirm() {
+        return "run.stop".equals(confirmOp) || "timer.stop".equals(confirmOp);
+    }
+
+    /** What the warning is about: an execution's timer, or the chosen timer. */
+    private String stopSubject() {
+        if ("run.stop".equals(confirmOp)) {
+            AdminModel.RunRow row = model.selectedRun();
+            return row == null ? "" : row.timerName();
+        }
+        String name = editor.timerName();
+        return name == null ? "" : name;
+    }
+
+    /** How many executions it ends, which is the whole difference between them. */
+    private int stopCount() {
+        if ("run.stop".equals(confirmOp)) return 1;
+        int count = 0;
+        String name = editor.timerName();
+        for (AdminModel.RunRow row : model.runs()) {
+            if (row.timerName().equals(name)) count++;
+        }
+        return count;
+    }
+
+    /**
+     * Closes whatever dialog is open and forgets what was typed into it.
+     *
+     * <p>Cleared on the way out as well as on the way in: what a dialog
+     * collected belongs to that dialog, and a later one keying off the same
+     * positions would otherwise read it.</p>
+     */
+    private void closeDialog() {
+        confirmOp = null;
+        dialogText.clear();
+        init();
+    }
+
     private void openDialog(String kind) {
         confirmOp = kind;
         // A fresh dialog starts from its suggestion; only a rebuild of the one
@@ -2051,7 +2104,7 @@ public final class AdminPanel {
     /** The dialogs that ask for something rather than just confirming. */
     private boolean isTimerDialog() {
         return "clone".equals(confirmOp) || "start".equals(confirmOp)
-                || "stop".equals(confirmOp) || "delete".equals(confirmOp);
+                || "delete".equals(confirmOp);
     }
 
     private int dialogHeight() {
@@ -2074,11 +2127,20 @@ public final class AdminPanel {
      */
     private String freeCopyName(String name) {
         if (name == null) return "";
-        for (int suffix = 2; suffix < 1000; suffix++) {
-            String candidate = name + suffix;
+        // The way a file system names a copy: the original keeps its name and
+        // each copy takes the lowest free number. Lowest free, not next after
+        // the highest -- with "Timer" and "Timer (2)" about, the new one is
+        // "Timer (1)", because that gap is a name nothing is using.
+        String base = name;
+        java.util.regex.Matcher matcher =
+                java.util.regex.Pattern.compile("^(.*) \\((\\d+)\\)$").matcher(name);
+        if (matcher.matches()) base = matcher.group(1);
+
+        for (int copy = 1; copy < 1000; copy++) {
+            String candidate = base + " (" + copy + ")";
             if (model.timer(candidate) == null) return candidate;
         }
-        return name + "2";
+        return base + " (1)";
     }
 
     private void buildTimerDialog() {
@@ -2134,8 +2196,7 @@ public final class AdminPanel {
         int startX = dialogX() + (DIALOG_WIDTH - 2 * buttonWidth - gap) / 2;
 
         host.addWidget(Button.builder(Component.translatable("gui.cancel"), b -> {
-                    confirmOp = null;
-                    init();
+                    closeDialog();
                 })
                 .bounds(startX, buttonsY, buttonWidth, 20)
                 .build());
@@ -2169,19 +2230,6 @@ public final class AdminPanel {
         JsonObject args = new JsonObject();
 
         switch (kind == null ? "" : kind) {
-            case "stop" -> {
-                confirmOp = null;
-                init();
-                // Every execution of this timer, which is the only thing the
-                // button can mean when it sits on a definition.
-                for (AdminModel.RunRow run : model.runs()) {
-                    if (!run.timerName().equals(name)) continue;
-                    JsonObject one = new JsonObject();
-                    one.addProperty("runId", run.runId());
-                    send("run.stop", one);
-                }
-                awaitingApply = true;
-            }
             case "clone" -> {
                 args.addProperty("name", name);
                 args.addProperty("dest", value(0));
@@ -2327,8 +2375,13 @@ public final class AdminPanel {
                             if (op == null) return;
                             // One of these acts on the execution that is
                             // selected; the rest act on the server.
-                            if ("run.stop".equals(op)) runAction(op);
-                            else send(op, new JsonObject());
+                            if ("run.stop".equals(op)) {
+                                runAction(op);
+                            } else if ("timer.stop".equals(op)) {
+                                stopEveryRunOfSelected();
+                            } else {
+                                send(op, new JsonObject());
+                            }
                         })
                 .bounds(startX + buttonWidth + gap, y, buttonWidth, 20)
                 .build());
@@ -2586,8 +2639,11 @@ public final class AdminPanel {
         // The dialog's fills go here for the same reason as the band: they are
         // large and opaque, and after the widgets they would bury its buttons.
         if (confirmOp != null) {
+            // The dimming and nothing else. A panel drawn on top of a screen
+            // that is already dimmed to near black is a second box around
+            // something that was already separate, and its edges were what
+            // the text kept running into.
             painter.rect(0, 0, width, height, COLOR_SCRIM);
-            painter.rect(dialogX(), dialogY(), DIALOG_WIDTH, dialogHeight(), COLOR_DIALOG);
         }
     }
 
@@ -2915,7 +2971,6 @@ public final class AdminPanel {
     /** The question and the frame; the box itself was filled before the widgets. */
     private void drawConfirm(Painter painter) {
         int x = dialogX(), y = dialogY();
-        painter.outline(x, y, DIALOG_WIDTH, dialogHeight(), COLOR_RULE);
 
         if (isTimerDialog()) {
             centered(painter, Component.translatable("ontime.gui.timers.dialog." + confirmOp,
@@ -2934,25 +2989,27 @@ public final class AdminPanel {
 
         boolean exiting = CONFIRM_EXIT.equals(confirmOp);
         boolean resetting = "config.reset".equals(confirmOp);
-        boolean stoppingOne = "run.stop".equals(confirmOp);
+        boolean stopping = isStopConfirm();
         String title = exiting ? "ontime.gui.confirm.exit.title"
                 : resetting ? "ontime.gui.confirm.reset.title"
-                : stoppingOne ? "ontime.gui.confirm.stop_run.title"
+                : stopping ? "ontime.gui.confirm.stop.title"
                 : "ontime.gui.confirm.stop_all.title";
         centered(painter, Component.translatable(title), x + DIALOG_WIDTH / 2, y + 16, COLOR_TEXT);
 
-        AdminModel.RunRow stopping = model.selectedRun();
         Component body = exiting
                 ? Component.translatable("ontime.gui.confirm.exit.body",
                         settings.pendingCount() + editor.pendingCount())
                 : resetting
                         ? Component.translatable("ontime.gui.confirm.reset.body")
-                        : stoppingOne
-                                ? Component.translatable("ontime.gui.confirm.stop_run.body",
-                                        stopping == null ? "" : stopping.timerName())
+                        : stopping
+                                ? Component.translatable("ontime.gui.confirm.stop.body",
+                                        stopSubject(), stopCount())
                                 : Component.translatable("ontime.gui.confirm.stop_all.body",
                                         model.runs().size());
-        centered(painter, body, x + DIALOG_WIDTH / 2, y + 34, COLOR_TEXT);
+        // Grey, with the subject and the count picked out in white by the
+        // text itself: the sentence is context and the numbers are the thing
+        // being agreed to.
+        centered(painter, body, x + DIALOG_WIDTH / 2, y + 34, COLOR_MUTED_TEXT);
     }
 
     private void centered(Painter painter, Component text, int centerX, int y, int argb) {
@@ -3571,6 +3628,18 @@ public final class AdminPanel {
     // ==================================================================
     // Actions
     // ==================================================================
+
+    /** Every execution of the chosen timer, which is what Stop means on a list row. */
+    private void stopEveryRunOfSelected() {
+        String name = editor.timerName();
+        for (AdminModel.RunRow run : model.runs()) {
+            if (!run.timerName().equals(name)) continue;
+            JsonObject one = new JsonObject();
+            one.addProperty("runId", run.runId());
+            send("run.stop", one);
+        }
+        awaitingApply = true;
+    }
 
     private void runAction(String op) {
         AdminModel.RunRow row = model.selectedRun();

@@ -49,6 +49,22 @@
 
 ### Fixed
 
+- A warning is the dimming and its words, with no panel drawn on top. The
+  screen behind it is already dimmed to near black, so the box was a second
+  frame around something already separate — and its edges were what the text
+  kept running into.
+- Stopping a timer and stopping one of its executions are one warning, worded
+  once, naming what it ends and how many. They were two dialogs with different
+  words for the same act.
+- The copy of a timer is named the way a file system names one: the original
+  keeps its name and each copy takes the lowest free number, so with "Timer"
+  and "Timer (2)" about, the next is "Timer (1)".
+- A dialog forgets what was typed into it when it closes as well as when it
+  opens.
+- While a timer is being filled in, the third button is Cancel and it leaves
+  the creation. It said Discard, and pressing it cleared the complaint about
+  the missing name and nothing else, as many times as you liked.
+
 - Starting a timer "one each" for everyone did nothing and said "already
   running for those players, or its slot is taken". The API refuses a global
   audience in that mode because it has no player list to expand; the panel
