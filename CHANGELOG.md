@@ -61,6 +61,10 @@
   and "Timer (2)" about, the next is "Timer (1)".
 - A dialog forgets what was typed into it when it closes as well as when it
   opens.
+- Copying the same timer twice offers a name both times. The buttons on a
+  list row went through the same call that picks and unpicks a timer, so the
+  second press unpicked it and the dialog had no timer to name a copy after.
+- The placement screen's warning lost its box too. It was the one left.
 - While a timer is being filled in, the third button is Cancel and it leaves
   the creation. It said Discard, and pressing it cleared the complaint about
   the missing name and nothing else, as many times as you liked.

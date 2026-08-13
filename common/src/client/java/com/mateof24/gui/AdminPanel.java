@@ -87,9 +87,6 @@ public final class AdminPanel {
     private static final int ROW_GAP = 2;
     private static final int MARK_WIDTH = 3;
     private static final int LINE = 11;
-    /** Air between two headed sections of the detail column. */
-    private static final int SECTION_GAP = 14;
-
     /** Below this the two columns stack instead of sitting side by side. */
     private static final int TWO_COLUMN_MIN_WIDTH = 460;
 
@@ -133,6 +130,33 @@ public final class AdminPanel {
      *
      * <p>{@link #confirmOp} otherwise holds the op to send once confirmed;
      * this value means "ask before closing" and is handled entirely here.</p>
+     */
+    /**
+     * Every warning this panel can raise, and where each one is answered.
+     *
+     * <p>{@code confirmOp} holds which one is up, or null for none. All of
+     * them draw the same way — the screen dims, a title, a body, and vanilla
+     * buttons along the bottom — and they fall into two shapes:</p>
+     *
+     * <ul>
+     *   <li><b>Asking for something</b>, listed by {@link #isTimerDialog()}:
+     *       {@code clone}, {@code start}, {@code delete}. These carry fields,
+     *       are built by {@link #buildTimerDialog()} and answered by
+     *       {@link #submitTimerDialog()}.</li>
+     *   <li><b>Only confirming</b>: {@link #CONFIRM_EXIT}, {@code config.reset},
+     *       {@code run.stopAll}, {@code run.stop} and {@code timer.stop}. These
+     *       carry nothing, and the accept button at the foot of
+     *       {@link #buildConfirm()} does what their name says.</li>
+     * </ul>
+     *
+     * <p>The two stops are one warning with two subjects: {@code run.stop}
+     * ends the chosen execution, {@code timer.stop} ends every execution of
+     * the chosen timer, and {@link #stopSubject()} and {@link #stopCount()}
+     * are the whole difference.</p>
+     *
+     * <p>One more lives outside this class: the placement screen's, in
+     * {@code PositionPicker.drawDialog}. It is drawn the same way and its
+     * buttons are placed by the screen that owns it.</p>
      */
     private static final String CONFIRM_EXIT = "$exit";
 
@@ -411,7 +435,7 @@ public final class AdminPanel {
                     // Nothing is selected while a new one is being filled in,
                     // or the column would show the last timer's values under
                     // the new one's name.
-                    model.selectTimer(null);
+                    model.select(null);
                     detailScroll = 0;
                     init();
                 })
@@ -462,7 +486,7 @@ public final class AdminPanel {
 
             Button name = Button.builder(Component.literal(row.name()), b -> {
                         editor.open(row.name());
-                        model.selectTimer(row.name());
+                        model.toggleTimer(row.name());
                         model.clearMessage();
                         init();
                     })
@@ -482,7 +506,7 @@ public final class AdminPanel {
                 String op = ops[a];
                 host.addWidget(Button.builder(Component.translatable("ontime.gui.timers.action." + op),
                                 b -> {
-                                    model.selectTimer(row.name());
+                                    model.select(row.name());
                                     editor.open(row.name());
                                     openDialog("stop".equals(op) ? "timer.stop" : op);
                                 })
@@ -547,7 +571,7 @@ public final class AdminPanel {
                         b -> {
                             if (creating) {
                                 editor.close();
-                                model.selectTimer(null);
+                                model.select(null);
                             } else {
                                 editor.discard();
                             }
@@ -2248,7 +2272,7 @@ public final class AdminPanel {
                 // Off the list now, not at whatever moment the next snapshot
                 // happens to arrive.
                 model.forgetTimer(name);
-                model.selectTimer(null);
+                model.select(null);
                 send("timer.delete", args);
                 init();
             }
@@ -2302,7 +2326,7 @@ public final class AdminPanel {
         if (editor.isCreating() && !ops.isEmpty()) {
             String name = ops.get(0).args().get("name").getAsString();
             editor.open(name);
-            model.selectTimer(name);
+            model.select(name);
             detailScroll = 0;
         } else {
             editor.discard();

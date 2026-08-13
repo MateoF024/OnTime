@@ -43,12 +43,18 @@ public final class PositionPicker {
 
     private static final int WHITE = 0xFFFFFF;
     private static final int BOUNDS_RED = 0xFFFF4040;
-    private static final int DIALOG_BACK = 0xE8101014;
-    private static final int DIALOG_LINE = 0x70FFFFFF;
+    /**
+     * The warning, in the shape every warning in this mod has.
+     *
+     * <p>The screen dims and the words sit on it. The width is what the three
+     * buttons need, and it is stated once here so the drawing and the screen
+     * that places them cannot disagree.</p>
+     */
+    private static final int DIALOG_SCRIM = 0xC0000000;
+    private static final int DIALOG_WIDTH = 360;
+    private static final int DIALOG_HEIGHT = 92;
     private static final int TEXT = 0xFFFFFFFF;
     private static final int TEXT_DIM = 0xFFA0A0A8;
-    private static final int TEXT_DANGER = 0xFFE06A6A;
-
     private final String timerName;
     private final String preset;
     private final String timeText;
@@ -366,18 +372,21 @@ public final class PositionPicker {
     }
 
     /**
-     * Title and body only. The three buttons are vanilla widgets the screen
-     * adds, like every other dialog in this interface — hand-drawn lookalikes
-     * were the one place that did not match.
+     * The dimming, a title and a body. The three buttons are vanilla widgets
+     * the screen adds.
+     *
+     * <p>Shaped like the admin panel's warnings and for the same reason: with
+     * the whole screen dimmed behind it, a filled panel is a second frame
+     * around something already set apart, and its edges are what long text
+     * runs into. This one kept its box after the others lost theirs.</p>
      */
     private void drawDialog(Painter painter, int screenW, int screenH) {
-        int width = 300;
-        int height = 92;
+        int width = DIALOG_WIDTH;
+        int height = DIALOG_HEIGHT;
         int left = (screenW - width) / 2;
         int top = (screenH - height) / 2;
 
-        painter.rect(left, top, width, height, DIALOG_BACK);
-        painter.outline(left, top, width, height, DIALOG_LINE);
+        painter.rect(0, 0, screenW, screenH, DIALOG_SCRIM);
 
         Component title = Component.translatable("ontime.gui.picker.exit.title");
         painter.text(title, left + (width - painter.textWidth(title)) / 2, top + 14, TEXT);
@@ -386,11 +395,13 @@ public final class PositionPicker {
     }
 
     /** Where the screen puts the three buttons, so both agree on one rectangle. */
-    public int dialogLeft(int screenW) { return (screenW - 300) / 2; }
+    public int dialogLeft(int screenW) { return (screenW - DIALOG_WIDTH) / 2; }
 
-    public int dialogWidth() { return 300; }
+    public int dialogWidth() { return DIALOG_WIDTH; }
 
-    public int dialogButtonsY(int screenH) { return (screenH - 92) / 2 + 92 - 30; }
+    public int dialogButtonsY(int screenH) {
+        return (screenH - DIALOG_HEIGHT) / 2 + DIALOG_HEIGHT - 30;
+    }
 
     /** Called by the buttons. */
     public void choose(Choice choice) { answer(choice); }

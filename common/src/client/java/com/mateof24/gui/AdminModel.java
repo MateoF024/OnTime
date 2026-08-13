@@ -284,8 +284,26 @@ public final class AdminModel {
 
     public String selectedTimer() { return selectedTimer; }
 
-    public void selectTimer(String name) {
+    /**
+     * Picks a timer, or unpicks it when it was already picked.
+     *
+     * <p>For the row itself, where pressing the same name again is how the
+     * column is closed. Anything that needs the timer picked in order to act
+     * on it wants {@link #select(String)}, not this.</p>
+     */
+    public void toggleTimer(String name) {
         selectedTimer = name != null && name.equals(selectedTimer) ? null : name;
+    }
+
+    /**
+     * Picks a timer and leaves it picked.
+     *
+     * <p>What the buttons on a row need. They used to go through the toggle,
+     * so pressing Copy on the timer that was already selected unpicked it —
+     * and the dialog that opened had no timer to name its copy after.</p>
+     */
+    public void select(String name) {
+        selectedTimer = name;
     }
 
     public String filter() { return filter; }
@@ -494,14 +512,6 @@ public final class AdminModel {
     private static long numOf(JsonObject json, String key, long fallback) {
         if (json == null || !json.has(key) || json.get(key).isJsonNull()) return fallback;
         return json.get(key).getAsLong();
-    }
-
-    private static List<String> strings(JsonObject json, String key) {
-        List<String> out = new ArrayList<>();
-        if (json.has(key) && json.get(key).isJsonArray()) {
-            for (JsonElement element : json.getAsJsonArray(key)) out.add(element.getAsString());
-        }
-        return out;
     }
 
     private static long numOr(JsonObject json, String key, long fallback) {
