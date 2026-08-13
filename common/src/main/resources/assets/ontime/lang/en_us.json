@@ -513,5 +513,7 @@
   "ontime.command.commands.no_such": "There is no command %s on this timer",
   "ontime.gui.editor.command.delay": "Wait",
   "ontime.gui.editor.command.delay.tip": "Ticks to wait after this command before the next one in the same batch. Zero runs them together.",
-  "ontime.gui.editor.command.waits": "then waits %s"
+  "ontime.gui.editor.command.waits": "then waits %s",
+  "ontime.gui.confirm.stop_run.title": "Stop this execution?",
+  "ontime.gui.confirm.stop_run.body": "%s ends now. Its clock resets and the execution is gone."
 }

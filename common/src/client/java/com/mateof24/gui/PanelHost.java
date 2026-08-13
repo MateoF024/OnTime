@@ -31,6 +31,17 @@ public interface PanelHost {
     /** Recomputes the completions, from the box's own responder. */
     void refreshCommandField();
 
+    /**
+     * Takes the focus off whatever holds it.
+     *
+     * <p>A widget cannot do this for itself: the screen keeps its own idea of
+     * which child is focused, and clearing the flag on the widget alone left
+     * the screen still pointing at it — so clicking that box again was
+     * clicking the box the screen already believed was focused, and nothing
+     * happened.</p>
+     */
+    void clearFocus();
+
     /** Closes the panel, which also unsubscribes from the server's updates. */
     void closePanel();
 

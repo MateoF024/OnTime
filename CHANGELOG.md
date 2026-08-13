@@ -47,6 +47,25 @@
 - The web panel no longer serves `/api/history`. The history is still available
   through `/timer history`.
 
+### Fixed
+
+- Starting a timer "one each" for everyone did nothing and said "already
+  running for those players, or its slot is taken". The API refuses a global
+  audience in that mode because it has no player list to expand; the panel
+  expands it to whoever is online first.
+- Stop, on an execution, asks before ending it. Stop all always has.
+- The runs page rebuilt itself on every snapshot, once a second, whether
+  anything about the list had changed or not. That threw away every widget --
+  and every tooltip counting down to its own appearance, which is why they
+  blinked in step with the timer. It rebuilds when an execution appears,
+  disappears or changes state.
+- Clicking away from the command box and back again left it dead. Clearing the
+  flag on a widget does not tell the screen to stop pointing at it, so the
+  second click was landing on the box the screen already believed was focused.
+- A command box opened and left alone no longer keeps whatever the completion
+  list put in it on the way past. It keeps what was typed, and Tab counts as
+  typing, because taking a suggestion is a decision.
+
 ### Added
 
 - The trigger page is two fixed headings, "Starts it when..." and "Ends it

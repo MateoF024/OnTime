@@ -881,6 +881,19 @@ public final class AdminOps {
         Audience audience = readAudience(server, args);
         if (audience == null) return Result.fail("No players matched");
 
+        // "One each, for everyone" means one each for whoever is on the server.
+        // The API refuses a global audience in that mode -- it has no player
+        // list to expand -- and the panel turned that into "already running or
+        // its slot is taken", which describes nothing that happened.
+        if (mode == RunMode.EACH && audience.isGlobal() && server != null) {
+            java.util.List<UUID> online = new java.util.ArrayList<>();
+            for (net.minecraft.server.level.ServerPlayer player : server.getPlayerList().getPlayers()) {
+                online.add(player.getUUID());
+            }
+            if (online.isEmpty()) return Result.fail("Nobody is online to start it for");
+            audience = Audience.ofPlayers(online);
+        }
+
         // The count gate of F3.2, applied here too: a panel is a place where
         // one careless click creates a hundred clocks.
         if (mode == RunMode.EACH) {

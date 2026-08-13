@@ -513,5 +513,7 @@
   "ontime.command.commands.no_such": "Este contador no tiene ningún comando %s",
   "ontime.gui.editor.command.delay": "Espera",
   "ontime.gui.editor.command.delay.tip": "Ticks que se esperan tras este comando antes del siguiente del mismo grupo. Cero los ejecuta juntos.",
-  "ontime.gui.editor.command.waits": "luego espera %s"
+  "ontime.gui.editor.command.waits": "luego espera %s",
+  "ontime.gui.confirm.stop_run.title": "¿Parar esta ejecución?",
+  "ontime.gui.confirm.stop_run.body": "%s termina ahora. Su reloj se reinicia y la ejecución desaparece."
 }

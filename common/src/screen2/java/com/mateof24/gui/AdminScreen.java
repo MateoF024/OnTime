@@ -116,6 +116,11 @@ public class AdminScreen extends Screen implements PanelHost {
         commandField.refresh();
     }
 
+    @Override
+    public void clearFocus() {
+        setFocused(null);
+    }
+
 
     @Override
     public void onClose() {

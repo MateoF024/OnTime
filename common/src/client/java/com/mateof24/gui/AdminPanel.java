@@ -209,6 +209,22 @@ public final class AdminPanel {
 
     public AdminModel model() { return model; }
 
+    /**
+     * What the runs page is built from, as far as its widgets care.
+     *
+     * <p>Which executions exist and which state each is in. Not their clocks:
+     * those are drawn from the model every frame and never decide what a
+     * widget is.</p>
+     */
+    private List<String> runShape() {
+        List<String> out = new ArrayList<>();
+        for (AdminModel.RunRow run : model.runs()) {
+            out.add(run.runId() + " " + run.running() + " " + run.phase() + " " + run.timerName());
+        }
+        out.add("sel:" + model.selectedRunId());
+        return out;
+    }
+
     public void refresh(JsonObject state) {
         model.apply(state);
         clock.onSnapshot(model.runs());
@@ -224,10 +240,17 @@ public final class AdminPanel {
      * can have moved without the operator doing it.</p>
      */
     public void onSnapshot(JsonObject state) {
+        List<String> before = runShape();
         model.apply(state);
         clock.onSnapshot(model.runs());
+        // Only when the list itself changed. A snapshot arrives every second
+        // and almost all of them differ by a clock reading alone, which the
+        // draw pass reads live; rebuilding for those threw away every widget
+        // once a second, and a tooltip counting down to its own appearance
+        // started over each time — which is why it blinked in step with the
+        // timer.
         if (model.tab() == AdminModel.Tab.RUNS) {
-            init();
+            if (!before.equals(runShape())) init();
         } else if (awaitingApply) {
             // Only the snapshot that carries an answer. Rebuilding on every
             // one took the caret straight back out of whatever field had just
@@ -696,6 +719,17 @@ public final class AdminPanel {
                     : Component.translatable("ontime.gui.editor.trigger." + value);
             default -> Component.literal(value);
         };
+    }
+
+    /**
+     * The name of a field, as a label.
+     *
+     * <p>With the colon here rather than in each of the four language files:
+     * it is punctuation this panel puts on every field name, not part of what
+     * any of them is called.</p>
+     */
+    private static Component labelled(String key) {
+        return Component.translatable(key).copy().append(":");
     }
 
     /** Green when it starts or is on, red when it ends or is off. */
@@ -1762,6 +1796,9 @@ public final class AdminPanel {
     private EditBox commandBox;
     private EditBox commandWait;
 
+    /** Whether the command box has been typed into since it took the caret. */
+    private boolean commandTyped;
+
     /** The whole name of each box, above it, in the reading order of the row. */
     private void drawCommandFormLabels(Painter painter) {
         if (commandFormLabelY < 0) return;
@@ -2287,7 +2324,11 @@ public final class AdminPanel {
                             String op = confirmOp;
                             confirmOp = null;
                             init();
-                            if (op != null) send(op, new JsonObject());
+                            if (op == null) return;
+                            // One of these acts on the execution that is
+                            // selected; the rest act on the server.
+                            if ("run.stop".equals(op)) runAction(op);
+                            else send(op, new JsonObject());
                         })
                 .bounds(startX + buttonWidth + gap, y, buttonWidth, 20)
                 .build());
@@ -2465,7 +2506,17 @@ public final class AdminPanel {
                 };
                 Button button = Button.builder(
                                 Component.translatable("ontime.gui.action." + op),
-                                b -> runAction("run." + op))
+                                // Stop ends an execution and cannot be undone,
+                                // so it asks — the same as Stop all, which sits
+                                // two panels away and always has.
+                                b -> {
+                                    if ("stop".equals(op)) {
+                                        confirmOp = "run.stop";
+                                        init();
+                                    } else {
+                                        runAction("run." + op);
+                                    }
+                                })
                         .bounds(startX + column * (buttonWidth + gap),
                                 y + rowIndex * 22, buttonWidth, 20)
                         .tooltip(Tooltip.create(Component.translatable("ontime.gui.action." + op + ".tip")))
@@ -2774,7 +2825,7 @@ public final class AdminPanel {
             } else if (editor.isEdited(timer, field.key())) {
                 painter.rect(x, y + 2, MARK_WIDTH, 14, COLOR_PAUSED);
             }
-            painter.text(Component.translatable("ontime.gui.editor.field." + field.label()),
+            painter.text(labelled("ontime.gui.editor.field." + field.label()),
                     x + MARK_WIDTH + 5, y + 5, COLOR_TEXT);
         }
 
@@ -2852,7 +2903,7 @@ public final class AdminPanel {
             } else if (settings.isEdited(model, row.key())) {
                 painter.rect(GUTTER - 6, y + 2, MARK_WIDTH, 14, COLOR_PAUSED);
             }
-            painter.text(Component.translatable("ontime.config." + snake(row.key())),
+            painter.text(labelled("ontime.config." + snake(row.key())),
                     GUTTER, y + 5, COLOR_TEXT);
         }
 
@@ -2883,17 +2934,24 @@ public final class AdminPanel {
 
         boolean exiting = CONFIRM_EXIT.equals(confirmOp);
         boolean resetting = "config.reset".equals(confirmOp);
+        boolean stoppingOne = "run.stop".equals(confirmOp);
         String title = exiting ? "ontime.gui.confirm.exit.title"
                 : resetting ? "ontime.gui.confirm.reset.title"
+                : stoppingOne ? "ontime.gui.confirm.stop_run.title"
                 : "ontime.gui.confirm.stop_all.title";
         centered(painter, Component.translatable(title), x + DIALOG_WIDTH / 2, y + 16, COLOR_TEXT);
 
+        AdminModel.RunRow stopping = model.selectedRun();
         Component body = exiting
                 ? Component.translatable("ontime.gui.confirm.exit.body",
                         settings.pendingCount() + editor.pendingCount())
                 : resetting
                         ? Component.translatable("ontime.gui.confirm.reset.body")
-                        : Component.translatable("ontime.gui.confirm.stop_all.body", model.runs().size());
+                        : stoppingOne
+                                ? Component.translatable("ontime.gui.confirm.stop_run.body",
+                                        stopping == null ? "" : stopping.timerName())
+                                : Component.translatable("ontime.gui.confirm.stop_all.body",
+                                        model.runs().size());
         centered(painter, body, x + DIALOG_WIDTH / 2, y + 34, COLOR_TEXT);
     }
 
@@ -3349,6 +3407,9 @@ public final class AdminPanel {
      * @return true when the completion list took it, so the screen stops there
      */
     public boolean keyPressed(int keyCode) {
+        // What separates "typed something" from "looked at it". Tab counts:
+        // it is how a suggestion is taken, and taking one is a decision.
+        if (commandBox != null && commandBox.isFocused()) commandTyped = true;
         return assist.keyPressed(keyCode);
     }
 
@@ -3371,7 +3432,12 @@ public final class AdminPanel {
                         && mouseX < commandBox.getX() + commandBox.getWidth()
                         && mouseY >= commandBox.getY()
                         && mouseY < commandBox.getY() + commandBox.getHeight())) {
-            commandBox.setFocused(false);
+            // Nothing typed into it means nothing to keep: opening a box and
+            // leaving it is not editing, and the completion list had been
+            // filling it in on the way past.
+            if (!commandTyped) commandText = "";
+            commandTyped = false;
+            host.clearFocus();
         }
 
         if (button != 1) return false;
