@@ -36,6 +36,7 @@
   --bad: #ff6b7a;
 
   --glow: color-mix(in srgb, var(--accent) 30%, transparent);
+  --tree: color-mix(in srgb, var(--text-2) 42%, transparent);
   --r-sm: 8px;
   --r: 12px;
   --r-lg: 18px;
@@ -695,15 +696,11 @@ dialog[open] { animation: pop .2s var(--ease); }
 }
 .cmd-row:last-of-type { border-bottom: 0; }
 
-/* The moment, said once, with its commands hanging under it -- the same rule
-   down the left the trigger tree uses. One idiom for structure, not two. */
+/* The moment, said once, with its commands hanging under it on the same
+   stems the trigger tree uses. One idiom for structure, not two. */
 .cmd-moment { padding: 10px 0 2px; }
 .cmd-moment:first-child { padding-top: 0; }
-.cmd-under {
-  border-left: 2px solid var(--line);
-  padding-left: 10px;
-  margin-left: 4px;
-}
+.cmd-under { margin-left: 2px; }
 .cmd-under > .cmd-row { grid-template-columns: 1fr auto; }
 
 /* A condition is text and the button that takes it away -- no moment in front
@@ -983,22 +980,12 @@ dialog[open] { animation: pop .2s var(--ease); }
 /*
  * An alternative, and whatever is bracketed inside it.
  *
- * The rule down the left is the whole of the tree drawing: a level begins
- * where a rule begins, and one inside another is one step further in. The
- * game has to paint corners and stems because it cannot put a box inside a
- * box; here that is the only thing there is, so the picture is not needed.
+ * The box itself draws nothing: its rows carry the stems and the elbows, which
+ * is what makes a condition visibly hang off the level above it rather than
+ * merely sit next to a line.
  */
-.trg-group {
-  border-left: 2px solid var(--line);
-  padding: 4px 0 4px 10px;
-  margin-left: 4px;
-}
-/* Deeper in, and said by the eye before it is read. */
-.trg-group.nested {
-  margin: 6px 0 6px 6px;
-  border-left-color: var(--accent);
-  border-left-style: dashed;
-}
+.trg-group { padding: 4px 0; margin-left: 2px; }
+.trg-group.nested { margin: 4px 0; }
 .trg-group-head {
   font-size: 12px;
   color: var(--muted);
@@ -1025,3 +1012,128 @@ dialog[open] { animation: pop .2s var(--ease); }
 
 /* The pause after one command, beside the command it follows. */
 .cmd-wait { width: 64px; }
+
+/* ====================================================================== */
+/* The editor page                                                        */
+/* ====================================================================== */
+
+/*
+ * Not a section of its own: this is what Timers becomes while a timer is being
+ * edited. A dialog gave nine groups of settings and two trees a column of
+ * about six hundred pixels, most of it below the fold.
+ */
+#panel-editor .view-head > div { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+#editor-name { margin: 0; }
+.btn.ghost {
+  padding: 3px 9px 3px 4px;
+  margin-bottom: 4px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.btn.ghost:hover { color: var(--text); background: var(--surface-2); }
+.btn.ghost svg { width: 15px; height: 15px; }
+
+/* The tabs inside it. The rail says which view you are in; these say which
+   part of one timer, so they are quieter than the rail and wider apart. */
+.subtabs {
+  display: flex;
+  gap: 2px;
+  margin: -8px 0 22px;
+  border-bottom: 1px solid var(--line);
+}
+.subtab {
+  position: relative;
+  padding: 9px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--fast);
+}
+.subtab:hover { color: var(--text-2); }
+.subtab[aria-selected="true"] { color: var(--text); }
+.subtab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+/* Room to breathe, and a ceiling so a line of settings does not run the width
+   of a wide monitor -- but the two that are trees get all of it. */
+.editor-panel { max-width: 980px; }
+.editor-panel[data-tab="triggers"],
+.editor-panel[data-tab="commands"] { max-width: none; }
+
+/* ====================================================================== */
+/* Trees                                                                  */
+/* ====================================================================== */
+
+/*
+ * A stem down the left of every row and an arm reaching into it, with the last
+ * row's stem cut short so the run closes in an elbow. Two pseudo-elements and
+ * no drawing: the same shape the game paints, made the way HTML makes it.
+ *
+ * The arm meets the row 15px down, which is the middle of a single line of it.
+ * Not 50%, deliberately -- a condition that wraps to three lines would have its
+ * arm halfway down the block instead of at the top, and the joint would stop
+ * lining up with the stem above it.
+ */
+.trg-group > .cmd-row,
+.trg-group > .trg-group,
+.cmd-under > .cmd-row {
+  position: relative;
+  padding-left: 22px;
+}
+.trg-group > .cmd-row::before,
+.trg-group > .trg-group::before,
+.cmd-under > .cmd-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--tree);
+}
+/* The last of a run closes it: the stem stops where the arm meets it. */
+.trg-group > .cmd-row:last-child::before,
+.trg-group > .trg-group:last-child::before,
+.cmd-under > .cmd-row:last-child::before { bottom: auto; height: 15px; }
+.trg-group > .cmd-row::after,
+.trg-group > .trg-group::after,
+.cmd-under > .cmd-row::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 15px;
+  width: 14px;
+  height: 2px;
+  background: var(--tree);
+}
+/* A bracket inside an alternative keeps the accent, which is what says it is a
+   level and not another condition. */
+.trg-group > .trg-group::before,
+.trg-group > .trg-group::after { background: var(--accent); }
+
+/* The foot hangs off the same stem as the rows above it, so Add and Remove
+   read as belonging to this level rather than floating after it. */
+.trg-group-foot { padding-left: 22px; position: relative; }
+.trg-group-foot::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -8px;
+  height: 20px;
+  width: 2px;
+  background: var(--tree);
+}

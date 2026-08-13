@@ -35,7 +35,9 @@
       "confirm.delete": "Delete '%s'?",
       "confirm.delete.body": "This permanently deletes the timer and stops every execution of it. It cannot be undone.",
       "dialog.new": "New timer", "dialog.clone": "Copy '%s'", "dialog.start": "Start '%s'",
-      "dialog.edit": "Edit '%s'", "field.hours": "Hours", "field.minutes": "Minutes", "field.seconds": "Seconds",
+      "editor.timer": "Timer", "editor.look": "Appearance",
+      "editor.triggers": "Triggers", "editor.commands": "Commands",
+      "field.hours": "Hours", "field.minutes": "Minutes", "field.seconds": "Seconds",
       "field.playerNames": "Player names, separated by commas",
       countdown: "Countdown", countup: "Count up", shared: "Shared", each: "One each",
       "group.identity": "The timer", "group.display": "Where it draws",
@@ -163,7 +165,9 @@
       "confirm.delete": "¿Borrar '%s'?",
       "confirm.delete.body": "Esto elimina el contador de forma permanente y detiene todas sus ejecuciones. No se puede deshacer.",
       "dialog.new": "Contador nuevo", "dialog.clone": "Copiar '%s'", "dialog.start": "Arrancar '%s'",
-      "dialog.edit": "Editar '%s'", "field.hours": "Horas", "field.minutes": "Minutos", "field.seconds": "Segundos",
+      "editor.timer": "Contador", "editor.look": "Apariencia",
+      "editor.triggers": "Disparadores", "editor.commands": "Comandos",
+      "field.hours": "Horas", "field.minutes": "Minutos", "field.seconds": "Segundos",
       "field.playerNames": "Nombres de jugador, separados por comas",
       countdown: "Cuenta atrás", countup: "Cuenta adelante", shared: "Compartido",
       each: "Uno por jugador",
@@ -471,14 +475,16 @@
 
   // -------------------------------------------------------------- drawing
 
-  let drawnRuns = "", drawnTimers = "", drawnSettings = "";
+  let drawnRuns = "", drawnTimers = "", drawnSettings = "", drawnEditor = "";
 
   function render() {
     $$(".nav-item").forEach(b => {
       b.setAttribute("aria-selected", String(b.dataset.tab === tab));
     });
+    // Timers is one of two things: the list, or the editor that replaced it.
     $("#panel-runs").hidden = tab !== "runs";
-    $("#panel-timers").hidden = tab !== "timers";
+    $("#panel-timers").hidden = tab !== "timers" || editing !== null;
+    $("#panel-editor").hidden = tab !== "timers" || editing === null;
     $("#panel-settings").hidden = tab !== "settings";
 
     const runs = (state.runs || []).length;
@@ -503,9 +509,16 @@
       if (key !== drawnRuns) { drawnRuns = key; renderRuns(); }
       startTicking();
     }
-    if (tab === "timers") {
+    if (tab === "timers" && editing === null) {
       const key = filter + "\u0000" + JSON.stringify(state.timers || []);
       if (key !== drawnTimers) { drawnTimers = key; renderTimers(); }
+    }
+    if (tab === "timers" && editing !== null) {
+      // Only when the timer itself moved. The board arrives four times a
+      // second and rebuilding the form that often would take the caret out of
+      // whatever box it was in.
+      const key = JSON.stringify((state.timers || []).find(x => x.name === editing));
+      if (key !== drawnEditor) { drawnEditor = key; renderEditor(); }
     }
     if (tab === "settings") {
       const key = JSON.stringify(state.config || {});
@@ -692,9 +705,9 @@
 
       // Rebound each time: the row it closes over is a new object every
       // snapshot, and a stale one would edit yesterday's values.
-      card.onclick = e => { if (!e.target.closest("button")) editDialog(timer); };
+      card.onclick = e => { if (!e.target.closest("button")) openEditor(timer.name); };
       card.onkeydown = e => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); editDialog(timer); }
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEditor(timer.name); }
       };
 
       card.classList.toggle("running", timer.runCount > 0);
@@ -1976,11 +1989,11 @@
   let keepPlace = false;
 
   function reopen(name) {
-    const fresh = state.timers.find(x => x.name === name);
-    if (!fresh) return;
+    if (!state.timers.find(x => x.name === name)) return;
     keepPlace = true;
     try {
-      editDialog(fresh);
+      drawnEditor = "";
+      renderEditor();
     } finally {
       keepPlace = false;
     }
@@ -2012,23 +2025,16 @@
   }
 
   /**
-   * Every value a timer has, in the sheets it has them in.
+   * The groups a timer's values live in.
    *
-   * <p>One function for both dialogs, because creating a timer and editing one
-   * ask the same questions -- the in-game panel draws the same form for both.
-   * The only differences are the two that belong to creation alone: the name,
-   * which cannot be changed afterwards, and the first command, which is a
-   * shortcut past a second visit to the Commands sheet.</p>
+   * <p>Named separately so a page with tabs can deal them out, and so the
+   * creation dialog can take the ones that make sense before a timer exists.
+   * Both surfaces build the same fields from the same place: a setting that
+   * moves has one home, not two.</p>
    */
-  function timerSheets(body, timer, creating) {
-    const display = timer.display || {};
-    const group = (name, build) => {
-      const sheeted = sheet(t("group." + name));
-      build(sheeted.body);
-      body.append(sheeted.section);
-    };
-
-      group("identity", s => {
+  const SHEETS = {
+    identity(body, timer, creating) {
+      sheetInto(body, "identity", s => {
         if (creating) s.append(field("name", "text", ""));
         const row = document.createElement("div");
         row.className = "field";
@@ -2062,14 +2068,19 @@
         $("select", silent).value = String(!!timer.silent);
         s.append(silent);
       });
+    },
 
+    display(body, timer) {
+      const display = timer.display || {};
       for (const [name, keys] of DISPLAY_KEYS) {
-        group(name, s => {
+        sheetInto(body, name, s => {
           for (const [key, kind] of keys) s.append(field("d:" + key, kind, display[key]));
         });
       }
+    },
 
-      group("titles", s => {
+    titles(body, timer) {
+      sheetInto(body, "titles", s => {
         const titles = timer.titles || {};
         for (const slot of ["above", "below", "left", "right"]) {
           const f = field("t:" + slot, "text", titles[slot] || "");
@@ -2079,8 +2090,10 @@
           s.append(f);
         }
       });
+    },
 
-      group("repeat", s => {
+    flow(body, timer) {
+      sheetInto(body, "repeat", s => {
         const repeat = field("repeat", "bool", String(!!timer.repeat));
         $("select", repeat).replaceChildren(new Option(t("on"), "true"), new Option(t("off"), "false"));
         $("select", repeat).value = String(!!timer.repeat);
@@ -2088,39 +2101,218 @@
         s.append(field("repeatCount", "int", timer.repeatCount ?? -1));
         s.append(field("repeatCooldown", "int", Math.floor((timer.repeatCooldownTicks || 0) / 20)));
       });
-
-      group("sequence", s => {
+      sheetInto(body, "sequence", s => {
         const next = field("nextTimer", "text", timer.nextTimer || "");
         $("input", next).dataset.optional = "1";
         s.append(next);
         s.append(field("sequenceCooldown", "int", Math.floor((timer.sequenceCooldownTicks || 0) / 20)));
       });
+    },
 
-      if (creating) {
-        // The one command you always know at creation, saving a second visit.
-        group("commands", s => {
-          const row = document.createElement("div");
-          // A command is a line of text, not a value: it gets the width.
-          row.className = "field wide";
-          const lab = document.createElement("label");
-          lab.textContent = label("finishCommand");
-          const { wrap, input } = commandField();
-          input.dataset.key = "finishCommand";
-          input.dataset.optional = "1";
-          row.append(lab, wrap, hint("finishCommand"));
-          s.append(row);
-        });
+    /** The one command you always know at creation, saving a second visit. */
+    firstCommand(body) {
+      sheetInto(body, "commands", s => {
+        const row = document.createElement("div");
+        // A command is a line of text, not a value: it gets the width.
+        row.className = "field wide";
+        const lab = document.createElement("label");
+        lab.textContent = label("finishCommand");
+        const { wrap, input } = commandField();
+        input.dataset.key = "finishCommand";
+        input.dataset.optional = "1";
+        row.append(lab, wrap, hint("finishCommand"));
+        s.append(row);
+      });
+    },
+
+    /**
+     * What starts a timer and what ends it.
+     *
+     * <p>Two headings, always both, because everything a timer can be told is
+     * one or the other. Under a heading sit alternatives, and any one of them
+     * holding is enough; inside an alternative everything has to hold at once.
+     * There is no third level: a rule and an alternative were both an "or", so
+     * the page used to show one idea twice.</p>
+     */
+    triggers(body, timer) {
+      closeComposer();
+      for (const action of ["start", "finish"]) {
+        const section = document.createElement("div");
+        section.className = "trg-section";
+
+        const head = document.createElement("div");
+        head.className = "trg-section-head";
+        const what = document.createElement("span");
+        what.className = "trg-when " + (action === "start" ? "starts" : "ends");
+        what.textContent = t(action === "start" ? "trg.startsWhen" : "trg.endsWhen");
+
+        const add = document.createElement("button");
+        add.type = "button";
+        add.className = "btn small";
+        add.textContent = t("add");
+        add.onclick = () => openComposer(section, null, timer, action, null);
+        head.append(what, add);
+        section.append(head);
+
+        const list = document.createElement("div");
+        list.className = "trg-list";
+        let branches = 0;
+        for (const rule of (timer.rules || [])) {
+          if (rule.action !== action) continue;
+          for (const group of groupsOf(rule)) {
+            if (branches > 0) {
+              const or = document.createElement("div");
+              or.className = "trg-or";
+              or.textContent = t("trg.orGroup");
+              list.append(or);
+            }
+            branches++;
+            list.append(groupBlock(timer, rule, group));
+          }
+        }
+        if (!branches) {
+          const p = document.createElement("p");
+          p.className = "muted";
+          p.textContent = t(action === "start" ? "trg.noStart" : "trg.noFinish");
+          list.append(p);
+        }
+        section.append(list);
+        body.append(section);
       }
+    },
+
+    /**
+     * The commands, by the moment they run at.
+     *
+     * <p>The moment is said once and its commands hang under it, which is how
+     * the game draws the same list. Repeated beside every row, two commands
+     * running at the same instant read as two unrelated facts.</p>
+     */
+    commands(body, timer) {
+      const list = document.createElement("div");
+      list.className = "cmd-list";
+      const entries = timer.commandList || [];
+      if (!entries.length) {
+        const p = document.createElement("p");
+        p.className = "muted";
+        p.textContent = t("cmd.none");
+        list.append(p);
+      }
+      let moment;
+      let under = null;
+      entries.forEach((entry, index) => {
+        // A new heading when the moment changes, exactly as commandLines
+        // decides it in game: the end is its own moment, once.
+        if (under === null || entry.at !== moment) {
+          moment = entry.at;
+          const head = document.createElement("div");
+          head.className = "cmd-moment";
+          const when = document.createElement("span");
+          when.className = "cmd-at" + (entry.at === undefined ? " end" : "");
+          when.textContent = entry.at === undefined ? t("cmd.end") : clock(entry.at * 20);
+          head.append(when);
+          list.append(head);
+          under = document.createElement("div");
+          under.className = "cmd-under";
+          list.append(under);
+        }
+        const row = document.createElement("div");
+        row.className = "cmd-row";
+        const text = document.createElement("span");
+        text.className = "cmd-text";
+        text.textContent = entry.delay > 0
+          ? entry.command + "   " + t("cmd.waits", entry.delay)
+          : entry.command;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "danger small";
+        remove.textContent = "\u00d7";
+        remove.onclick = async () => {
+          // Zero-based, exactly as the server counts them.
+          if (await act("timer.removeCommand", { name: timer.name, index })) {
+            reopen(timer.name);
+          }
+        };
+        row.append(text, remove);
+        under.append(row);
+      });
+      body.append(list);
+
+      const adder = document.createElement("div");
+      adder.className = "cmd-add";
+      const cells = document.createElement("div");
+      cells.className = "units";
+      for (const [key, ph] of [["ch", "H"], ["cm", "M"], ["cs", "S"]]) {
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = "0";
+        input.placeholder = ph;
+        input.dataset.key = key;
+        cells.append(input);
+      }
+      const { wrap: commandBox, input: command } = commandField();
+      command.dataset.key = "cc";
+
+      // What waits after this one before the next in the same batch. Beside
+      // the command, because that is whose pause it is.
+      const wait = document.createElement("input");
+      wait.type = "number";
+      wait.min = "0";
+      wait.value = "0";
+      wait.className = "cmd-wait";
+      wait.title = t("cmd.wait");
+      const add = document.createElement("button");
+      add.type = "button";
+      add.className = "primary small";
+      add.textContent = t("add");
+      add.onclick = async () => {
+        if (!command.value.trim()) return;
+        const n = key => parseInt($(`[data-key='${key}']`, formHost()).value, 10) || 0;
+        const seconds = n("ch") * 3600 + n("cm") * 60 + n("cs");
+        const args = { name: timer.name, command: command.value.trim() };
+        if (seconds > 0) args.atSeconds = seconds;
+        args.delayTicks = parseInt(wait.value, 10) || 0;
+        if (await act("timer.addCommand", args)) {
+          reopen(timer.name);
+        }
+      };
+      adder.append(cells, commandBox, wait, add);
+      body.append(adder);
+    },
+  };
+
+  /** A titled sheet, built into whatever is hosting the form. */
+  function sheetInto(body, name, build) {
+    const sheeted = sheet(t("group." + name));
+    build(sheeted.body);
+    body.append(sheeted.section);
+  }
+
+  /** Everything a timer that does not exist yet can be asked. */
+  function timerSheets(body, timer, creating) {
+    SHEETS.identity(body, timer, creating);
+    SHEETS.display(body, timer);
+    SHEETS.titles(body, timer);
+    SHEETS.flow(body, timer);
+    if (creating) SHEETS.firstCommand(body);
   }
 
   /**
-   * What Apply sends: the boxes that differ from the ones the dialog opened
+   * Where the form being edited lives: the page, or the dialog over it.
+   *
+   * <p>One question with one answer, rather than every caller reaching for
+   * "#modal-body" and being wrong the moment the editor stopped being one.</p>
+   */
+  const formHost = () => (editing ? $("#editor-body") : $("#modal-body"));
+
+  /**
+   * What Apply sends: the boxes that differ from the ones the form opened
    * with, grouped the way the operations are.
    *
    * @return how many operations were accepted
    */
   async function applyTimer(name) {
-    const get = key => $(`#modal-body [data-key='${key}']`);
+    const get = key => $(`[data-key='${key}']`, formHost());
     const num = key => parseInt(get(key).value, 10) || 0;
     const moved = key => get(key) && get(key).value !== baseline[key];
     let done = 0;
@@ -2160,201 +2352,137 @@
     return done;
   }
 
-  function editDialog(timer) {
-    modal(t("dialog.edit", timer.name), body => {
-      const group = (name, build) => {
-        const sheeted = sheet(t("group." + name));
-        build(sheeted.body);
-        body.append(sheeted.section);
-      };
-      timerSheets(body, timer, false);
+  /** Every box Apply would send, which is not every box on the page. */
+  const APPLIES = () => [
+    "hours", "minutes", "seconds", "silent",
+    "repeat", "repeatCount", "repeatCooldown", "nextTimer", "sequenceCooldown",
+    ...DISPLAY_KEYS.flatMap(([, keys]) => keys.map(([key]) => "d:" + key)),
+    ...["above", "below", "left", "right"].map(slot => "t:" + slot)
+  ];
 
-      // One list, the way the commands sheet works. There were three fixed
-      // forms here -- a scoreboard block, an expression block and a select of
-      // four game events -- so a timer could hold one of each and no more, and
-      // the select wrote "death" where the server stores "player_death", which
-      // never matched anything.
-      group("triggers", s => {
-        closeComposer();
-
-        // Two headings, always both, because everything a timer can be told
-        // is one or the other. Under a heading sit alternatives, and any one
-        // of them holding is enough; inside an alternative everything has to
-        // hold at once. There is no third level: a rule and an alternative
-        // were both an "or", so the page used to show one idea twice.
-        for (const action of ["start", "finish"]) {
-          const section = document.createElement("div");
-          section.className = "trg-section";
-
-          const head = document.createElement("div");
-          head.className = "trg-section-head";
-          const what = document.createElement("span");
-          what.className = "trg-when " + (action === "start" ? "starts" : "ends");
-          what.textContent = t(action === "start" ? "trg.startsWhen" : "trg.endsWhen");
-
-          const add = document.createElement("button");
-          add.type = "button";
-          add.className = "btn small";
-          add.textContent = t("add");
-          add.onclick = () => openComposer(section, null, timer, action, null);
-          head.append(what, add);
-          section.append(head);
-
-          const body = document.createElement("div");
-          let branches = 0;
-          for (const rule of (timer.rules || [])) {
-            if (rule.action !== action) continue;
-            for (const group of groupsOf(rule)) {
-              if (branches > 0) {
-                const or = document.createElement("div");
-                or.className = "trg-or";
-                or.textContent = t("trg.orGroup");
-                body.append(or);
-              }
-              branches++;
-              body.append(groupBlock(timer, rule, group));
-            }
-          }
-          if (!branches) {
-            const p = document.createElement("p");
-            p.className = "muted";
-            p.textContent = t(action === "start" ? "trg.noStart" : "trg.noFinish");
-            body.append(p);
-          }
-          section.append(body);
-          s.append(section);
-        }
-      });
-
-      // The moment is said once and the commands hang under it, which is how
-      // the game draws the same list. Repeated beside every row, two commands
-      // running at the same instant read as two unrelated facts.
-      group("commands", s => {
-        const list = document.createElement("div");
-        const entries = timer.commandList || [];
-        if (!entries.length) {
-          const p = document.createElement("p");
-          p.className = "muted";
-          p.textContent = t("cmd.none");
-          list.append(p);
-        }
-        let moment;
-        let under = null;
-        entries.forEach((entry, index) => {
-          // A new heading when the moment changes, exactly as commandLines
-          // decides it in game: the end is its own moment, once.
-          if (under === null || entry.at !== moment) {
-            moment = entry.at;
-            const head = document.createElement("div");
-            head.className = "cmd-moment";
-            const at = document.createElement("span");
-            at.className = "cmd-at" + (entry.at === undefined ? " end" : "");
-            at.textContent = entry.at === undefined ? t("cmd.end") : clock(entry.at * 20);
-            head.append(at);
-            list.append(head);
-            under = document.createElement("div");
-            under.className = "cmd-under";
-            list.append(under);
-          }
-          const row = document.createElement("div");
-          row.className = "cmd-row";
-          const text = document.createElement("span");
-          text.className = "cmd-text";
-          text.textContent = entry.delay > 0
-            ? entry.command + "   " + t("cmd.waits", entry.delay)
-            : entry.command;
-          const remove = document.createElement("button");
-          remove.type = "button";
-          remove.className = "danger small";
-          remove.textContent = "×";
-          remove.onclick = async () => {
-            // Zero-based, exactly as the server counts them.
-            if (await act("timer.removeCommand", { name: timer.name, index })) {
-              reopen(timer.name);
-            }
-          };
-          row.append(text, remove);
-          under.append(row);
-        });
-        s.append(list);
-
-        const adder = document.createElement("div");
-        adder.className = "cmd-add";
-        const cells = document.createElement("div");
-        cells.className = "units";
-        for (const [key, ph] of [["ch", "H"], ["cm", "M"], ["cs", "S"]]) {
-          const input = document.createElement("input");
-          input.type = "number";
-          input.min = "0";
-          input.placeholder = ph;
-          input.dataset.key = key;
-          cells.append(input);
-        }
-        const { wrap: commandBox, input: command } = commandField();
-        command.dataset.key = "cc";
-
-        // What waits after this one before the next in the same batch. Beside
-        // the command, because that is whose pause it is.
-        const wait = document.createElement("input");
-        wait.type = "number";
-        wait.min = "0";
-        wait.value = "0";
-        wait.className = "cmd-wait";
-        wait.title = t("cmd.wait");
-        const add = document.createElement("button");
-        add.type = "button";
-        add.className = "primary small";
-        add.textContent = t("add");
-        add.onclick = async () => {
-          if (!command.value.trim()) return;
-          const n = key => parseInt($(`#modal-body [data-key='${key}']`).value, 10) || 0;
-          const at = n("ch") * 3600 + n("cm") * 60 + n("cs");
-          const args = { name: timer.name, command: command.value.trim() };
-          if (at > 0) args.atSeconds = at;
-          args.delayTicks = parseInt(wait.value, 10) || 0;
-          if (await act("timer.addCommand", args)) {
-            reopen(timer.name);
-          }
-        };
-        adder.append(cells, commandBox, wait, add);
-        s.append(adder);
-      });
-    }, [
-      [t("cancel"), "", null],
-      [t("apply"), "primary", async () => {
-        const get = key => $(`#modal-body [data-key='${key}']`);
-
-        // Nothing empty and nothing unparseable leaves this dialog. Sending
-        // it earned an "Unknown preset" from the server, which told the person
-        // reading it nothing about which box was wrong.
-        //
-        // Asked of what Apply is about to send, and not of everything on
-        // screen that happens to carry a key. Every box in the dialog did:
-        // the four titles, which are blank on a timer that has none; the next
-        // timer, same; and the three units and the text of the command adder,
-        // which are blank until somebody adds a command. So Apply marked
-        // fourteen boxes red and refused on a timer nobody had touched, which
-        // is every timer.
-        const sent = [
-          "hours", "minutes", "seconds", "silent",
-          "repeat", "repeatCount", "repeatCooldown", "nextTimer", "sequenceCooldown",
-          ...DISPLAY_KEYS.flatMap(([, keys]) => keys.map(([key]) => "d:" + key)),
-          ...["above", "below", "left", "right"].map(slot => "t:" + slot)
-        ];
-        const bad = sent.map(get).filter(i =>
-          i && (!parses(i) || (i.value.trim() === "" && !i.dataset.optional)));
-        if (bad.length) {
-          bad.forEach(i => i.classList.add("bad"));
-          bad[0].focus();
-          toast(t("badValue"), true);
-          return false;
-        }
-
-        const done = await applyTimer(timer.name);
-        toast(done ? t("applied", done) : t("nothingToApply"), false);
-      }]
-    ], true);
+  /**
+   * Refuses, loudly and in the right place, rather than letting the server
+   * answer "Unknown preset" to somebody who cannot tell which box it meant.
+   */
+  function badFields() {
+    const get = key => $(`[data-key='${key}']`, formHost());
+    const bad = APPLIES().map(get).filter(i =>
+      i && (!parses(i) || (i.value.trim() === "" && !i.dataset.optional)));
+    if (!bad.length) return false;
+    bad.forEach(i => i.classList.add("bad"));
+    bad[0].focus();
+    toast(t("badValue"), true);
+    return true;
   }
+
+  // ------------------------------------------------------------ the editor
+
+  /** The timer being edited, which is what turns Timers into the editor. */
+  let editing = null;
+  let editorTab = "timer";
+
+  /** The tabs, and which groups each one is made of. */
+  const EDITOR_TABS = [
+    ["timer", (body, timer) => {
+      SHEETS.identity(body, timer, false);
+      SHEETS.titles(body, timer);
+      SHEETS.flow(body, timer);
+    }],
+    ["display", (body, timer) => SHEETS.display(body, timer)],
+    ["triggers", (body, timer) => SHEETS.triggers(body, timer)],
+    ["commands", (body, timer) => SHEETS.commands(body, timer)],
+  ];
+
+  function openEditor(name) {
+    editing = name;
+    editorTab = "timer";
+    render();
+  }
+
+  function closeEditor() {
+    editing = null;
+    baseline = {};
+    render();
+  }
+
+  /**
+   * The editor, in the space the list was using.
+   *
+   * <p>Every tab is built, and the ones not being looked at are hidden rather
+   * than left unbuilt. Building on demand would throw away whatever had been
+   * typed on the tab being left, which is not what changing tabs means -- and
+   * Apply has to be able to see the whole form at once, since a single press
+   * sends what changed anywhere in it.</p>
+   */
+  function renderEditor() {
+    const timer = (state.timers || []).find(x => x.name === editing);
+    if (!timer) {
+      // Deleted from under us, or renamed by somebody else.
+      closeEditor();
+      return;
+    }
+    $("#editor-name").textContent = timer.name;
+    $("#editor-lead").textContent =
+      (timer.countUp ? "\u2191 " : "\u2193 ") + clock(timer.targetTicks);
+
+    const tabs = $("#editor-tabs");
+    tabs.replaceChildren(...EDITOR_TABS.map(([name]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "subtab";
+      button.textContent = t("editor." + (name === "display" ? "look" : name));
+      button.setAttribute("aria-selected", String(name === editorTab));
+      button.onclick = () => {
+        editorTab = name;
+        // Only the panels change hands; nothing is rebuilt, so nothing typed
+        // on the way out is lost.
+        [...$("#editor-body").children].forEach(panel => {
+          panel.hidden = panel.dataset.tab !== editorTab;
+        });
+        [...tabs.children].forEach((b, i) =>
+          b.setAttribute("aria-selected", String(EDITOR_TABS[i][0] === editorTab)));
+      };
+      return button;
+    }));
+
+    const body = $("#editor-body");
+    const place = keepPlace ? body.scrollTop : 0;
+    body.replaceChildren(...EDITOR_TABS.map(([name, build]) => {
+      const panel = document.createElement("div");
+      panel.className = "editor-panel";
+      panel.dataset.tab = name;
+      panel.hidden = name !== editorTab;
+      build(panel, timer);
+      return panel;
+    }));
+    body.scrollTop = place;
+
+    baseline = {};
+    for (const input of $$("[data-key]", body)) baseline[input.dataset.key] = input.value;
+    markEditor();
+  }
+
+  /** Apply and Discard, in the state the page is actually in. */
+  function markEditor() {
+    const changed = $$("[data-key]", $("#editor-body"))
+      .some(i => baseline[i.dataset.key] !== undefined && i.value !== baseline[i.dataset.key]);
+    $("#editor-apply").disabled = busy || !changed;
+    $("#editor-discard").disabled = busy || !changed;
+  }
+
+  $("#editor-body").addEventListener("input", markEditor);
+  $("#editor-body").addEventListener("change", markEditor);
+  $("#editor-back").onclick = closeEditor;
+  $("#editor-discard").onclick = () => renderEditor();
+  $("#editor-apply").onclick = async () => {
+    if (badFields()) return;
+    busy = true;
+    markEditor();
+    const done = await applyTimer(editing);
+    busy = false;
+    toast(done ? t("applied", done) : t("nothingToApply"), false);
+    renderEditor();
+  };
 
   /**
    * Everything about one execution, and nothing to press.
@@ -2479,6 +2607,7 @@
 
   $$(".nav-item").forEach(b => b.onclick = () => {
     tab = b.dataset.tab;
+    editing = null;
     // The map and the page have to be forgotten together. Emptying the map
     // alone left the old cards in the document and built a second set beside
     // them, so every visit to the tab doubled the board -- and pressing Delete
@@ -2489,7 +2618,7 @@
   });
 
   function forget() {
-    drawnRuns = drawnTimers = drawnSettings = "";
+    drawnRuns = drawnTimers = drawnSettings = drawnEditor = "";
     runCards.clear();
     timerCards.clear();
     $("#runs").replaceChildren();

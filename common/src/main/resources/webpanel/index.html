@@ -97,6 +97,29 @@
       </div>
     </section>
 
+    <!-- ------------------------------------------------------ editor -->
+    <!-- Not a section of its own in the rail: this is what Timers becomes
+         while a timer is being edited. A dialog had about six hundred pixels
+         for nine groups of settings and two trees. -->
+    <section id="panel-editor" class="view" hidden>
+      <header class="view-head">
+        <div>
+          <button id="editor-back" class="btn ghost" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+            <span data-i18n="tab.timers">Timers</span>
+          </button>
+          <h1 id="editor-name"></h1>
+          <p class="lead" id="editor-lead"></p>
+        </div>
+        <div class="tools">
+          <button id="editor-discard" class="btn" type="button" data-i18n="discard">Discard</button>
+          <button id="editor-apply" class="btn primary" type="button" data-i18n="apply">Apply</button>
+        </div>
+      </header>
+      <nav id="editor-tabs" class="subtabs" role="tablist"></nav>
+      <div id="editor-body"></div>
+    </section>
+
     <!-- ---------------------------------------------------- settings -->
     <section id="panel-settings" class="view" hidden>
       <header class="view-head">
