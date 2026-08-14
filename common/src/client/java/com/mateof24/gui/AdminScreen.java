@@ -57,10 +57,28 @@ public class AdminScreen extends Screen implements PanelHost {
      */
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // Drawn here because 1.20.1 does not draw it for us. From 1.20.2 on,
+        // Screen.render calls this itself and blurs what is behind; here the
+        // screen has to ask, and what it gets is vanilla's own dim over the
+        // world. Without it the panel floated on top of the game with nothing
+        // between them.
+        //
+        // PositionScreen deliberately does not: placing a counter means seeing
+        // exactly what is behind it.
+        renderBackground(graphics);
         Painter painter = new GfxPainter(graphics);
         panel.drawBands(painter, mouseX, mouseY);
         super.render(graphics, mouseX, mouseY, partialTick);
         panel.drawContent(painter);
+        // Everything queued so far, on screen before the list paints over it.
+        //
+        // Drawing last is not enough here: text and rectangles go through
+        // different render types, and the whole text pass is drawn after the
+        // whole fill pass. So the labels the panel had already queued -- Hours,
+        // Minutes, Seconds, Wait -- came out on top of a completion box that
+        // was drawn later, which is exactly backwards. Flushing puts the panel
+        // on the screen first, and what follows genuinely follows.
+        PoseScale.nextLayer(graphics);
         // Over everything, the way it is over the chat line.
         commandField.tick();
         if (commandField.suggestions() != null) {
@@ -85,9 +103,26 @@ public class AdminScreen extends Screen implements PanelHost {
                 && commandField.suggestions().mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
-        if (panel.mouseClicked(mouseX, mouseY, button)) return true;
-        return super.mouseClicked(mouseX, mouseY, button);
+        boolean handled = panel.mouseClicked(mouseX, mouseY, button)
+                || super.mouseClicked(mouseX, mouseY, button);
+        letGoIfOutside(mouseX, mouseY);
+        return handled;
     }
+
+    /**
+     * Lets go of a box the click did not land in.
+     *
+     * <p>Asked after the click has been handled, so whatever it landed on has
+     * already taken the focus if it wanted it. What is left is a box holding
+     * the caret with the pointer somewhere else, and that is nobody's.</p>
+     */
+    private void letGoIfOutside(double mouseX, double mouseY) {
+        if (getFocused() instanceof net.minecraft.client.gui.components.EditBox box
+                && !box.isMouseOver(mouseX, mouseY)) {
+            setFocused(null);
+        }
+    }
+
 
     /**
      * One delta, not two. The horizontal one arrived with 1.21; here the
