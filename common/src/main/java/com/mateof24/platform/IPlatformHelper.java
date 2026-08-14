@@ -8,12 +8,17 @@ public interface IPlatformHelper {
     String getPlatformName();
     boolean isModLoaded(String modId);
     Path getConfigDir();
-    void sendTimerSyncPacket(MinecraftServer server, String name, long currentTicks, long targetTicks, boolean countUp, boolean running, boolean silent);
+    /** Pushes each online player the executions their audience covers. */
+    void sendTimerState(MinecraftServer server);
+
+    /** Pushes one player their own view, for joins. */
+    void sendTimerState(ServerPlayer player);
     void sendVisibilityPacket(ServerPlayer player, boolean visible);
     void sendSilentPacket(ServerPlayer player, boolean silent);
-    default void sendDisplayConfigPacket(ServerPlayer player) {}
-    default void sendDisplayConfigPacketToAll(MinecraftServer server) {}
     void registerPackets();
+
+    /** Pushes the admin panel snapshot to one subscribed player. */
+    void sendAdminState(ServerPlayer player, String json);
     boolean checkScoreboardCondition(MinecraftServer server, String objective, int score, String target);
     void updateScoreboardTimer(MinecraftServer server, String timerName, long currentSeconds, long targetSeconds);
     void clearScoreboardTimer(MinecraftServer server);

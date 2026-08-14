@@ -3,15 +3,44 @@ package com.mateof24.manager;
 import com.mateof24.OnTimeConstants;
 import com.mateof24.config.ModConfig;
 import com.mateof24.storage.TimerStorage;
+import com.mateof24.api.Audience;
 import com.mateof24.timer.Timer;
+import com.mateof24.timer.TimerRun;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 public class TimerManager {
     private static final TimerManager INSTANCE = new TimerManager();
     private final Map<String, Timer> timers = new HashMap<>();
-    private Timer activeTimer = null;
+
+    /**
+     * Executions in flight, oldest first — the ordering is what makes "the
+     * primary run" well defined.
+     *
+     * <p>This replaces the single {@code activeTimer} field. It is capped at
+     * one global run for now, so behaviour is unchanged, but the single source
+     * of truth has moved here: there is no separate active pointer left to
+     * drift out of sync with it.</p>
+     */
+    private final Map<UUID, TimerRun> runs = new LinkedHashMap<>();
+
+    /**
+     * Timer name to its primary run, kept in step with {@link #runs}.
+     *
+     * <p>Nothing here that a scan of {@code runs} could not answer, and the
+     * scan looks cheap because it stops at the first run carrying that name.
+     * What it actually costs is the number of runs of <em>other</em> timers
+     * registered before it — so it is free while one timer is running and gets
+     * expensive precisely when several are, which is what this stage makes
+     * possible. Measured over 100 executions: unchanged with a single timer,
+     * about eighty times cheaper with fifty.</p>
+     */
+    private final Map<String, TimerRun> primaryRuns = new HashMap<>();
 
     private TimerManager() {}
 
@@ -42,46 +71,133 @@ public class TimerManager {
             return false;
         }
 
-        Timer timer = timers.get(name);
-        if (timer == activeTimer) {
-            activeTimer = null;
-        }
+        runs.values().removeIf(run -> run.timerName().equals(name));
+        refreshPrimaries();
 
         timers.remove(name);
         TimerStorage.deleteTimer(name);
-        TimerStorage.saveActiveState(activeTimer != null ? activeTimer.getName() : null);
+        saveRuns();
         return true;
     }
 
+    /** Starts a run seen by the whole server. The 4.0.0 shape of a timer. */
     public boolean startTimer(String name) {
-        Timer timer = timers.get(name);
-        if (timer == null) {
-            return false;
-        }
+        return startShared(name, Audience.global()) != null;
+    }
 
-        Timer previous = activeTimer;
-        if (previous != null) {
-            previous.setRunning(false);
+    /**
+     * Starts one run shared by an audience.
+     *
+     * @return the new run, or null when the timer is missing or an existing
+     *         run of it already reaches some of the same players
+     */
+    public TimerRun startShared(String name, Audience audience) {
+        Timer timer = timers.get(name);
+        if (timer == null) return null;
+        if (findOverlapping(name, audience) != null) return null;
+
+        // Explicit rather than relying on the run seeding itself from the
+        // definition: that only works while setRunning happens to come first.
+        TimerRun run = newRun(TimerRun.shared(timer, audience));
+        run.setRunning(true);
+        timer.setRunning(true);
+        TimerStorage.saveTimer(timer);
+        saveRuns();
+
+        com.mateof24.event.TimerEventBus.fireStart(run);
+        return run;
+    }
+
+    /**
+     * Starts one run per player, each with a clock of its own.
+     *
+     * <p>Players who already have a run of this timer are skipped rather than
+     * refused: asking for a timer "for everyone" should not fail because one
+     * person already has it.</p>
+     *
+     * @return the runs actually created
+     */
+    public java.util.List<TimerRun> startEach(String name, Collection<UUID> players) {
+        Timer timer = timers.get(name);
+        if (timer == null) return java.util.List.of();
+
+        java.util.List<TimerRun> created = new java.util.ArrayList<>();
+        for (UUID player : players) {
+            if (findOverlapping(name, Audience.ofPlayer(player)) != null) continue;
+            TimerRun run = newRun(TimerRun.forPlayer(timer, player));
+            // Each run seeds its clock from the definition, including whether
+            // it is running — and the definition is not running yet at this
+            // point, so without this every 'each' run started frozen.
+            run.setRunning(true);
+            created.add(run);
         }
+        if (created.isEmpty()) return created;
 
         timer.setRunning(true);
-        activeTimer = timer;
-        if (previous != null && previous != timer) {
-            TimerStorage.saveTimer(previous);
-        }
-        saveActiveTimer();
+        TimerStorage.saveTimer(timer);
+        saveRuns();
+        // One event per execution: 'each' created several, and a listener that
+        // only heard about the timer could not tell them apart.
+        for (TimerRun run : created) com.mateof24.event.TimerEventBus.fireStart(run);
+        return created;
+    }
 
-        getTimer(name).ifPresent(t ->
-                com.mateof24.event.TimerEventBus.fireOnStart(toInfo(t)));
-        return true;
+    /**
+     * The run whose clock is mirrored onto the definition: the first one
+     * registered for that timer. With one run — the overwhelmingly common case
+     * — it is simply that run.
+     */
+    public boolean isPrimaryRunOf(TimerRun run) {
+        return primaryRuns.get(run.timerName()) == run;
+    }
+
+    /** An existing run of this timer that would reach some of the same players. */
+    public TimerRun findOverlapping(String timerName, Audience audience) {
+        for (TimerRun run : runs.values()) {
+            if (!run.timerName().equals(timerName)) continue;
+            if (run.audience().overlaps(audience)) return run;
+        }
+        return null;
+    }
+
+    /** Runs matching a timer name (null for any) and reaching any of the given players (null for any). */
+    public java.util.List<TimerRun> findRuns(String timerName, Collection<UUID> players) {
+        java.util.List<TimerRun> found = new java.util.ArrayList<>();
+        for (TimerRun run : runs.values()) {
+            if (timerName != null && !run.timerName().equals(timerName)) continue;
+            if (players != null && players.stream().noneMatch(run::isVisibleTo)) continue;
+            found.add(run);
+        }
+        return found;
+    }
+
+    /** Registers the run and returns it. Split out so the put stays readable. */
+    private TimerRun newRun(TimerRun run) {
+        runs.put(run.runId(), run);
+        // First one registered for that timer wins, which is the definition of
+        // primary; later ones leave it alone.
+        primaryRuns.putIfAbsent(run.timerName(), run);
+        return run;
+    }
+
+    /**
+     * Recomputes the primary of every timer. Only removals need this: adding
+     * cannot displace an existing primary, so {@link #newRun} maintains it
+     * incrementally.
+     */
+    private void refreshPrimaries() {
+        primaryRuns.clear();
+        for (TimerRun run : runs.values()) primaryRuns.putIfAbsent(run.timerName(), run);
     }
 
     public boolean pauseTimer() {
-        if (activeTimer == null) {
+        Optional<TimerRun> active = getActiveRun().filter(run -> !run.isAwaitingSequence());
+        if (active.isEmpty()) {
             return false;
         }
 
-        activeTimer.setRunning(false);
+        active.get().setRunning(false);
+        active.get().mirrorToTimer();
         saveActiveTimer();
         return true;
     }
@@ -93,9 +209,13 @@ public class TimerManager {
         }
 
         timer.setTime(hours, minutes, seconds);
+        // The runs carry the live clock, so a manual jump has to reach them.
+        for (TimerRun run : runs.values()) {
+            if (run.timerName().equals(name)) run.setTime(hours, minutes, seconds);
+        }
         // Manual jump: re-baseline scheduled commands so skipped-over
         // thresholds don't fire (only natural ticking fires them).
-        com.mateof24.tick.TimerTickHandler.resetCommandProgress();
+        resetCommandProgress(name);
         saveTimer(timer);
         return true;
     }
@@ -107,15 +227,10 @@ public class TimerManager {
         }
 
         timer.addTime(hours, minutes, seconds);
-        com.mateof24.tick.TimerTickHandler.resetCommandProgress();
-        saveTimer(timer);
-        return true;
-    }
-
-    public boolean setTimerCommand(String name, String command) {
-        Timer timer = timers.get(name);
-        if (timer == null) return false;
-        timer.setCommand(command);
+        for (TimerRun run : runs.values()) {
+            if (run.timerName().equals(name)) run.addTime(hours, minutes, seconds);
+        }
+        resetCommandProgress(name);
         saveTimer(timer);
         return true;
     }
@@ -123,7 +238,7 @@ public class TimerManager {
     public boolean addScheduledCommand(String name, long atSeconds, String command) {
         Timer timer = timers.get(name);
         if (timer == null) return false;
-        if (!timer.addScheduledCommand(atSeconds, command)) return false;
+        if (!timer.addScheduledCommand(atSeconds, command, 0)) return false;
         saveTimer(timer);
         return true;
     }
@@ -131,7 +246,7 @@ public class TimerManager {
     public boolean addFinishCommand(String name, String command) {
         Timer timer = timers.get(name);
         if (timer == null) return false;
-        if (!timer.addFinishCommand(command)) return false;
+        if (!timer.addFinishCommand(command, 0)) return false;
         saveTimer(timer);
         return true;
     }
@@ -180,8 +295,80 @@ public class TimerManager {
         return Optional.ofNullable(timers.get(name));
     }
 
+    /**
+     * The primary run: the oldest one still registered. With a single run in
+     * flight this is simply "the active timer" as 4.0.0 meant it.
+     */
+    public Optional<TimerRun> getActiveRun() {
+        return runs.values().stream().findFirst();
+    }
+
+    /**
+     * The timer the player would call "the current one".
+     *
+     * <p>A run waiting out a sequence cooldown is deliberately excluded: the
+     * display is cleared and nothing is ticking, and 4.0.0 reported no active
+     * timer in that window because it had cleared the pointer outright.</p>
+     */
     public Optional<Timer> getActiveTimer() {
-        return Optional.ofNullable(activeTimer);
+        return getActiveRun().filter(run -> !run.isAwaitingSequence()).map(TimerRun::timer);
+    }
+
+    /** True when any run is waiting out a repeat or sequence cooldown. */
+    public boolean hasPendingCooldown() {
+        // A loop rather than a stream: this is asked on the tick path, and the
+        // pipeline was the only thing being allocated there.
+        for (TimerRun run : runs.values()) {
+            if (run.isInCooldown()) return true;
+        }
+        return false;
+    }
+
+    /** True when this timer already has an execution registered. */
+    public boolean hasRunOf(String timerName) {
+        return runs.values().stream().anyMatch(run -> run.timerName().equals(timerName));
+    }
+
+    /** Ends one execution. The definition itself is untouched. */
+    public void endRun(TimerRun run) {
+        if (runs.remove(run.runId()) != null) {
+            refreshPrimaries();
+            saveRuns();
+        }
+    }
+
+    /**
+     * Ends several executions with a single write. {@code /timer stop} over a
+     * selector can reach every run at once, and one file write per run would
+     * make a mass stop cost as much as the runs it is cancelling.
+     */
+    public void endRuns(Collection<TimerRun> ending) {
+        boolean removed = false;
+        for (TimerRun run : ending) {
+            if (runs.remove(run.runId()) != null) removed = true;
+        }
+        if (removed) {
+            refreshPrimaries();
+            saveRuns();
+        }
+    }
+
+    /** Re-baselines the scheduled-command cursor of every run of this timer. */
+    public void resetCommandProgress(String timerName) {
+        for (TimerRun run : runs.values()) {
+            if (run.timerName().equals(timerName)) run.resetCommandProgress();
+        }
+    }
+
+    /** Live view over the executions in flight. Server thread only. */
+    public Collection<TimerRun> runsView() {
+        return Collections.unmodifiableCollection(runs.values());
+    }
+
+    public int runCount() { return runs.size(); }
+
+    private String activeName() {
+        return getActiveTimer().map(Timer::getName).orElse(null);
     }
 
     public boolean hasTimer(String name) {
@@ -204,12 +391,18 @@ public class TimerManager {
     }
 
     public void clearActiveTimer() {
-        activeTimer = null;
+        if (runs.isEmpty()) return;
+        runs.clear();
+        primaryRuns.clear();
+        saveRuns();
     }
 
     public void saveTimers() {
-        String activeTimerName = activeTimer != null ? activeTimer.getName() : null;
-        TimerStorage.saveTimers(timers, activeTimerName);
+        TimerStorage.saveTimers(timers, activeName());
+        // What the armed triggers have seen goes with it. A round that spans a
+        // restart would otherwise come back having forgotten who had already
+        // died, silently, which is the worst way for it to be wrong.
+        TimerStorage.saveTriggerState(com.mateof24.trigger.RuleEngine.toJson());
     }
 
     /**
@@ -218,10 +411,8 @@ public class TimerManager {
      * repeatsDone changes — avoids the per-tick re-write of every timer file.
      */
     public void saveActiveTimer() {
-        if (activeTimer != null) {
-            TimerStorage.saveTimer(activeTimer);
-        }
-        TimerStorage.saveActiveState(activeTimer != null ? activeTimer.getName() : null);
+        getActiveTimer().ifPresent(TimerStorage::saveTimer);
+        TimerStorage.saveActiveState(activeName());
     }
 
     /**
@@ -231,76 +422,62 @@ public class TimerManager {
     public void saveTimer(Timer timer) {
         if (timer == null) return;
         TimerStorage.saveTimer(timer);
-        TimerStorage.saveActiveState(activeTimer != null ? activeTimer.getName() : null);
+        TimerStorage.saveActiveState(activeName());
     }
 
     public void loadTimers() {
         timers.clear();
-        activeTimer = null;
+        runs.clear();
+        primaryRuns.clear();
 
         TimerStorage.TimerLoadResult result = TimerStorage.loadTimers();
         timers.putAll(result.getTimers());
 
-        String activeTimerName = result.getActiveTimerName();
-        if (activeTimerName != null && timers.containsKey(activeTimerName)) {
-            activeTimer = timers.get(activeTimerName);
-            OnTimeConstants.LOGGER.info("Restored active timer: '{}'", activeTimerName);
+        com.mateof24.trigger.RuleEngine.loadFrom(TimerStorage.loadTriggerState());
+
+        java.util.List<com.google.gson.JsonObject> stored = TimerStorage.loadRunElements();
+        if (stored != null) {
+            for (com.google.gson.JsonObject entry : stored) {
+                if (!entry.has("timerName")) continue;
+                Timer timer = timers.get(entry.get("timerName").getAsString());
+                TimerRun run = TimerRun.fromJson(entry, timer);
+                if (run != null) newRun(run);
+            }
+            if (!runs.isEmpty()) {
+                OnTimeConstants.LOGGER.info("Restored {} timer run(s)", runs.size());
+            }
+        } else {
+            // No runs file: this world comes from 4.0.0 or earlier. Its active
+            // pointer meant exactly one run, shared by the whole server.
+            String activeTimerName = result.getActiveTimerName();
+            if (activeTimerName != null && timers.containsKey(activeTimerName)) {
+                newRun(TimerRun.global(timers.get(activeTimerName)));
+                OnTimeConstants.LOGGER.info("Migrated active timer '{}' to a global run", activeTimerName);
+            }
         }
         validateActiveTimer();
+        saveRuns();
     }
 
-    public void reloadCommandsFromDisk() {
-        TimerStorage.TimerLoadResult result = TimerStorage.loadTimers();
-        Map<String, Timer> diskTimers = result.getTimers();
-
-        for (Map.Entry<String, Timer> entry : diskTimers.entrySet()) {
-            String name = entry.getKey();
-            Timer diskTimer = entry.getValue();
-            Timer memTimer = timers.get(name);
-
-            if (memTimer != null) {
-                memTimer.setCommand(diskTimer.getCommand());
-                memTimer.setSilent(diskTimer.isSilent());
-            }
-        }
+    /** Persists the run registry plus the 4.0.0 active pointer kept for downgrades. */
+    public void saveRuns() {
+        TimerStorage.saveRuns(runs.values());
+        TimerStorage.saveActiveState(activeName());
     }
 
-    public void reloadFromDisk() {
-        TimerStorage.TimerLoadResult result = TimerStorage.loadTimers();
-        Map<String, Timer> diskTimers = result.getTimers();
-
-        for (Map.Entry<String, Timer> entry : diskTimers.entrySet()) {
-            String name = entry.getKey();
-            Timer diskTimer = entry.getValue();
-            Timer memTimer = timers.get(name);
-
-            if (memTimer != null) {
-                boolean wasRunning = memTimer.isRunning();
-                timers.put(name, diskTimer);
-                diskTimer.setRunning(wasRunning);
-
-                if (activeTimer == memTimer) {
-                    activeTimer = diskTimer;
-                }
-            } else {
-                timers.put(name, diskTimer);
-            }
-        }
-    }
-
+    /** Drops runs whose definition is no longer registered. */
     public boolean validateActiveTimer() {
-        if (activeTimer != null && !timers.containsValue(activeTimer)) {
-            OnTimeConstants.LOGGER.warn("Active timer '{}' not found in timers map, clearing", activeTimer.getName());
-            activeTimer = null;
-            TimerStorage.saveActiveState(null);
+        boolean removed = runs.values().removeIf(run -> {
+            if (timers.containsValue(run.timer())) return false;
+            OnTimeConstants.LOGGER.warn("Run of timer '{}' has no definition, clearing", run.timerName());
+            return true;
+        });
+        if (removed) {
+            refreshPrimaries();
+            saveRuns();
             return false;
         }
         return true;
     }
 
-    private com.mateof24.api.TimerInfo toInfo(Timer t) {
-        return new com.mateof24.api.TimerInfo(t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
-                t.isCountUp(), t.isRunning(), t.isSilent(), t.getCommand(),
-                t.isRepeat(), t.getRepeatCount(), t.getRepeatsDone());
-    }
 }

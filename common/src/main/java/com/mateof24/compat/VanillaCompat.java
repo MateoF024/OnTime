@@ -120,8 +120,12 @@ public final class VanillaCompat {
         String trimmed = raw.trim();
         if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
             try {
-                com.google.gson.JsonElement el = com.google.gson.JsonParser.parseString(trimmed);
-                return Component.Serializer.fromJson(el);
+                // The string overload, not the JsonElement one. Both exist here,
+                // but the element form cannot be resolved against the remapped
+                // 1.20.1 jar, and this is the form the branch has always
+                // compiled. Malformed JSON throws either way and the catch is
+                // what turns it into null.
+                return Component.Serializer.fromJson(trimmed);
             } catch (Exception e) {
                 return null;
             }

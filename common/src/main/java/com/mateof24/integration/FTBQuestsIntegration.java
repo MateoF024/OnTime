@@ -7,6 +7,18 @@ import net.minecraft.server.level.ServerPlayer;
 import java.lang.reflect.Method;
 import java.util.UUID;
 
+/**
+ * FTB Quests, reached by reflection because the mod is optional.
+ *
+ * <p>The six members below were checked with javap against the official jars
+ * for 1.21.1 and 26.1 and are identical in both, so there is one code path and
+ * no per-version handling. What differs is whether FTB Quests exists at all:
+ * there is no official build for 1.21.5, 1.21.6, 1.21.10 or 26.2, so on those
+ * families {@link #isInstalled()} answers false for ever and the two FTB
+ * trigger kinds never fire. They are still accepted and saved — a pack can
+ * move to a version that has it — and the command says so when one is added
+ * on a server without the mod.</p>
+ */
 public class FTBQuestsIntegration {
 
     private static volatile Boolean installed = null;
@@ -46,7 +58,12 @@ public class FTBQuestsIntegration {
             Object apiObj = apiMethod.invoke(null);
             if (apiObj == null) throw new Exception("FTBQuestsAPI.api() returned null");
 
-            getQuestFileMethod        = apiObj.getClass().getMethod("getQuestFile", boolean.class);
+            // From the published interface, not from apiObj.getClass(). The
+            // implementation is an enum singleton that happens to be public
+            // today; binding to it means this breaks the day it stops being,
+            // and the interface is the thing FTB Quests actually publishes.
+            Class<?> apiInterface = Class.forName("dev.ftb.mods.ftbquests.api.FTBQuestsAPI$API");
+            getQuestFileMethod        = apiInterface.getMethod("getQuestFile", boolean.class);
             getQuestObjectMethod      = questFileClass.getMethod("get", long.class);
             getRewardMethod           = questFileClass.getMethod("getReward", long.class);
             getNullableTeamDataMethod = questFileClass.getMethod("getNullableTeamData", UUID.class);
@@ -136,18 +153,19 @@ public class FTBQuestsIntegration {
         }
     }
 
+    /** Used by the expression parser, where a quest is a term rather than a trigger. */
     public static boolean isQuestCompletedByAnyPlayer(MinecraftServer server, String hexId) {
         if (!isReady()) { tryInit(); return false; }
-        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-            if (hasPlayerCompletedQuest(p, hexId)) return true;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (hasPlayerCompletedQuest(player, hexId)) return true;
         }
         return false;
     }
 
     public static boolean isRewardClaimedByAnyPlayer(MinecraftServer server, String hexId) {
         if (!isReady()) { tryInit(); return false; }
-        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-            if (hasPlayerClaimedReward(p, hexId)) return true;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (hasPlayerClaimedReward(player, hexId)) return true;
         }
         return false;
     }
