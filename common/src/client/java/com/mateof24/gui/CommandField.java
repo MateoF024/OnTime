@@ -121,10 +121,6 @@ public final class CommandField {
         return suggestions;
     }
 
-    public boolean isVisible() {
-        return suggestions != null && suggestions.isVisible();
-    }
-
     /** True while the box it belongs to has the caret. */
     public boolean isFocused() {
         return bound != null && bound.isFocused();
