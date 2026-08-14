@@ -15,20 +15,13 @@ config="ontime.client.mixins.json"
 [[dependencies.ontime]]
 modId="forge"
 mandatory=true
-versionRange="[47,)"
+versionRange="${forge_range}"
 ordering="NONE"
 side="BOTH"
 
 [[dependencies.ontime]]
 modId="minecraft"
 mandatory=true
-versionRange="[1.20.1,1.20.2)"
-ordering="NONE"
-side="BOTH"
-
-[[dependencies.ontime]]
-modId="cloth_config"
-mandatory=true
-versionRange="[11.0,)"
+versionRange="${minecraft_range}"
 ordering="NONE"
 side="BOTH"

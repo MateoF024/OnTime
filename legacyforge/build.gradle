@@ -6,7 +6,6 @@ plugins {
 
 def forgeMcVer      = project.forge_mc_version
 def forgeVer        = project.forge_version
-def forgeClothVer   = project.forge_cloth_version
 def forgeMappingVer = project.forge_mapping_version
 def helpSystemVer   = "v1"
 
@@ -77,7 +76,6 @@ repositories {
 
 dependencies {
     minecraft "net.minecraftforge:forge:${forgeMcVer}-${forgeVer}"
-    implementation fg.deobf("me.shedaniel.cloth:cloth-config-forge:${forgeClothVer}")
     annotationProcessor "org.spongepowered:mixin:0.8.5:processor"
 }
 
@@ -93,6 +91,15 @@ tasks.withType(JavaCompile).configureEach {
     options.release = 17
 }
 
+def requireOr(String key) {
+    def value = project.findProperty(key)
+    if (!value) throw new GradleException("gradle.properties is missing '${key}'")
+    return value
+}
+
+def minecraftRange = requireOr("mc_range_forge_v1_20_1")
+def forgeRange     = requireOr("forge_range")
+
 processResources {
     from('../common/src/main/resources') {
         // The web panel's page ships inside the jar and is read from there at
@@ -106,8 +113,12 @@ processResources {
         exclude 'fabric.mod.json'
     }
 
+    inputs.property "version", mod_version
+    inputs.property "minecraft_range", minecraftRange
+    inputs.property "forge_range", forgeRange
     filesMatching("META-INF/mods.toml") {
-        expand 'version': mod_version
+        expand 'version': mod_version, 'minecraft_range': minecraftRange,
+                'forge_range': forgeRange
     }
 
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
