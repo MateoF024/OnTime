@@ -23,7 +23,6 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 
-import java.util.Map;
 
 /**
  * Registers the {@code /timer} command tree. The subcommand handlers live in
@@ -311,23 +310,6 @@ public class TimerCommands {
         });
         return builder.buildFuture();
     }
-
-    /** Any holder, plus whoever is online. */
-    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestScoreHolders(
-            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
-        String remaining = builder.getRemaining().toLowerCase();
-        if (remaining.isEmpty() || "*".startsWith(remaining)) builder.suggest("*");
-        net.minecraft.server.MinecraftServer server = ctx.getSource().getServer();
-        if (server == null) return builder.buildFuture();
-        for (net.minecraft.server.level.ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (player.getScoreboardName().toLowerCase().startsWith(remaining)) {
-                builder.suggest(player.getScoreboardName());
-            }
-        }
-        return builder.buildFuture();
-    }
-
-
 
     /**
      * The presets, and "reset" to hand the timer back to the server default.

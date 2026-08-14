@@ -1066,12 +1066,6 @@ public final class AdminOps {
 
     private static float clampF(float value, float min, float max) { return Math.max(min, Math.min(max, value)); }
 
-    private static JsonArray toArray(List<String> values) {
-        JsonArray array = new JsonArray();
-        for (String value : values) array.add(value);
-        return array;
-    }
-
     /** Names of every operation {@link #apply} understands, for tests and docs. */
     public static List<String> operations() {
         return List.of(

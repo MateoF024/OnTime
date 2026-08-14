@@ -25,8 +25,6 @@ public final class PositionPicker {
     /** What ESC offers. Cancel is first because it is the one that undoes a mis-key. */
     public enum Choice { CANCEL, DISCARD, SAVE }
 
-    private static final String SAMPLE_TIME = "00:00:00";
-
     /** Space between the counter and a title beside it. */
     private static final int TITLE_GAP = 4;
 

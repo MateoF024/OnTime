@@ -93,8 +93,13 @@ public class TimerTickHandler {
 
         // The cadences only advance while something is actually ticking, so a
         // paused timer does not drift the next broadcast, exactly as before.
-        boolean anyTicking = manager.runsView().stream()
-                .anyMatch(run -> !run.isInCooldown() && run.isRunning());
+        boolean anyTicking = false;
+        for (TimerRun run : manager.runsView()) {
+            if (!run.isInCooldown() && run.isRunning()) {
+                anyTicking = true;
+                break;
+            }
+        }
 
         boolean syncNow = false;
         if (anyTicking) {

@@ -1,6 +1,5 @@
 package com.mateof24.command;
 
-import com.mateof24.config.ModConfig;
 import com.mateof24.config.TimerPositionPreset;
 import com.mateof24.manager.DisplaySlots;
 import com.mateof24.manager.TimerManager;

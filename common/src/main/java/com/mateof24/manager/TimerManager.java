@@ -316,7 +316,12 @@ public class TimerManager {
 
     /** True when any run is waiting out a repeat or sequence cooldown. */
     public boolean hasPendingCooldown() {
-        return runs.values().stream().anyMatch(TimerRun::isInCooldown);
+        // A loop rather than a stream: this is asked on the tick path, and the
+        // pipeline was the only thing being allocated there.
+        for (TimerRun run : runs.values()) {
+            if (run.isInCooldown()) return true;
+        }
+        return false;
     }
 
     /** True when this timer already has an execution registered. */

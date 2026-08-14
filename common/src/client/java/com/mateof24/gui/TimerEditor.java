@@ -425,12 +425,6 @@ public final class TimerEditor {
         return text;
     }
 
-    private static String orEmpty(String value) { return value == null ? "" : value; }
-
-    private static String orDefault(String value, String fallback) {
-        return value == null || value.isEmpty() ? fallback : value;
-    }
-
     // ---- turning edits into operations ----
 
     /** One operation and its arguments, ready to send. */

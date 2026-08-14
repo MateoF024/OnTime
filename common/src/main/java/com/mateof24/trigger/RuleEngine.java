@@ -52,9 +52,12 @@ public final class RuleEngine {
         if (server == null) return;
         TimerManager manager = TimerManager.getInstance();
 
+        // Asked once. It does not depend on the timer, and it was being asked
+        // again for every one of them -- each ask walking every run.
+        boolean cooling = manager.hasPendingCooldown();
+
         for (Timer timer : manager.timersView()) {
             boolean hasRun = manager.hasRunOf(timer.getName());
-            boolean cooling = manager.hasPendingCooldown();
 
             for (TriggerRule rule : timer.rules()) {
                 String key = keyOf(timer, rule);

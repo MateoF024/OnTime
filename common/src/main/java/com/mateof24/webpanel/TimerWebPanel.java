@@ -70,14 +70,29 @@ public class TimerWebPanel {
     /** Built on the server thread, read by the handlers. */
     private volatile String publishedState = "{}";
 
+    /**
+     * Whether the snapshot above is older than the world it describes.
+     *
+     * <p>Set instead of rebuilding whenever nobody is listening. Building it
+     * means walking every timer, every run, every player and <em>every
+     * advancement on the server</em> and serialising the lot to a string;
+     * doing that on a cadence, for no one, is the one thing on the tick path
+     * that costs a measurable amount. A request finds it stale and pays for it
+     * then, which is the only moment the answer is wanted.</p>
+     */
+    private volatile boolean stateStale = true;
+
     private final ConcurrentHashMap<String, long[]> rateWindows = new ConcurrentHashMap<>();
 
     private static final String TOKEN_HEADER = "X-OnTime-Token";
     private static final String TOKEN_QUERY = "t";
     private static final long RATE_WINDOW_MS = 10_000L;
     private static final int RATE_MAX_PER_WINDOW = 60;
-    // onServerTick runs every 4 server ticks, so 5 calls is about one second.
-    private static final int STATE_REFRESH_EVERY = 5;
+    // Called from the server tick handler, so once per tick: twenty of them is
+    // one second. It used to say "every 4 ticks", which it never was -- the
+    // snapshot was being rebuilt and pushed four times a second rather than
+    // the once this was meant to be.
+    private static final int STATE_REFRESH_EVERY = 20;
     private int stateRefreshCounter = 0;
 
     private TimerWebPanel() {}
@@ -119,7 +134,7 @@ public class TimerWebPanel {
             // Seeded here rather than waiting for the first tick: a panel
             // opened in the moment between the two would otherwise be handed
             // an empty board and believe it.
-            publishedState = AdminOps.state(server).toString();
+            republish(server);
 
             if (!listenersRegistered) {
                 // Any of them means the board moved; the panel asks for the
@@ -174,17 +189,35 @@ public class TimerWebPanel {
     public void onServerTick(MinecraftServer server) {
         if (!running) return;
         this.mcServer = server;
+        // Nobody is listening, so nothing is built: the next request will find
+        // the snapshot stale and build it then. The panel used to be ticked
+        // unconditionally to stop it serving the past, which it still cannot
+        // do -- but it can stop paying for a board no one has asked for.
+        if (sseClients.isEmpty()) {
+            stateStale = true;
+            return;
+        }
         if (++stateRefreshCounter < STATE_REFRESH_EVERY) return;
         stateRefreshCounter = 0;
-        publishedState = AdminOps.state(server).toString();
+        republish(server);
         // The clock moved. Cheap to say, and the panel decides what to do.
         broadcast("STATE", "{}");
     }
 
     private void nudge(String event) {
         if (!running) return;
-        publishedState = AdminOps.state(mcServer).toString();
+        if (sseClients.isEmpty()) {
+            stateStale = true;
+            return;
+        }
+        republish(mcServer);
         broadcast(event, "{}");
+    }
+
+    /** Rebuilds the snapshot. Only ever called with somebody to send it to. */
+    private void republish(MinecraftServer server) {
+        publishedState = AdminOps.state(server).toString();
+        stateStale = false;
     }
 
     // ==================================================================
@@ -235,14 +268,13 @@ public class TimerWebPanel {
 
     private void serveState(HttpExchange ex) throws IOException {
         if (!authorized(ex)) return;
-        String snapshot = publishedState;
-        // Belt and braces: if nothing has published yet, build one now rather
-        // than answer with an empty board that looks like the real thing.
-        if ("{}".equals(snapshot)) {
-            snapshot = AdminOps.state(mcServer).toString();
-            publishedState = snapshot;
-        }
-        send(ex, 200, "application/json", snapshot.getBytes(StandardCharsets.UTF_8));
+        // Stale means the tick handler stopped building it because no stream
+        // was open, so this is where it gets built. It also covers the case it
+        // always covered: a request arriving before anything has published,
+        // which would otherwise be answered with an empty board that looks
+        // exactly like a real one.
+        if (stateStale || "{}".equals(publishedState)) republish(mcServer);
+        send(ex, 200, "application/json", publishedState.getBytes(StandardCharsets.UTF_8));
     }
 
     /**
@@ -276,7 +308,9 @@ public class TimerWebPanel {
 
         AdminOps.Result result = AdminOps.apply(mcServer, AdminOps.Caller.web("web panel"), op, args);
         if (result.stateChanged()) {
-            publishedState = AdminOps.state(mcServer).toString();
+            // Through the same door as everything else, so the staleness flag
+            // cannot end up saying the opposite of what the snapshot is.
+            republish(mcServer);
             broadcast("STATE", "{}");
         }
 

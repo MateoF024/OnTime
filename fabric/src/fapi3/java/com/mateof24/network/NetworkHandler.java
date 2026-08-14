@@ -1,7 +1,6 @@
 package com.mateof24.network;
 
 import com.mateof24.OnTime;
-import com.mateof24.config.ModConfig;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.FriendlyByteBuf;
