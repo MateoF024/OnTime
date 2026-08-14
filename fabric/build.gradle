@@ -4,22 +4,10 @@ plugins {
 
 def minecraftVer = project.minecraft_version
 
-// NOTE: the v1.21.6 family must be checked BEFORE v1.21.1, otherwise
-// startsWith("1.21.1") also matches "1.21.10" and picks the wrong family.
-String versionType
-if (minecraftVer.startsWith("1.20.1")) {
-    versionType = "v1.20.1"
-} else if (minecraftVer.startsWith("1.21.6") || minecraftVer.startsWith("1.21.7") ||
-        minecraftVer.startsWith("1.21.8") || minecraftVer.startsWith("1.21.9") ||
-        minecraftVer.startsWith("1.21.10")) {
-    versionType = "v1.21.6"
-} else if (minecraftVer.startsWith("1.21.1") || minecraftVer.startsWith("1.21.2") ||
-        minecraftVer.startsWith("1.21.3") || minecraftVer.startsWith("1.21.4") ||
-        minecraftVer.startsWith("1.21.5")) {
-    versionType = "v1.21.1"
-} else {
-    versionType = "v1.21.1"
-}
+// One family on this branch. The fork that used to be here chose between four
+// of them, three of which are built from 'main'.
+String versionType = "v1.20.1"
+def helpSystemVer  = "v1"
 
 def vKey = versionType.replace('.', '_')
 
@@ -52,6 +40,7 @@ sourceSets {
             srcDirs = [
                     'src/main/java',
                     '../common/src/main/java',
+                    "../common/src/${helpSystemVer}/java",
                     "src/${versionType}/main/java"
             ]
         }
@@ -67,8 +56,11 @@ sourceSets {
 
     client {
         java {
+            // Where every client class will live once F6 moves it out of
+            // the loaders, exactly as it sits on 'main'.
             srcDirs = [
                     'src/client/java',
+                    '../common/src/client/java',
                     "src/${versionType}/client/java"
             ]
         }
@@ -104,8 +96,10 @@ dependencies {
         modCompileOnly "eu.pb4:placeholder-api:${placeholderApiVer}"
     }
 
-    implementation project(path: ':common', configuration: 'namedElements')
-    include project(':common')
+    // Compiled from source into this jar, not carried inside it. The mod
+    // ships no nested anything -- which is also how 'main' builds, and why
+    // HelpSystem looked missing here: it was inside META-INF/jars.
+    compileOnly project(path: ':common', configuration: 'namedElements')
 }
 
 def minecraftRange = project.findProperty("mc_range_fabric_${vKey}")

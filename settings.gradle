@@ -14,20 +14,10 @@ plugins {
 
 rootProject.name = 'ontime'
 
-def minecraftVer = settings.extensions.extraProperties.has('minecraft_version')
-        ? settings.extensions.extraProperties.get('minecraft_version')
-        : new File(rootDir, 'gradle.properties').with { f ->
-    def props = new Properties()
-    f.withInputStream { props.load(it) }
-    props.getProperty('minecraft_version')
-}
-
+// This branch is 1.20.1 and nothing else. The other families are built from
+// 'main', which has its own seven of them; the fork that used to be here chose
+// between legacyforge and a NeoForge module that no build on this branch ever
+// compiled.
 include('common')
-
-if (minecraftVer.startsWith("1.20.1")) {
-    include('fabric')
-    include('legacyforge')
-} else {
-    include('fabric')
-    include('forge')
-}
+include('fabric')
+include('legacyforge')

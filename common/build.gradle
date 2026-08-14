@@ -5,19 +5,12 @@ plugins {
 
 def minecraftVer = project.minecraft_version
 
-String versionType
-if (minecraftVer.startsWith("1.20.1")) {
-    versionType = "v1.20.1"
-} else if (minecraftVer.startsWith("1.21.6") || minecraftVer.startsWith("1.21.7") ||
-        minecraftVer.startsWith("1.21.8") || minecraftVer.startsWith("1.21.9") ||
-        minecraftVer.startsWith("1.21.10")) {
-    versionType = "v1.21.6"
-} else {
-    versionType = "v1.21.1"
-}
-
-def helpSystemVer = (versionType == "v1.21.6") ? "v2" : "v1"
-def javaVer = (versionType == "v1.20.1") ? 17 : 21
+// One family on this branch, so one answer each. Java 17 is what 1.20.1
+// runs on, and it is also the ceiling for what can be written here: 'main'
+// compiles at 21 but deliberately uses nothing that needs it.
+String versionType = "v1.20.1"
+def helpSystemVer = "v1"
+def javaVer = 17
 
 base {
     archivesName = "${project.archives_base_name}-common"

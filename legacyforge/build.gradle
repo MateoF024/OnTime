@@ -49,10 +49,13 @@ minecraft {
 sourceSets {
     main {
         java {
+            // Forge 1.20.1 has no separate client source set, so the shared
+            // client sources join main here rather than a client one.
             srcDirs = [
                     'src/main/java',
                     'src/client/java',
                     '../common/src/main/java',
+                    '../common/src/client/java',
                     "../common/src/${helpSystemVer}/java"
             ]
         }
