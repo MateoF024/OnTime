@@ -1,34 +1,36 @@
 package com.mateof24.command;
 
-import com.mateof24.config.TimerPositionPreset;
-import com.mateof24.platform.Services;
+import com.mateof24.api.RunMode;
+
+import com.mateof24.compat.VanillaCompat;
 import com.mateof24.config.ModConfig;
+import com.mateof24.config.TimerPositionPreset;
 import com.mateof24.manager.TimerManager;
-import com.mateof24.storage.PlayerPreferences;
-import com.mateof24.storage.TimerStorage;
-import com.mateof24.timer.Timer;
-import com.mateof24.tick.TimerTickHandler;
 import com.mateof24.permission.PermissionHelper;
 import com.mateof24.permission.PermissionNodes;
-import com.mateof24.webpanel.TimerWebPanel;
+import com.mateof24.storage.TimerStorage;
+import com.mateof24.timer.Timer;
+import com.mateof24.trigger.Trigger;
+import com.mateof24.trigger.Who;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.Component;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
 import net.minecraft.commands.arguments.EntityArgument;
-import com.mojang.brigadier.arguments.FloatArgumentType;
-import net.minecraft.commands.arguments.ResourceLocationArgument;
-import net.minecraft.commands.SharedSuggestionProvider;
-import net.minecraft.core.registries.BuiltInRegistries;
 
+
+/**
+ * Registers the {@code /timer} command tree. The subcommand handlers live in
+ * the per-area classes of this package ({@link LifecycleCommands},
+ * {@link DisplayCommands}, {@link BehaviorCommands}, {@link SharingCommands},
+ * {@link WebPanelCommands}, {@link InfoCommands}); this class only owns the
+ * tree topology, the shared suggestion providers and small shared helpers.
+ */
 public class TimerCommands {
 
     private static class TimerNameSuggestionProvider implements com.mojang.brigadier.suggestion.SuggestionProvider<CommandSourceStack> {
@@ -37,19 +39,82 @@ public class TimerCommands {
                 CommandContext<CommandSourceStack> context,
                 com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
 
-            Map<String, Timer> timers = TimerManager.getInstance().getAllTimers();
+            // No defensive copy: this runs on the server thread once per
+            // keystroke, and only names are read.
+            String remaining = builder.getRemaining().toLowerCase();
 
-            for (String timerName : timers.keySet()) {
-                if (timerName.toLowerCase().startsWith(builder.getRemaining().toLowerCase())) {
-                    builder.suggest(timerName);
-                }
+            // Prefixes first, then anything containing what was typed, the way
+            // vanilla finds an id from the middle of it. Matching only on the
+            // prefix meant you had to remember how a timer's name began.
+            java.util.List<String> contains = new java.util.ArrayList<>();
+            for (Timer timer : TimerManager.getInstance().timersView()) {
+                String lower = timer.getName().toLowerCase();
+                if (lower.startsWith(remaining)) builder.suggest(timer.getName());
+                else if (!remaining.isEmpty() && lower.contains(remaining)) contains.add(timer.getName());
             }
+            contains.forEach(builder::suggest);
 
             return builder.buildFuture();
         }
     }
 
-    private static String formatTime(long totalSeconds) {
+    /**
+     * One position branch of /timer title: <pos> clear | <pos> <text...>.
+     * The 'clear' literal wins over the greedy text (Brigadier priority) —
+     * a literal title saying "clear" needs the JSON form {"text":"clear"}.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> titlePosition(String position) {
+        return Commands.literal(position)
+                .then(Commands.literal("clear")
+                        .executes(ctx -> BehaviorCommands.clearTitle(ctx, position)))
+                .then(Commands.argument("text", StringArgumentType.greedyString())
+                        .executes(ctx -> BehaviorCommands.setTitle(ctx, position,
+                                StringArgumentType.getString(ctx, "text"))));
+    }
+
+    /** A run-scoped lifecycle handler: {@code /timer <verb> [<name>] [<targets>]}. */
+    @FunctionalInterface
+    private interface SelectionCommand {
+        int run(CommandContext<CommandSourceStack> ctx, String name,
+                java.util.Collection<net.minecraft.server.level.ServerPlayer> targets)
+                throws com.mojang.brigadier.exceptions.CommandSyntaxException;
+    }
+
+    /**
+     * Builds one of the four lifecycle branches, all of which share the same
+     * shape: no argument (every run), a timer name, or a name and a selector.
+     *
+     * <p>The name argument is declared before the bare selector one on purpose.
+     * Brigadier tries argument children in declaration order, so a plain word
+     * means the timer of that name; {@code @}-selectors fail the word parse and
+     * fall through to the selector branch, which is what makes
+     * {@code /timer stop @a} work without making {@code /timer stop race}
+     * ambiguous.</p>
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> selection(
+            String verb, String permission,
+            com.mojang.brigadier.Command<CommandSourceStack> bare,
+            SelectionCommand selective) {
+        return Commands.literal(verb)
+                .requires(source -> PermissionHelper.hasPermission(source, permission, 4))
+                // "all" is spelled out. The bare verb used to mean the 4.0.0
+                // toggle, so /timer pause could resume something.
+                .then(Commands.literal("all").executes(bare))
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .suggests(TIMER_SUGGESTIONS)
+                        .executes(ctx -> selective.run(ctx, StringArgumentType.getString(ctx, "name"), null))
+                        .then(Commands.argument("targets", EntityArgument.players())
+                                .executes(ctx -> selective.run(ctx,
+                                        StringArgumentType.getString(ctx, "name"),
+                                        EntityArgument.getPlayers(ctx, "targets")))
+                        )
+                )
+                .then(Commands.argument("targets", EntityArgument.players())
+                        .executes(ctx -> selective.run(ctx, null, EntityArgument.getPlayers(ctx, "targets")))
+                );
+    }
+
+    static String formatTime(long totalSeconds) {
         long hours = totalSeconds / 3600;
         long minutes = (totalSeconds % 3600) / 60;
         long seconds = totalSeconds % 60;
@@ -58,13 +123,221 @@ public class TimerCommands {
 
     private static final TimerNameSuggestionProvider TIMER_SUGGESTIONS = new TimerNameSuggestionProvider();
 
+    // ---- /timer trigger <name> add ... ----
+    //
+    // Every kind ends in the same two literals. The action used to be a
+    // separate argument on some kinds, a literal baked into the node name on
+    // others (if / if_start), and absent on the scoreboard branch, which could
+    // only ever end a timer.
+
+    /** Builds the trigger once the arguments and the subject are both known. */
+    @FunctionalInterface
+    private interface TriggerFactory {
+        Trigger build(CommandContext<CommandSourceStack> ctx, Who who);
+    }
+
+    /**
+     * One action leaf, and everything that can follow it.
+     *
+     * <p>Bare, it means the default subject — the timer's own audience, any
+     * one of them — which is what every trigger meant before there was a
+     * choice. Spelling out a quantifier and a subject after it is what makes
+     * "when both of them do" a different thing from "when either does".</p>
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> actionNode(
+            String literal, TriggerFactory make) {
+        LiteralArgumentBuilder<CommandSourceStack> node = Commands.literal(literal)
+                .executes(ctx -> BehaviorCommands.addTrigger(ctx, make.build(ctx, Who.DEFAULT)));
+
+        for (Who.Quantifier quantifier : Who.Quantifier.values()) {
+            if (quantifier == Who.Quantifier.AT_LEAST) {
+                node = node.then(Commands.literal(quantifier.lower())
+                        .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                                .then(scopeNodes(make, quantifier, true))
+                                .then(scopeValueNodes(make, quantifier, true))));
+            } else {
+                node = node.then(Commands.literal(quantifier.lower())
+                        .then(scopeNodes(make, quantifier, false))
+                        .then(scopeValueNodes(make, quantifier, false)));
+            }
+        }
+        return node;
+    }
+
+    /** The two subjects that name nobody: they are complete on their own. */
+    private static LiteralArgumentBuilder<CommandSourceStack> scopeNodes(
+            TriggerFactory make, Who.Quantifier quantifier, boolean counted) {
+        LiteralArgumentBuilder<CommandSourceStack> first = null;
+        for (Who.Scope scope : Who.Scope.values()) {
+            if (scope.needsValue()) continue;
+            LiteralArgumentBuilder<CommandSourceStack> node = Commands.literal(scope.lower())
+                    .executes(ctx -> BehaviorCommands.addTrigger(ctx, make.build(ctx,
+                            new Who(scope, "", quantifier, counted
+                                    ? IntegerArgumentType.getInteger(ctx, "count") : 1))));
+            first = first == null ? node : first.then(node);
+        }
+        return first;
+    }
+
+    /**
+     * The two that do name somebody, both greedy and both last.
+     *
+     * <p>A list of names has commas in it and a selector has brackets, so
+     * neither is a word. Greedy is also why they cannot be followed by
+     * anything.</p>
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> scopeValueNodes(
+            TriggerFactory make, Who.Quantifier quantifier, boolean counted) {
+        LiteralArgumentBuilder<CommandSourceStack> first = null;
+        for (Who.Scope scope : Who.Scope.values()) {
+            if (!scope.needsValue()) continue;
+            LiteralArgumentBuilder<CommandSourceStack> node = Commands.literal(scope.lower())
+                    .then(Commands.argument("who", StringArgumentType.greedyString())
+                            .suggests(scope == Who.Scope.PLAYERS
+                                    ? TimerCommands::suggestPlayerNames : TimerCommands::suggestSelectors)
+                            .executes(ctx -> BehaviorCommands.addTrigger(ctx, make.build(ctx,
+                                    new Who(scope, StringArgumentType.getString(ctx, "who"), quantifier,
+                                            counted ? IntegerArgumentType.getInteger(ctx, "count") : 1)))));
+            first = first == null ? node : first.then(node);
+        }
+        return first;
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> bareTrigger(String literal, Trigger.Kind kind) {
+        return Commands.literal(literal)
+                .then(actionNode("start", (c, who) -> Trigger.of(kind, Trigger.Action.START, "", who)))
+                .then(actionNode("finish", (c, who) -> Trigger.of(kind, Trigger.Action.FINISH, "", who)));
+    }
+
+    /** A kind narrowed by a resource id, with completion for it. */
+    private static LiteralArgumentBuilder<CommandSourceStack> idTrigger(
+            String literal, Trigger.Kind kind,
+            com.mojang.brigadier.suggestion.SuggestionProvider<CommandSourceStack> suggestions) {
+        return Commands.literal(literal)
+                .then(Commands.argument("id", VanillaCompat.idArgument())
+                        .suggests(suggestions)
+                        .then(actionNode("start", (c, who) -> Trigger.of(kind, Trigger.Action.START,
+                                VanillaCompat.getIdArgument(c, "id"), who)))
+                        .then(actionNode("finish", (c, who) -> Trigger.of(kind, Trigger.Action.FINISH,
+                                VanillaCompat.getIdArgument(c, "id"), who))));
+    }
+
+    /** FTB ids are opaque hex strings, so there is nothing to complete. */
+    private static LiteralArgumentBuilder<CommandSourceStack> wordTrigger(String literal, Trigger.Kind kind) {
+        return Commands.literal(literal)
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(actionNode("start", (c, who) -> Trigger.of(kind, Trigger.Action.START,
+                                StringArgumentType.getString(c, "id"), who)))
+                        .then(actionNode("finish", (c, who) -> Trigger.of(kind, Trigger.Action.FINISH,
+                                StringArgumentType.getString(c, "id"), who))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> scoreboardAction(String literal, Trigger.Action action) {
+        return actionNode(literal, (c, who) -> Trigger.scoreboard(action,
+                StringArgumentType.getString(c, "objective"),
+                IntegerArgumentType.getInteger(c, "score"), who));
+    }
+
+    /**
+     * The expression takes no subject.
+     *
+     * <p>It is one question asked of the server, not of a player, so there is
+     * nobody for a quantifier to count. Everything a per-player condition needs
+     * belongs in the expression itself.</p>
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> expressionAction(String literal, Trigger.Action action) {
+        return Commands.literal(literal)
+                .then(Commands.argument("expression", StringArgumentType.greedyString())
+                        .executes(ctx -> BehaviorCommands.addTrigger(ctx,
+                                Trigger.expression(action, StringArgumentType.getString(ctx, "expression")))));
+    }
+
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestPlayerNames(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        net.minecraft.server.MinecraftServer server = ctx.getSource().getServer();
+        if (server == null) return builder.buildFuture();
+        String remaining = builder.getRemaining().toLowerCase();
+        // After a comma the completion is for the next name, not the whole list.
+        int comma = remaining.lastIndexOf(',');
+        String head = comma < 0 ? "" : remaining.substring(0, comma + 1);
+        String tail = comma < 0 ? remaining : remaining.substring(comma + 1).trim();
+        for (net.minecraft.server.level.ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (player.getScoreboardName().toLowerCase().startsWith(tail)) {
+                builder.suggest(head + player.getScoreboardName());
+            }
+        }
+        return builder.buildFuture();
+    }
+
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestSelectors(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        String remaining = builder.getRemaining().toLowerCase();
+        for (String option : new String[]{"@a", "@a[team=]", "@a[tag=]", "@a[gamemode=survival]"}) {
+            if (option.startsWith(remaining)) builder.suggest(option);
+        }
+        return builder.buildFuture();
+    }
+
+    /**
+     * Every advancement the server knows.
+     *
+     * <p>There were none: the id argument was left bare, so the one trigger
+     * kind whose value nobody can guess was the one you had to type blind.</p>
+     */
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestAdvancements(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        net.minecraft.server.MinecraftServer server = ctx.getSource().getServer();
+        if (server == null) return builder.buildFuture();
+        String remaining = builder.getRemaining().toLowerCase();
+        java.util.List<String> contains = new java.util.ArrayList<>();
+        // Same as everywhere else on this branch: Advancement, not a holder.
+        for (net.minecraft.advancements.Advancement advancement : server.getAdvancements().getAllAdvancements()) {
+            String id = advancement.getId().toString();
+            String lower = id.toLowerCase();
+            if (lower.startsWith(remaining)) builder.suggest(id);
+            else if (!remaining.isEmpty() && lower.contains(remaining)) contains.add(id);
+        }
+        contains.forEach(builder::suggest);
+        return builder.buildFuture();
+    }
+
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestObjectives(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        net.minecraft.server.MinecraftServer server = ctx.getSource().getServer();
+        if (server == null) return builder.buildFuture();
+        String remaining = builder.getRemaining().toLowerCase();
+        server.getScoreboard().getObjectives().forEach(objective -> {
+            if (objective.getName().toLowerCase().startsWith(remaining)) builder.suggest(objective.getName());
+        });
+        return builder.buildFuture();
+    }
+
+    /**
+     * The presets, and "reset" to hand the timer back to the server default.
+     *
+     * <p>One list of one kind of thing. The two providers this replaces each
+     * poured presets, values, timer names and "default" into the same
+     * completion, because the argument underneath them had to accept all of
+     * it.</p>
+     */
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestPresets(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        String remaining = builder.getRemaining().toLowerCase();
+        if ("reset".startsWith(remaining)) builder.suggest("reset");
+        for (TimerPositionPreset preset : TimerPositionPreset.values()) {
+            String name = preset.name().toLowerCase();
+            if (name.startsWith(remaining)) builder.suggest(name);
+        }
+        return builder.buildFuture();
+    }
+
     private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestDimensions(
             CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
         net.minecraft.server.MinecraftServer server = ctx.getSource().getServer();
         if (server != null) {
             String remaining = builder.getRemaining().toLowerCase();
             for (net.minecraft.server.level.ServerLevel level : server.getAllLevels()) {
-                String dimId = level.dimension().location().toString();
+                String dimId = VanillaCompat.dimensionId(level);
                 if (dimId.toLowerCase().startsWith(remaining)) builder.suggest(dimId);
             }
         }
@@ -80,18 +353,19 @@ public class TimerCommands {
                                 .then(Commands.argument("hours", IntegerArgumentType.integer(0))
                                         .then(Commands.argument("minutes", IntegerArgumentType.integer(0, 59))
                                                 .then(Commands.argument("seconds", IntegerArgumentType.integer(0, 59))
-                                                        .executes(ctx -> createTimer(ctx, false))
+                                                        .executes(ctx -> LifecycleCommands.createTimer(ctx, false))
+                                                        // The direction has to be spelled before a command can
+                                                        // follow. Letting the command come straight after the
+                                                        // seconds meant Brigadier tried the boolean first and
+                                                        // swallowed the first word of any command beginning
+                                                        // with "true" or "false".
                                                         .then(Commands.argument("countUp", BoolArgumentType.bool())
-                                                                .executes(ctx -> createTimer(ctx, BoolArgumentType.getBool(ctx, "countUp")))
+                                                                .executes(ctx -> LifecycleCommands.createTimer(ctx, BoolArgumentType.getBool(ctx, "countUp")))
                                                                 .then(Commands.argument("command", StringArgumentType.greedyString())
-                                                                        .executes(ctx -> createTimerWithCommand(ctx,
+                                                                        .executes(ctx -> LifecycleCommands.createTimerWithCommand(ctx,
                                                                                 BoolArgumentType.getBool(ctx, "countUp"),
                                                                                 StringArgumentType.getString(ctx, "command")))
                                                                 )
-                                                        )
-                                                        .then(Commands.argument("command", StringArgumentType.greedyString())
-                                                                .executes(ctx -> createTimerWithCommand(ctx, false,
-                                                                        StringArgumentType.getString(ctx, "command")))
                                                         )
                                                 )
                                         )
@@ -105,7 +379,7 @@ public class TimerCommands {
                                 .then(Commands.argument("hours", IntegerArgumentType.integer(0))
                                         .then(Commands.argument("minutes", IntegerArgumentType.integer(0, 59))
                                                 .then(Commands.argument("seconds", IntegerArgumentType.integer(0, 59))
-                                                        .executes(TimerCommands::setTimer)
+                                                        .executes(LifecycleCommands::setTimer)
                                                 )
                                         )
                                 )
@@ -115,18 +389,58 @@ public class TimerCommands {
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_START, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
-                                .executes(TimerCommands::startTimer)
+                                // No selector: a global run, seen by whoever
+                                // connects later. Exactly the 4.0.0 shape.
+                                .executes(ctx -> RunCommands.start(ctx, null, com.mateof24.api.RunMode.SHARED))
+                                .then(Commands.argument("targets", EntityArgument.players())
+                                        .executes(ctx -> RunCommands.start(ctx,
+                                                EntityArgument.getPlayers(ctx, "targets"),
+                                                com.mateof24.api.RunMode.SHARED))
+                                        .then(Commands.literal("shared")
+                                                .executes(ctx -> RunCommands.start(ctx,
+                                                        EntityArgument.getPlayers(ctx, "targets"),
+                                                        com.mateof24.api.RunMode.SHARED)))
+                                        .then(Commands.literal("each")
+                                                .executes(ctx -> RunCommands.start(ctx,
+                                                        EntityArgument.getPlayers(ctx, "targets"),
+                                                        com.mateof24.api.RunMode.EACH)))
+                                )
                         )
                 )
-                .then(Commands.literal("pause")
-                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_PAUSE, 4))
-                        .executes(TimerCommands::pauseTimer)
+                .then(selection("pause", PermissionNodes.TIMER_PAUSE,
+                        ctx -> RunCommands.setRunning(ctx, Boolean.FALSE, null, null),
+                        (ctx, name, targets) -> RunCommands.setRunning(ctx, Boolean.FALSE, name, targets)))
+                .then(selection("resume", PermissionNodes.TIMER_PAUSE,
+                        ctx -> RunCommands.setRunning(ctx, Boolean.TRUE, null, null),
+                        (ctx, name, targets) -> RunCommands.setRunning(ctx, Boolean.TRUE, name, targets)))
+                // No permission of its own: it only replays something the
+                // caller already had the permission to stage, and the closure
+                // belongs to them alone.
+                .then(Commands.literal("confirm")
+                        .executes(RunCommands::confirm)
+                )
+                .then(Commands.literal("audience")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_AUDIENCE, 4))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(RunCommands::audienceList)
+                                .then(Commands.literal("list")
+                                        .executes(RunCommands::audienceList))
+                                .then(Commands.literal("add")
+                                        .then(Commands.argument("targets", EntityArgument.players())
+                                                .executes(ctx -> RunCommands.audienceEdit(ctx, true,
+                                                        EntityArgument.getPlayers(ctx, "targets")))))
+                                .then(Commands.literal("remove")
+                                        .then(Commands.argument("targets", EntityArgument.players())
+                                                .executes(ctx -> RunCommands.audienceEdit(ctx, false,
+                                                        EntityArgument.getPlayers(ctx, "targets")))))
+                        )
                 )
                 .then(Commands.literal("remove")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_REMOVE, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
-                                .executes(TimerCommands::removeTimer)
+                                .executes(LifecycleCommands::removeTimer)
                         )
                 )
                 .then(Commands.literal("add")
@@ -136,7 +450,7 @@ public class TimerCommands {
                                 .then(Commands.argument("hours", IntegerArgumentType.integer(0))
                                         .then(Commands.argument("minutes", IntegerArgumentType.integer(0, 59))
                                                 .then(Commands.argument("seconds", IntegerArgumentType.integer(0, 59))
-                                                        .executes(TimerCommands::addTime)
+                                                        .executes(LifecycleCommands::addTime)
                                                 )
                                         )
                                 )
@@ -147,7 +461,7 @@ public class TimerCommands {
                                 .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_CREATE, 4))
                                 .then(Commands.argument("name", StringArgumentType.word())
                                         .then(Commands.argument("expression", StringArgumentType.greedyString())
-                                                .executes(ctx -> createTimerWithExpr(ctx, false))
+                                                .executes(ctx -> LifecycleCommands.createTimerWithExpr(ctx, false))
                                         )
                                 )
                         )
@@ -156,7 +470,7 @@ public class TimerCommands {
                                 .then(Commands.argument("name", StringArgumentType.word())
                                         .suggests(TIMER_SUGGESTIONS)
                                         .then(Commands.argument("expression", StringArgumentType.greedyString())
-                                                .executes(TimerCommands::setTimerExpr)
+                                                .executes(LifecycleCommands::setTimerExpr)
                                         )
                                 )
                         )
@@ -165,117 +479,165 @@ public class TimerCommands {
                                 .then(Commands.argument("name", StringArgumentType.word())
                                         .suggests(TIMER_SUGGESTIONS)
                                         .then(Commands.argument("expression", StringArgumentType.greedyString())
-                                                .executes(TimerCommands::addTimerExpr)
+                                                .executes(LifecycleCommands::addTimerExpr)
                                         )
                                 )
                         )
                 )
                 .then(Commands.literal("list")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_LIST, 4))
-                        .executes(TimerCommands::listTimers)
+                        .executes(InfoCommands::listTimers)
                 )
+                // Called 'gui' rather than 'panel' so it cannot be confused
+                // with /timer webpanel, which is the other surface entirely.
+                .then(Commands.literal("gui")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_GUI, 4))
+                        .executes(InfoCommands::openPanel)
+                )
+                .then(Commands.literal("status")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_STATUS, 4))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(InfoCommands::status)
+                        )
+                )
+                // Both are player preferences, so they take players and never a
+                // timer. Say who and say what: the bare form toggled whoever
+                // typed it and the targets-only form toggled them, so the same
+                // line could mute or unmute depending on the state it found.
+                // A command block cannot reason about that.
                 .then(Commands.literal("silent")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SILENT, 4))
-                        .executes(TimerCommands::toggleSilentSelf)
                         .then(Commands.argument("targets", EntityArgument.players())
-                                .executes(TimerCommands::toggleSilentTargets)
+                                .then(Commands.literal("mute")
+                                        .executes(ctx -> DisplayCommands.applySilentTargets(ctx, Boolean.TRUE)))
+                                .then(Commands.literal("unmute")
+                                        .executes(ctx -> DisplayCommands.applySilentTargets(ctx, Boolean.FALSE)))
+                                .then(Commands.literal("toggle")
+                                        .executes(ctx -> DisplayCommands.applySilentTargets(ctx, null)))
                         )
                 )
                 .then(Commands.literal("hide")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_HIDE, 4))
-                        .executes(TimerCommands::toggleHideSelf)
-                        .then(Commands.argument("targets", net.minecraft.commands.arguments.EntityArgument.players())
-                                .executes(TimerCommands::toggleHideTargets)
+                        .then(Commands.argument("targets", EntityArgument.players())
+                                .then(Commands.literal("show")
+                                        .executes(ctx -> DisplayCommands.applyHideTargets(ctx, Boolean.TRUE)))
+                                .then(Commands.literal("hide")
+                                        .executes(ctx -> DisplayCommands.applyHideTargets(ctx, Boolean.FALSE)))
+                                .then(Commands.literal("toggle")
+                                        .executes(ctx -> DisplayCommands.applyHideTargets(ctx, null)))
                         )
                 )
-                .then(Commands.literal("stop")
-                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_STOP, 4))
-                        .executes(TimerCommands::stopTimer)
-                )
-                .then(Commands.literal("reset")
-                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_RESET, 4))
-                        .executes(TimerCommands::resetCurrentTimer)
-                        .then(Commands.argument("name", StringArgumentType.word())
-                                .suggests(TIMER_SUGGESTIONS)
-                                .executes(TimerCommands::resetNamedTimer)
-                        )
-                )
+                .then(selection("stop", PermissionNodes.TIMER_STOP,
+                        ctx -> RunCommands.stop(ctx, null, null), RunCommands::stop))
+                .then(selection("reset", PermissionNodes.TIMER_RESET,
+                        ctx -> RunCommands.reset(ctx, null, null), RunCommands::reset))
                 .then(Commands.literal("help")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_HELP, 4))
                         .executes(ctx -> HelpSystem.showHelpPage(ctx.getSource(), 1))
-                        .then(Commands.argument("pageOrCommand", StringArgumentType.word())
-                                .executes(ctx -> {
-                                    String arg = StringArgumentType.getString(ctx, "pageOrCommand");
-                                    try {
-                                        int page = Integer.parseInt(arg);
-                                        return HelpSystem.showHelpPage(ctx.getSource(), page);
-                                    } catch (NumberFormatException e) {
-                                        return HelpSystem.showCommandHelp(ctx.getSource(), arg);
-                                    }
-                                })
+                        // Two arguments of different types rather than one word
+                        // the handler re-parses in a try/catch. Brigadier picks
+                        // the integer when the token is one, and a page number
+                        // out of range is now refused instead of silently
+                        // looked up as the name of a subcommand.
+                        .then(Commands.argument("page", IntegerArgumentType.integer(1))
+                                .executes(ctx -> HelpSystem.showHelpPage(ctx.getSource(),
+                                        IntegerArgumentType.getInteger(ctx, "page")))
                         )
-                )
-                .then(Commands.literal("position")
-                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_POSITION, 4))
-                        .then(Commands.argument("preset", StringArgumentType.word())
-                                .suggests((context, builder) -> {
-                                    for (TimerPositionPreset preset : TimerPositionPreset.values()) {
-                                        String presetName = preset.name().toLowerCase();
-                                        if (presetName.startsWith(builder.getRemaining().toLowerCase()))
-                                            builder.suggest(presetName);
+                        .then(Commands.argument("subcommand", StringArgumentType.word())
+                                .suggests((ctx, builder) -> {
+                                    String remaining = builder.getRemaining().toLowerCase();
+                                    for (String topic : HelpSystem.topics()) {
+                                        if (topic.startsWith(remaining)) builder.suggest(topic);
                                     }
                                     return builder.buildFuture();
                                 })
-                                .executes(TimerCommands::setPosition)
+                                .executes(ctx -> HelpSystem.showCommandHelp(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "subcommand")))
                         )
                 )
+                // position and scale read the timer first and nothing else.
+                // They used to accept a preset or a value in that same slot to
+                // mean "the global default", which is why one argument had to
+                // serve two shapes and why the suggestions offered names and
+                // values mixed together. Server defaults are set from the
+                // panel, not by overloading a per-timer command.
+                .then(Commands.literal("position")
+                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_POSITION, 4))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(DisplayCommands::positionView)
+                                .then(Commands.argument("preset", StringArgumentType.word())
+                                        .suggests(TimerCommands::suggestPresets)
+                                        .executes(DisplayCommands::positionSet)
+                                        .then(Commands.argument("x", IntegerArgumentType.integer())
+                                                .then(Commands.argument("y", IntegerArgumentType.integer(0))
+                                                        .executes(ctx -> DisplayCommands.positionCustom(ctx,
+                                                                IntegerArgumentType.getInteger(ctx, "x"),
+                                                                IntegerArgumentType.getInteger(ctx, "y")))
+                                                )
+                                        )
+                                )
+                        )
+                )
+                // Sound belonged to no timer at all: it wrote the server
+                // default and there was no way to give one timer its own.
                 .then(Commands.literal("sound")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SOUND, 4))
-                        .then(Commands.argument("soundId", ResourceLocationArgument.id())
-                                .suggests((context, builder) ->
-                                        SharedSuggestionProvider.suggestResource(
-                                                BuiltInRegistries.SOUND_EVENT.keySet(), builder))
-                                .executes(ctx -> setSoundDefault(ctx,
-                                        ResourceLocationArgument.getId(ctx, "soundId").toString()))
-                                .then(Commands.argument("volume", FloatArgumentType.floatArg(0.0f, 1.0f))
-                                        .executes(ctx -> setSoundWithVolume(ctx,
-                                                ResourceLocationArgument.getId(ctx, "soundId").toString(),
-                                                FloatArgumentType.getFloat(ctx, "volume")))
-                                        .then(Commands.argument("pitch", FloatArgumentType.floatArg(0.5f, 2.0f))
-                                                .executes(ctx -> setSoundFull(ctx,
-                                                        ResourceLocationArgument.getId(ctx, "soundId").toString(),
-                                                        FloatArgumentType.getFloat(ctx, "volume"),
-                                                        FloatArgumentType.getFloat(ctx, "pitch")))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(TIMER_SUGGESTIONS)
+                                .executes(DisplayCommands::soundView)
+                                .then(Commands.literal("reset")
+                                        .executes(DisplayCommands::soundReset)
+                                )
+                                .then(Commands.argument("soundId", VanillaCompat.idArgument())
+                                        .suggests((context, builder) ->
+                                                VanillaCompat.suggestSoundEvents(builder))
+                                        .executes(ctx -> DisplayCommands.setSound(ctx,
+                                                VanillaCompat.getIdArgument(ctx, "soundId"), 0.75f, 2.0f))
+                                        .then(Commands.argument("volume", FloatArgumentType.floatArg(0.0f, 1.0f))
+                                                .executes(ctx -> DisplayCommands.setSound(ctx,
+                                                        VanillaCompat.getIdArgument(ctx, "soundId"),
+                                                        FloatArgumentType.getFloat(ctx, "volume"), 2.0f))
+                                                .then(Commands.argument("pitch", FloatArgumentType.floatArg(0.5f, 2.0f))
+                                                        .executes(ctx -> DisplayCommands.setSound(ctx,
+                                                                VanillaCompat.getIdArgument(ctx, "soundId"),
+                                                                FloatArgumentType.getFloat(ctx, "volume"),
+                                                                FloatArgumentType.getFloat(ctx, "pitch")))
+                                                )
                                         )
                                 )
                         )
                 )
                 .then(Commands.literal("scale")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SCALE, 4))
-                        .then(Commands.argument("scale", FloatArgumentType.floatArg(0.1f, 5.0f))
-                                .executes(ctx -> setScale(ctx, FloatArgumentType.getFloat(ctx, "scale")))
-                        )
-                )
-                .then(Commands.literal("command")
-                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_COMMAND, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
-                                .executes(TimerCommands::viewTimerCommand)
-                                .then(Commands.argument("command", StringArgumentType.greedyString())
-                                        .executes(ctx -> updateTimerCommand(ctx,
-                                                StringArgumentType.getString(ctx, "command")))
+                                .executes(DisplayCommands::scaleView)
+                                // A float argument, not a word the handler
+                                // reparses: the range is enforced by the parser
+                                // and a bad value is refused before it runs.
+                                .then(Commands.argument("value", FloatArgumentType.floatArg(0.1f, 5.0f))
+                                        .executes(DisplayCommands::scaleSet)
+                                )
+                                .then(Commands.literal("reset")
+                                        .executes(DisplayCommands::scaleReset)
                                 )
                         )
                 )
+                // /timer command is gone. It held one command, "the" finish
+                // command, alongside the list that can hold several -- the same
+                // idea kept in two places since 4.0.0 grew the list. A finish
+                // command is now an entry of the list like any other.
                 .then(Commands.literal("commands")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_COMMAND, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
-                                .executes(TimerCommands::listScheduledCommands)
+                                .executes(BehaviorCommands::listScheduledCommands)
                                 .then(Commands.literal("add")
                                         .then(Commands.literal("finish")
                                                 .then(Commands.argument("command", StringArgumentType.greedyString())
-                                                        .executes(ctx -> addFinishCommand(ctx,
+                                                        .executes(ctx -> BehaviorCommands.addFinishCommand(ctx,
                                                                 StringArgumentType.getString(ctx, "command")))
                                                 )
                                         )
@@ -283,7 +645,7 @@ public class TimerCommands {
                                                 .then(Commands.argument("minutes", IntegerArgumentType.integer(0, 59))
                                                         .then(Commands.argument("seconds", IntegerArgumentType.integer(0, 59))
                                                                 .then(Commands.argument("command", StringArgumentType.greedyString())
-                                                                        .executes(ctx -> addScheduledCommand(ctx,
+                                                                        .executes(ctx -> BehaviorCommands.addScheduledCommand(ctx,
                                                                                 IntegerArgumentType.getInteger(ctx, "hours"),
                                                                                 IntegerArgumentType.getInteger(ctx, "minutes"),
                                                                                 IntegerArgumentType.getInteger(ctx, "seconds"),
@@ -294,16 +656,34 @@ public class TimerCommands {
                                         )
                                 )
                                 .then(Commands.literal("list")
-                                        .executes(TimerCommands::listScheduledCommands)
+                                        .executes(BehaviorCommands::listScheduledCommands)
                                 )
                                 .then(Commands.literal("remove")
                                         .then(Commands.argument("index", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> removeScheduledCommand(ctx,
+                                                .executes(ctx -> BehaviorCommands.removeScheduledCommand(ctx,
                                                         IntegerArgumentType.getInteger(ctx, "index")))
                                         )
                                 )
                                 .then(Commands.literal("clear")
-                                        .executes(TimerCommands::clearScheduledCommands)
+                                        .executes(BehaviorCommands::clearScheduledCommands)
+                                )
+                                // The pause between two of this timer's own
+                                // commands. A datapack that builds a timer has
+                                // to be able to set it; the server default is
+                                // a default, not the only figure there is.
+                                // The pause after one command, addressed the
+                                // way remove addresses one: by its number in
+                                // the list. It belongs to the command in front
+                                // of it, not to the timer.
+                                .then(Commands.literal("delay")
+                                        .then(Commands.argument("index", IntegerArgumentType.integer(1))
+                                                .then(Commands.argument("ticks",
+                                                                IntegerArgumentType.integer(0, 72000))
+                                                        .executes(ctx -> BehaviorCommands.setCommandDelay(ctx,
+                                                                IntegerArgumentType.getInteger(ctx, "index"),
+                                                                IntegerArgumentType.getInteger(ctx, "ticks")))
+                                                )
+                                        )
                                 )
                         )
                 )
@@ -311,9 +691,9 @@ public class TimerCommands {
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_TITLE, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
-                                .executes(TimerCommands::viewTitles)
+                                .executes(BehaviorCommands::viewTitles)
                                 .then(Commands.literal("clear")
-                                        .executes(TimerCommands::clearAllTitles)
+                                        .executes(BehaviorCommands::clearAllTitles)
                                 )
                                 .then(titlePosition("above"))
                                 .then(titlePosition("below"))
@@ -325,12 +705,12 @@ public class TimerCommands {
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_REPEAT, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
-                                .executes(TimerCommands::toggleRepeatInfinite)
+                                .executes(BehaviorCommands::toggleRepeatInfinite)
                                 .then(Commands.argument("count", IntegerArgumentType.integer(-1))
-                                        .executes(ctx -> setRepeatCount(ctx,
+                                        .executes(ctx -> BehaviorCommands.setRepeatCount(ctx,
                                                 IntegerArgumentType.getInteger(ctx, "count"), 0))
                                         .then(Commands.argument("cooldownSeconds", IntegerArgumentType.integer(0))
-                                                .executes(ctx -> setRepeatCount(ctx,
+                                                .executes(ctx -> BehaviorCommands.setRepeatCount(ctx,
                                                         IntegerArgumentType.getInteger(ctx, "count"),
                                                         IntegerArgumentType.getInteger(ctx, "cooldownSeconds")))
                                         )
@@ -341,72 +721,18 @@ public class TimerCommands {
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_SEQUENCE, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
-                                .executes(TimerCommands::viewSequence)
+                                .executes(BehaviorCommands::viewSequence)
                                 .then(Commands.literal("clear")
-                                        .executes(TimerCommands::clearSequence)
+                                        .executes(BehaviorCommands::clearSequence)
                                 )
                                 .then(Commands.argument("nextName", StringArgumentType.word())
                                         .suggests(TIMER_SUGGESTIONS)
-                                        .executes(ctx -> setSequence(ctx,
+                                        .executes(ctx -> BehaviorCommands.setSequence(ctx,
                                                 StringArgumentType.getString(ctx, "nextName"), 0))
                                         .then(Commands.argument("cooldownSeconds", IntegerArgumentType.integer(0))
-                                                .executes(ctx -> setSequence(ctx,
+                                                .executes(ctx -> BehaviorCommands.setSequence(ctx,
                                                         StringArgumentType.getString(ctx, "nextName"),
                                                         IntegerArgumentType.getInteger(ctx, "cooldownSeconds")))
-                                        )
-                                )
-                        )
-                )
-                .then(Commands.literal("condition")
-                        .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_CONDITION, 4))
-                        .then(Commands.argument("name", StringArgumentType.word())
-                                .suggests(TIMER_SUGGESTIONS)
-                                .executes(TimerCommands::viewCondition)
-                                .then(Commands.literal("clear")
-                                        .executes(TimerCommands::clearCondition)
-                                )
-                                .then(Commands.literal("if")
-                                        .then(Commands.argument("expression", StringArgumentType.greedyString())
-                                                .executes(ctx -> setConditionExpression(ctx,
-                                                        StringArgumentType.getString(ctx, "expression"), "finish"))
-                                        )
-                                )
-                                .then(Commands.literal("if_start")
-                                        .then(Commands.argument("expression", StringArgumentType.greedyString())
-                                                .executes(ctx -> setConditionExpression(ctx,
-                                                        StringArgumentType.getString(ctx, "expression"), "start"))
-                                        )
-                                )
-                                .then(Commands.argument("objective", StringArgumentType.word())
-                                        .suggests((ctx, builder) -> {
-                                            ctx.getSource().getServer().getScoreboard().getObjectives()
-                                                    .forEach(obj -> {
-                                                        if (obj.getName().toLowerCase().startsWith(builder.getRemaining().toLowerCase()))
-                                                            builder.suggest(obj.getName());
-                                                    });
-                                            return builder.buildFuture();
-                                        })
-                                        .then(Commands.argument("score", IntegerArgumentType.integer(0))
-                                                .executes(ctx -> setCondition(ctx,
-                                                        StringArgumentType.getString(ctx, "objective"),
-                                                        IntegerArgumentType.getInteger(ctx, "score"),
-                                                        "*"))
-                                                .then(Commands.argument("target", StringArgumentType.word())
-                                                        .suggests((ctx, builder) -> {
-                                                            String remaining = builder.getRemaining().toLowerCase();
-                                                            if ("*".startsWith(remaining)) builder.suggest("*");
-                                                            ctx.getSource().getServer().getPlayerList().getPlayers()
-                                                                    .forEach(p -> {
-                                                                        if (p.getScoreboardName().toLowerCase().startsWith(remaining))
-                                                                            builder.suggest(p.getScoreboardName());
-                                                                    });
-                                                            return builder.buildFuture();
-                                                        })
-                                                        .executes(ctx -> setCondition(ctx,
-                                                                StringArgumentType.getString(ctx, "objective"),
-                                                                IntegerArgumentType.getInteger(ctx, "score"),
-                                                                StringArgumentType.getString(ctx, "target")))
-                                                )
                                         )
                                 )
                         )
@@ -415,7 +741,7 @@ public class TimerCommands {
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_EXPORT, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
-                                .executes(ctx -> exportTimer(ctx, StringArgumentType.getString(ctx, "name")))
+                                .executes(ctx -> SharingCommands.exportTimer(ctx, StringArgumentType.getString(ctx, "name")))
                         )
                 )
                 .then(Commands.literal("import")
@@ -427,9 +753,9 @@ public class TimerCommands {
                                             .forEach(builder::suggest);
                                     return builder.buildFuture();
                                 })
-                                .executes(ctx -> importTimer(ctx, StringArgumentType.getString(ctx, "filename"), null))
+                                .executes(ctx -> SharingCommands.importTimer(ctx, StringArgumentType.getString(ctx, "filename"), null))
                                 .then(Commands.argument("newname", StringArgumentType.word())
-                                        .executes(ctx -> importTimer(ctx,
+                                        .executes(ctx -> SharingCommands.importTimer(ctx,
                                                 StringArgumentType.getString(ctx, "filename"),
                                                 StringArgumentType.getString(ctx, "newname")))
                                 )
@@ -440,7 +766,7 @@ public class TimerCommands {
                         .then(Commands.argument("source", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
                                 .then(Commands.argument("dest", StringArgumentType.word())
-                                        .executes(ctx -> cloneTimer(ctx,
+                                        .executes(ctx -> SharingCommands.cloneTimer(ctx,
                                                 StringArgumentType.getString(ctx, "source"),
                                                 StringArgumentType.getString(ctx, "dest")))
                                 )
@@ -449,1384 +775,63 @@ public class TimerCommands {
                 .then(Commands.literal("webpanel")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_WEBPANEL, 4))
                         .then(Commands.literal("start")
-                                .executes(ctx -> webPanelStart(ctx, ModConfig.getInstance().getWebPanelPort()))
+                                .executes(ctx -> WebPanelCommands.webPanelStart(ctx, ModConfig.getInstance().getWebPanelPort()))
                                 .then(Commands.argument("port", IntegerArgumentType.integer(1024, 65535))
-                                        .executes(ctx -> webPanelStart(ctx, IntegerArgumentType.getInteger(ctx, "port")))
+                                        .executes(ctx -> WebPanelCommands.webPanelStart(ctx, IntegerArgumentType.getInteger(ctx, "port")))
                                 )
                         )
                         .then(Commands.literal("stop")
-                                .executes(TimerCommands::webPanelStop)
+                                .executes(WebPanelCommands::webPanelStop)
                         )
                         .then(Commands.literal("info")
-                                .executes(TimerCommands::webPanelInfo)
+                                .executes(WebPanelCommands::webPanelInfo)
                         )
                 )
+                // One subtree for every reason a timer starts or ends.
+                // /timer condition used to hold the scoreboard and expression
+                // halves under a different grammar, where the action was a
+                // literal in the node name (if / if_start) and the scoreboard
+                // branch offered no action at all.
                 .then(Commands.literal("trigger")
                         .requires(source -> PermissionHelper.hasPermission(source, PermissionNodes.TIMER_TRIGGER, 4))
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(TIMER_SUGGESTIONS)
-                                .executes(TimerCommands::viewTrigger)
+                                .executes(BehaviorCommands::listTriggers)
+                                .then(Commands.literal("list")
+                                        .executes(BehaviorCommands::listTriggers))
                                 .then(Commands.literal("clear")
-                                        .executes(TimerCommands::clearTrigger)
-                                )
-                                .then(Commands.literal("player_death")
-                                        .executes(ctx -> setTrigger(ctx, "player_death", "finish"))
-                                        .then(Commands.argument("action", StringArgumentType.word())
-                                                .suggests((c, b) -> { b.suggest("finish"); b.suggest("start"); return b.buildFuture(); })
-                                                .executes(ctx -> setTrigger(ctx, "player_death",
-                                                        StringArgumentType.getString(ctx, "action")))
-                                        )
-                                )
-                                .then(Commands.literal("dimension_change")
-                                        .executes(ctx -> setTrigger(ctx, "dimension_change", "finish"))
-                                        .then(Commands.argument("dimension", ResourceLocationArgument.id())
-                                                .suggests(TimerCommands::suggestDimensions)
-                                                .executes(ctx -> setTrigger(ctx, "dimension_change:" +
-                                                        ResourceLocationArgument.getId(ctx, "dimension"), "finish"))
-                                                .then(Commands.argument("action", StringArgumentType.word())
-                                                        .suggests((c, b) -> { b.suggest("finish"); b.suggest("start"); return b.buildFuture(); })
-                                                        .executes(ctx -> setTrigger(ctx, "dimension_change:" +
-                                                                        ResourceLocationArgument.getId(ctx, "dimension"),
-                                                                StringArgumentType.getString(ctx, "action")))
+                                        .executes(BehaviorCommands::clearTriggers))
+                                .then(Commands.literal("remove")
+                                        .then(Commands.argument("index", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> BehaviorCommands.removeTrigger(ctx,
+                                                        IntegerArgumentType.getInteger(ctx, "index")))))
+                                .then(Commands.literal("add")
+                                        .then(bareTrigger("player_join", Trigger.Kind.PLAYER_JOIN))
+                                        .then(bareTrigger("player_leave", Trigger.Kind.PLAYER_LEAVE))
+                                        .then(bareTrigger("player_death", Trigger.Kind.PLAYER_DEATH))
+                                        .then(bareTrigger("player_respawn", Trigger.Kind.PLAYER_RESPAWN))
+                                        .then(idTrigger("dimension_change", Trigger.Kind.DIMENSION_CHANGE,
+                                                TimerCommands::suggestDimensions))
+                                        .then(idTrigger("advancement", Trigger.Kind.ADVANCEMENT,
+                                                TimerCommands::suggestAdvancements))
+                                        .then(wordTrigger("ftb_quest", Trigger.Kind.FTB_QUEST))
+                                        .then(wordTrigger("ftb_reward", Trigger.Kind.FTB_REWARD))
+                                        .then(Commands.literal("scoreboard")
+                                                .then(Commands.argument("objective", StringArgumentType.word())
+                                                        .suggests(TimerCommands::suggestObjectives)
+                                                        .then(Commands.argument("score", IntegerArgumentType.integer())
+                                                                .then(scoreboardAction("start", Trigger.Action.START))
+                                                                .then(scoreboardAction("finish", Trigger.Action.FINISH))
+                                                        )
                                                 )
                                         )
-                                )
-                                .then(Commands.literal("advancement")
-                                        .then(Commands.argument("advancement_id", ResourceLocationArgument.id())
-                                                .executes(ctx -> setTrigger(ctx, "advancement:" +
-                                                        ResourceLocationArgument.getId(ctx, "advancement_id"), "finish"))
-                                                .then(Commands.argument("action", StringArgumentType.word())
-                                                        .suggests((c, b) -> { b.suggest("finish"); b.suggest("start"); return b.buildFuture(); })
-                                                        .executes(ctx -> setTrigger(ctx, "advancement:" +
-                                                                        ResourceLocationArgument.getId(ctx, "advancement_id"),
-                                                                StringArgumentType.getString(ctx, "action")))
-                                                )
-                                        )
-                                )
-                                .then(Commands.literal("ftb_quest")
-                                        .then(Commands.argument("quest_id", StringArgumentType.word())
-                                                .executes(ctx -> setTrigger(ctx, "ftb_quest:quest:" +
-                                                        StringArgumentType.getString(ctx, "quest_id"), "finish"))
-                                                .then(Commands.argument("action", StringArgumentType.word())
-                                                        .suggests((c, b) -> { b.suggest("finish"); b.suggest("start"); return b.buildFuture(); })
-                                                        .executes(ctx -> setTrigger(ctx, "ftb_quest:quest:" +
-                                                                        StringArgumentType.getString(ctx, "quest_id"),
-                                                                StringArgumentType.getString(ctx, "action")))
-                                                )
-                                        )
-                                )
-                                .then(Commands.literal("ftb_reward")
-                                        .then(Commands.argument("reward_id", StringArgumentType.word())
-                                                .executes(ctx -> setTrigger(ctx, "ftb_quest:reward:" +
-                                                        StringArgumentType.getString(ctx, "reward_id"), "finish"))
-                                                .then(Commands.argument("action", StringArgumentType.word())
-                                                        .suggests((c, b) -> { b.suggest("finish"); b.suggest("start"); return b.buildFuture(); })
-                                                        .executes(ctx -> setTrigger(ctx, "ftb_quest:reward:" +
-                                                                        StringArgumentType.getString(ctx, "reward_id"),
-                                                                StringArgumentType.getString(ctx, "action")))
-                                                )
+                                        .then(Commands.literal("expression")
+                                                .then(expressionAction("start", Trigger.Action.START))
+                                                .then(expressionAction("finish", Trigger.Action.FINISH))
                                         )
                                 )
                         )
                 )
         );
-    }
-
-    private static int createTimer(CommandContext<CommandSourceStack> ctx, boolean countUp) {
-        String name = StringArgumentType.getString(ctx, "name");
-        int hours = IntegerArgumentType.getInteger(ctx, "hours");
-        int minutes = IntegerArgumentType.getInteger(ctx, "minutes");
-        int seconds = IntegerArgumentType.getInteger(ctx, "seconds");
-
-        long totalSeconds = hours * 3600L + minutes * 60L + seconds;
-        long maxSeconds = ModConfig.getInstance().getMaxTimerSeconds();
-
-        if (totalSeconds > maxSeconds) {
-            ctx.getSource().sendFailure(
-                    Component.translatable("ontime.command.error.maxtime", formatTime(maxSeconds))
-            );
-            return 0;
-        }
-
-        if (TimerManager.getInstance().createTimer(name, hours, minutes, seconds, countUp)) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.create.success", name,
-                            String.format("%02d:%02d:%02d", hours, minutes, seconds),
-                            Component.translatable(countUp ? "ontime.mode.countup" : "ontime.mode.countdown")), true);
-            return 1;
-        } else {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.create.exists", name));
-            return 0;
-        }
-    }
-
-    private static int createTimerWithCommand(CommandContext<CommandSourceStack> ctx, boolean countUp, String command) {
-        String name = StringArgumentType.getString(ctx, "name");
-        int hours = IntegerArgumentType.getInteger(ctx, "hours");
-        int minutes = IntegerArgumentType.getInteger(ctx, "minutes");
-        int seconds = IntegerArgumentType.getInteger(ctx, "seconds");
-
-        long totalSeconds = hours * 3600L + minutes * 60L + seconds;
-        long maxSeconds = ModConfig.getInstance().getMaxTimerSeconds();
-
-        if (totalSeconds > maxSeconds) {
-            ctx.getSource().sendFailure(
-                    Component.translatable("ontime.command.error.maxtime", formatTime(maxSeconds))
-            );
-            return 0;
-        }
-
-        // Validar comando si se proporcionó
-        if (command != null && !command.isEmpty()) {
-            com.mateof24.validation.CommandValidator.ValidationResult validation =
-                    com.mateof24.validation.CommandValidator.validate(command);
-
-            if (!validation.isValid()) {
-                ctx.getSource().sendFailure(validation.getErrorMessage());
-                return 0;
-            }
-        }
-
-        if (TimerManager.getInstance().createTimer(name, hours, minutes, seconds, countUp)) {
-            // Asignar comando personalizado si se proporcionó
-            if (command != null && !command.isEmpty()) {
-                TimerManager.getInstance().getTimer(name).ifPresent(timer -> {
-                    timer.setCommand(command);
-                    TimerManager.getInstance().saveTimers();
-                });
-            }
-
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.create.success", name,
-                            String.format("%02d:%02d:%02d", hours, minutes, seconds),
-                            Component.translatable(countUp ? "ontime.mode.countup" : "ontime.mode.countdown")), true);
-
-            // Mensaje adicional si se asignó comando
-            if (command != null && !command.isEmpty()) {
-                ctx.getSource().sendSuccess(() ->
-                        Component.translatable("ontime.command.command_set", command), false);
-            }
-
-            return 1;
-        } else {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.create.exists", name));
-            return 0;
-        }
-    }
-
-    private static int setTimer(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        int hours = IntegerArgumentType.getInteger(ctx, "hours");
-        int minutes = IntegerArgumentType.getInteger(ctx, "minutes");
-        int seconds = IntegerArgumentType.getInteger(ctx, "seconds");
-
-        long totalSeconds = hours * 3600L + minutes * 60L + seconds;
-        long maxSeconds = ModConfig.getInstance().getMaxTimerSeconds();
-
-        if (totalSeconds > maxSeconds) {
-            ctx.getSource().sendFailure(
-                    Component.translatable("ontime.command.error.maxtime", formatTime(maxSeconds))
-            );
-            return 0;
-        }
-
-        if (TimerManager.getInstance().setTimerTime(name, hours, minutes, seconds)) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.set.success", name,
-                            String.format("%02d:%02d:%02d", hours, minutes, seconds)), true);
-
-            syncIfActive(ctx, name);
-            return 1;
-        } else {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-    }
-
-    private static int startTimer(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-
-        Timer timer = timerOpt.get();
-        if (timer.isRunning()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.start.running", name));
-            return 0;
-        }
-
-        Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
-        if (activeTimer.isPresent() || TimerTickHandler.hasPendingCooldown()) {
-            String activeName = activeTimer.map(Timer::getName).orElse("(cooldown)");
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.start.active", activeName));
-            return 0;
-        }
-
-        if (TimerManager.getInstance().startTimer(name)) {
-            timer = TimerManager.getInstance().getTimer(name).orElseThrow();
-
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.start.success", name), true);
-
-            Services.PLATFORM.sendTimerSyncPacket(
-                    ctx.getSource().getServer(),
-                    timer.getName(),
-                    timer.getCurrentTicks(),
-                    timer.getTargetTicks(),
-                    timer.isCountUp(),
-                    timer.isRunning(),
-                    timer.isSilent()
-            );
-            return 1;
-        }
-
-        return 0;
-    }
-
-    private static int pauseTimer(CommandContext<CommandSourceStack> ctx) {
-        Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
-
-        if (activeTimer.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.pause.none"));
-            return 0;
-        }
-
-        Timer timer = activeTimer.get();
-
-        if (timer.isRunning()) {
-            timer.setRunning(false);
-            TimerManager.getInstance().saveTimers();
-
-            com.mateof24.event.TimerEventBus.fireOnPause(
-                    new com.mateof24.api.TimerInfo(timer.getName(), timer.getCurrentTicks(), timer.getTargetTicks(),
-                            timer.isCountUp(), false, timer.isSilent(), timer.getCommand(),
-                            timer.isRepeat(), timer.getRepeatCount(), timer.getRepeatsDone()));
-
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.pause.success", timer.getName()), true);
-
-            Services.PLATFORM.sendTimerSyncPacket(
-                    ctx.getSource().getServer(),
-                    timer.getName(),
-                    timer.getCurrentTicks(),
-                    timer.getTargetTicks(),
-                    timer.isCountUp(),
-                    false,
-                    timer.isSilent()
-            );
-            return 1;
-        } else {
-            TimerManager.getInstance().reloadCommandsFromDisk();
-            timer.setRunning(true);
-            TimerManager.getInstance().saveTimers();
-
-            com.mateof24.event.TimerEventBus.fireOnResume(
-                    new com.mateof24.api.TimerInfo(timer.getName(), timer.getCurrentTicks(), timer.getTargetTicks(),
-                            timer.isCountUp(), true, timer.isSilent(), timer.getCommand(),
-                            timer.isRepeat(), timer.getRepeatCount(), timer.getRepeatsDone()));
-
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.resume.success", timer.getName()), true);
-
-            Services.PLATFORM.sendTimerSyncPacket(
-                    ctx.getSource().getServer(),
-                    timer.getName(),
-                    timer.getCurrentTicks(),
-                    timer.getTargetTicks(),
-                    timer.isCountUp(),
-                    true,
-                    timer.isSilent()
-            );
-            return 1;
-        }
-    }
-
-    private static int removeTimer(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-
-        if (TimerManager.getInstance().removeTimer(name)) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.remove.success", name), true);
-
-            Services.PLATFORM.sendTimerSyncPacket(ctx.getSource().getServer(), "", 0, 0, false, false, false);
-            return 1;
-        } else {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-    }
-
-    private static int addTime(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        int hours = IntegerArgumentType.getInteger(ctx, "hours");
-        int minutes = IntegerArgumentType.getInteger(ctx, "minutes");
-        int seconds = IntegerArgumentType.getInteger(ctx, "seconds");
-
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-
-        Timer timer = timerOpt.get();
-        long currentSeconds = timer.getCurrentTicks() / 20L;
-        long additionalSeconds = hours * 3600L + minutes * 60L + seconds;
-        long newTotalSeconds = currentSeconds + additionalSeconds;
-        long maxSeconds = ModConfig.getInstance().getMaxTimerSeconds();
-
-        if (newTotalSeconds > maxSeconds) {
-            ctx.getSource().sendFailure(
-                    Component.translatable("ontime.command.error.maxtime.add", formatTime(maxSeconds))
-            );
-            return 0;
-        }
-
-        if (TimerManager.getInstance().addTimerTime(name, hours, minutes, seconds)) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.add.success",
-                            String.format("%02d:%02d:%02d", hours, minutes, seconds), name), true);
-
-            syncIfActive(ctx, name);
-            return 1;
-        } else {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-    }
-
-    private static int toggleSilentSelf(CommandContext<CommandSourceStack> ctx) {
-        if (!(ctx.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.players_only"));
-            return 0;
-        }
-
-        UUID playerUUID = player.getUUID();
-        boolean currentSilent = PlayerPreferences.getTimerSilent(playerUUID);
-        boolean newSilent = !currentSilent;
-
-        PlayerPreferences.setTimerSilent(playerUUID, newSilent);
-        Services.PLATFORM.sendSilentPacket(player, newSilent);
-
-        String targetKey = "ontime.command.silent.self";
-
-        if (newSilent) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.silent.disabled_for",
-                            Component.translatable(targetKey)), false);
-        } else {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.silent.enabled_for",
-                            Component.translatable(targetKey)), false);
-        }
-
-        return 1;
-    }
-
-    private static int toggleSilentTargets(CommandContext<CommandSourceStack> ctx) {
-        try {
-            var targets = EntityArgument.getPlayers(ctx, "targets");
-            int count = 0;
-            boolean newSilent = true;
-
-            for (net.minecraft.server.level.ServerPlayer target : targets) {
-                UUID playerUUID = target.getUUID();
-                boolean currentSilent = PlayerPreferences.getTimerSilent(playerUUID);
-                newSilent = !currentSilent;
-
-                PlayerPreferences.setTimerSilent(playerUUID, newSilent);
-                Services.PLATFORM.sendSilentPacket(target, newSilent);
-                count++;
-            }
-
-            int finalCount = count;
-            boolean finalSilent = newSilent;
-
-            if (finalSilent) {
-                ctx.getSource().sendSuccess(() ->
-                        Component.translatable("ontime.command.silent.disabled_for",
-                                Component.translatable("ontime.command.silent.players", finalCount)), true);
-            } else {
-                ctx.getSource().sendSuccess(() ->
-                        Component.translatable("ontime.command.silent.enabled_for",
-                                Component.translatable("ontime.command.silent.players", finalCount)), true);
-            }
-
-            return count;
-        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.invalid_selector"));
-            return 0;
-        }
-    }
-
-    private static void syncIfActive(CommandContext<CommandSourceStack> ctx, String name) {
-        Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
-        if (activeTimer.isPresent() && activeTimer.get().getName().equals(name)) {
-            Timer timer = activeTimer.get();
-            Services.PLATFORM.sendTimerSyncPacket(
-                    ctx.getSource().getServer(),
-                    timer.getName(),
-                    timer.getCurrentTicks(),
-                    timer.getTargetTicks(),
-                    timer.isCountUp(),
-                    timer.isRunning(),
-                    timer.isSilent()
-            );
-        }
-    }
-
-    private static int listTimers(CommandContext<CommandSourceStack> ctx) {
-        java.util.Collection<Timer> timers = TimerManager.getInstance().timersView();
-
-        if (timers.isEmpty()) {
-            ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.list.empty"), false);
-            return 0;
-        }
-
-        ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.list.header"), false);
-
-        Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
-
-        for (Timer timer : timers) {
-            Component statusComponent = Component.translatable(
-                    timer.isRunning() ? "ontime.list.status.running" : "ontime.list.status.stopped"
-            );
-            String active = activeTimer.isPresent() && activeTimer.get().getName().equals(timer.getName()) ? " §e*" : "";
-            String type = timer.isCountUp() ? "↑" : "↓";
-            String silent = timer.isSilent() ? " §7[S]" : "";
-
-            Component message = Component.translatable("ontime.command.list.entry",
-                    statusComponent, timer.getName(), type, timer.getFormattedTime(), active, silent);
-
-            ctx.getSource().sendSuccess(() -> message, false);
-        }
-
-        return 1;
-    }
-
-    private static int toggleHideSelf(CommandContext<CommandSourceStack> ctx) {
-        if (!(ctx.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.players_only"));
-            return 0;
-        }
-
-        UUID playerUUID = player.getUUID();
-        boolean currentVisibility = PlayerPreferences.getTimerVisibility(playerUUID);
-        boolean newVisibility = !currentVisibility;
-
-        PlayerPreferences.setTimerVisibility(playerUUID, newVisibility);
-        Services.PLATFORM.sendVisibilityPacket(player, newVisibility);
-
-        String targetKey = "ontime.command.hide.self";
-
-        if (newVisibility) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.hide.enabled",
-                            Component.translatable(targetKey)), false);
-        } else {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.hide.disabled",
-                            Component.translatable(targetKey)), false);
-        }
-
-        return 1;
-    }
-
-    private static int toggleHideTargets(CommandContext<CommandSourceStack> ctx) {
-        try {
-            var targets = EntityArgument.getPlayers(ctx, "targets");
-            int count = 0;
-            boolean newVisibility = true;
-
-            for (net.minecraft.server.level.ServerPlayer target : targets) {
-                UUID playerUUID = target.getUUID();
-                boolean currentVisibility = PlayerPreferences.getTimerVisibility(playerUUID);
-                newVisibility = !currentVisibility;
-
-                PlayerPreferences.setTimerVisibility(playerUUID, newVisibility);
-                Services.PLATFORM.sendVisibilityPacket(target, newVisibility);
-                count++;
-            }
-
-            int finalCount = count;
-            boolean finalVisibility = newVisibility;
-
-            if (newVisibility) {
-                ctx.getSource().sendSuccess(() ->
-                        Component.translatable("ontime.command.hide.enabled",
-                                Component.translatable("ontime.command.hide.players", finalCount)), true);
-            } else {
-                ctx.getSource().sendSuccess(() ->
-                        Component.translatable("ontime.command.hide.disabled",
-                                Component.translatable("ontime.command.hide.players", finalCount)), true);
-            }
-
-            return count;
-        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.invalid_selector"));
-            return 0;
-        }
-    }
-
-    private static int stopTimer(CommandContext<CommandSourceStack> ctx) {
-        Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
-        boolean hasCooldown = TimerTickHandler.hasPendingCooldown();
-
-        if (activeTimer.isEmpty() && !hasCooldown) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.stop.none"));
-            return 0;
-        }
-
-        TimerTickHandler.cancelCooldown();
-
-        if (activeTimer.isPresent()) {
-            Timer timer = activeTimer.get();
-            timer.resetRepeatsDone();
-            timer.reset();
-            TimerManager.getInstance().clearActiveTimer();
-            TimerManager.getInstance().saveTimers();
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.stop.success", timer.getName()), true);
-        } else {
-            TimerManager.getInstance().saveTimers();
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.stop.cooldown_cancelled"), true);
-        }
-
-        Services.PLATFORM.sendTimerSyncPacket(ctx.getSource().getServer(), "", 0, 0, false, false, false);
-        return 1;
-    }
-
-    private static int resetCurrentTimer(CommandContext<CommandSourceStack> ctx) {
-        Optional<Timer> activeTimer = TimerManager.getInstance().getActiveTimer();
-
-        if (activeTimer.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.reset.noactive"));
-            return 0;
-        }
-
-        TimerTickHandler.cancelCooldown();
-
-        Timer timer = activeTimer.get();
-        boolean wasRunning = timer.isRunning();
-        timer.reset();
-        TimerManager.getInstance().saveTimers();
-
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.reset.success", timer.getName()), true);
-
-        if (wasRunning) {
-            Services.PLATFORM.sendTimerSyncPacket(
-                    ctx.getSource().getServer(),
-                    timer.getName(), timer.getCurrentTicks(), timer.getTargetTicks(),
-                    timer.isCountUp(), false, timer.isSilent());
-        }
-        return 1;
-    }
-
-    private static int resetNamedTimer(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-
-        Timer timer = timerOpt.get();
-        boolean wasActive = TimerManager.getInstance().getActiveTimer()
-                .map(t -> t.getName().equals(name))
-                .orElse(false);
-        boolean wasRunning = timer.isRunning();
-
-        timer.reset();
-        TimerManager.getInstance().saveTimers();
-
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.reset.success", name), true);
-
-        if (wasActive && wasRunning) {
-            Services.PLATFORM.sendTimerSyncPacket(
-                    ctx.getSource().getServer(),
-                    timer.getName(),
-                    timer.getCurrentTicks(),
-                    timer.getTargetTicks(),
-                    timer.isCountUp(),
-                    false,
-                    timer.isSilent()
-            );
-        }
-
-        return 1;
-    }
-
-    private static int setPosition(CommandContext<CommandSourceStack> ctx) {
-        String presetName = StringArgumentType.getString(ctx, "preset");
-        TimerPositionPreset preset = TimerPositionPreset.fromString(presetName);
-
-        ModConfig.getInstance().setPositionPreset(preset);
-
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.position.success", preset.getDisplayName()), true);
-        return 1;
-    }
-
-    private static int setSoundDefault(CommandContext<CommandSourceStack> ctx, String soundId) {
-        return setSound(ctx, soundId, 0.75f, 2.0f);
-    }
-
-    private static int setSoundWithVolume(CommandContext<CommandSourceStack> ctx, String soundId, float volume) {
-        return setSound(ctx, soundId, volume, 2.0f);
-    }
-
-    private static int setSoundFull(CommandContext<CommandSourceStack> ctx, String soundId, float volume, float pitch) {
-        return setSound(ctx, soundId, volume, pitch);
-    }
-
-    private static int setSound(CommandContext<CommandSourceStack> ctx, String soundId, float volume, float pitch) {
-        ModConfig.getInstance().setTimerSound(soundId, volume, pitch);
-
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.sound.success", soundId, volume, pitch), true);
-        return 1;
-    }
-
-    private static int setScale(CommandContext<CommandSourceStack> ctx, float scale) {
-        ModConfig.getInstance().setTimerScale(scale);
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.scale.success", scale), true);
-        return 1;
-    }
-
-    private static int viewTimerCommand(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        String command = timerOpt.get().getCommand();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.command.current", name,
-                        command != null && !command.isEmpty() ? command : "(none)"), false);
-        return 1;
-    }
-
-    private static int updateTimerCommand(CommandContext<CommandSourceStack> ctx, String command) {
-        String name = StringArgumentType.getString(ctx, "name");
-
-        if (!command.isEmpty()) {
-            com.mateof24.validation.CommandValidator.ValidationResult validation =
-                    com.mateof24.validation.CommandValidator.validate(command);
-            if (!validation.isValid()) {
-                ctx.getSource().sendFailure(validation.getErrorMessage());
-                return 0;
-            }
-        }
-
-        if (TimerManager.getInstance().setTimerCommand(name, command)) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.command.set", name, command), true);
-            return 1;
-        }
-        ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-        return 0;
-    }
-
-    private static int toggleRepeatInfinite(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        Timer timer = timerOpt.get();
-        boolean newRepeat = !timer.isRepeat();
-        timer.setRepeat(newRepeat);
-        if (newRepeat) {
-            timer.setRepeatCount(-1);
-        } else {
-            timer.setRepeatCooldownTicks(0);
-        }
-        TimerManager.getInstance().saveTimers();
-        ctx.getSource().sendSuccess(() -> Component.translatable(
-                newRepeat ? "ontime.command.repeat.enabled_infinite"
-                        : "ontime.command.repeat.disabled", name), true);
-        return 1;
-    }
-
-    private static int setRepeatCount(CommandContext<CommandSourceStack> ctx, int count, int cooldownSeconds) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        Timer timer = timerOpt.get();
-        if (count == 0) {
-            timer.setRepeat(false);
-            timer.setRepeatCount(0);
-            timer.setRepeatCooldownTicks(0);
-            TimerManager.getInstance().saveTimers();
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.repeat.disabled", name), true);
-        } else if (count == -1) {
-            timer.setRepeat(true);
-            timer.setRepeatCount(-1);
-            timer.setRepeatCooldownTicks(cooldownSeconds * 20L);
-            TimerManager.getInstance().saveTimers();
-            if (cooldownSeconds > 0) {
-                ctx.getSource().sendSuccess(() ->
-                        Component.translatable("ontime.command.repeat.enabled_infinite_cooldown", name, cooldownSeconds), true);
-            } else {
-                ctx.getSource().sendSuccess(() ->
-                        Component.translatable("ontime.command.repeat.enabled_infinite", name), true);
-            }
-        } else {
-            timer.setRepeat(true);
-            timer.setRepeatCount(count);
-            timer.setRepeatCooldownTicks(cooldownSeconds * 20L);
-            TimerManager.getInstance().saveTimers();
-            if (cooldownSeconds > 0) {
-                ctx.getSource().sendSuccess(() ->
-                        Component.translatable("ontime.command.repeat.enabled_count_cooldown", name, count, cooldownSeconds), true);
-            } else {
-                ctx.getSource().sendSuccess(() ->
-                        Component.translatable("ontime.command.repeat.enabled_count", name, count), true);
-            }
-        }
-        return 1;
-    }
-
-    private static int viewSequence(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        Timer timer = timerOpt.get();
-        String next = timer.getNextTimer();
-        long cdSec = timer.getSequenceCooldownTicks() / 20L;
-        if (next == null) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.sequence.current", name, "(none)"), false);
-        } else if (cdSec > 0) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.sequence.current_cooldown", name, next, cdSec), false);
-        } else {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.sequence.current", name, next), false);
-        }
-        return 1;
-    }
-
-    private static int setSequence(CommandContext<CommandSourceStack> ctx, String nextName, int cooldownSeconds) {
-        String name = StringArgumentType.getString(ctx, "name");
-        if (name.equals(nextName)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.sequence.self"));
-            return 0;
-        }
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        if (!TimerManager.getInstance().hasTimer(nextName)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", nextName));
-            return 0;
-        }
-        timerOpt.get().setNextTimer(nextName);
-        timerOpt.get().setSequenceCooldownTicks(cooldownSeconds * 20L);
-        TimerManager.getInstance().saveTimers();
-        if (cooldownSeconds > 0) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.sequence.set_cooldown", name, nextName, cooldownSeconds), true);
-        } else {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.sequence.set", name, nextName), true);
-        }
-        return 1;
-    }
-
-    private static int clearSequence(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        timerOpt.get().setNextTimer(null);
-        timerOpt.get().setSequenceCooldownTicks(0);
-        TimerManager.getInstance().saveTimers();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.sequence.cleared", name), true);
-        return 1;
-    }
-
-    private static int viewCondition(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        Timer timer = timerOpt.get();
-        if (!timer.hasCondition()) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.condition.none", name), false);
-        } else {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.condition.current",
-                            name, timer.getConditionObjective(),
-                            timer.getConditionScore(), timer.getConditionTarget()), false);
-        }
-        return 1;
-    }
-
-    private static int setCondition(CommandContext<CommandSourceStack> ctx,
-                                    String objective, int score, String target) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        timerOpt.get().setCondition(objective, score, target);
-        TimerManager.getInstance().saveTimers();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.condition.set",
-                        name, objective, score, target), true);
-        return 1;
-    }
-
-    private static int clearCondition(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        timerOpt.get().clearCondition();
-        TimerManager.getInstance().saveTimers();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.condition.cleared", name), true);
-        return 1;
-    }
-
-    private static int exportTimer(CommandContext<CommandSourceStack> ctx, String name) {
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        if (TimerStorage.exportTimer(name, timerOpt.get())) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.export.success", name), true);
-            return 1;
-        }
-        ctx.getSource().sendFailure(Component.translatable("ontime.command.export.failed", name));
-        return 0;
-    }
-
-    private static int importTimer(CommandContext<CommandSourceStack> ctx, String filename, String overrideName) {
-        if (!TimerStorage.exportFileExists(filename)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.import.notfound", filename));
-            return 0;
-        }
-        Timer imported = TimerStorage.importTimerFromExports(filename);
-        if (imported == null) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.import.invalid", filename));
-            return 0;
-        }
-        String targetName = (overrideName != null && !overrideName.isEmpty()) ? overrideName : imported.getName();
-        if (TimerManager.getInstance().hasTimer(targetName)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.import.exists", targetName));
-            return 0;
-        }
-        long maxSeconds = ModConfig.getInstance().getMaxTimerSeconds();
-        if (imported.getTargetTicks() / 20L > maxSeconds) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.error.maxtime", formatTime(maxSeconds)));
-            return 0;
-        }
-        Timer toAdd = imported;
-        if (overrideName != null && !overrideName.isEmpty() && !overrideName.equals(imported.getName())) {
-            com.google.gson.JsonObject json = imported.toJson();
-            json.addProperty("name", overrideName);
-            json.addProperty("running", false);
-            json.addProperty("wasRunningBeforeShutdown", false);
-            toAdd = Timer.fromJson(json);
-        }
-        if (TimerManager.getInstance().addTimer(toAdd)) {
-            final Timer added = toAdd;
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.import.success", added.getName()), true);
-            return 1;
-        }
-        ctx.getSource().sendFailure(Component.translatable("ontime.command.import.exists", targetName));
-        return 0;
-    }
-
-    private static int cloneTimer(CommandContext<CommandSourceStack> ctx, String sourceName, String destName) {
-        Optional<Timer> sourceOpt = TimerManager.getInstance().getTimer(sourceName);
-        if (sourceOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", sourceName));
-            return 0;
-        }
-        if (TimerManager.getInstance().hasTimer(destName)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.clone.exists", destName));
-            return 0;
-        }
-        com.google.gson.JsonObject json = sourceOpt.get().toJson();
-        json.addProperty("name", destName);
-        json.addProperty("running", false);
-        json.addProperty("wasRunningBeforeShutdown", false);
-        json.addProperty("repeatsDone", 0);
-        long targetTicks = json.get("targetTicks").getAsLong();
-        boolean countUp = json.get("countUp").getAsBoolean();
-        json.addProperty("currentTicks", countUp ? 0 : targetTicks);
-        Timer cloned = Timer.fromJson(json);
-        if (TimerManager.getInstance().addTimer(cloned)) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.clone.success", sourceName, destName), true);
-            return 1;
-        }
-        ctx.getSource().sendFailure(Component.translatable("ontime.command.clone.exists", destName));
-        return 0;
-    }
-
-    private static int webPanelStart(CommandContext<CommandSourceStack> ctx, int port) {
-        if (TimerWebPanel.getInstance().isRunning()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.webpanel.already_running",
-                    TimerWebPanel.getInstance().getAccessUrl()));
-            return 0;
-        }
-        TimerWebPanel.getInstance().start(port, ctx.getSource().getServer());
-        if (!TimerWebPanel.getInstance().isRunning()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.webpanel.start_failed", port));
-            return 0;
-        }
-        String url = TimerWebPanel.getInstance().getAccessUrl();
-        ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.webpanel.started", url), false);
-        return 1;
-    }
-
-    private static int webPanelStop(CommandContext<CommandSourceStack> ctx) {
-        if (!TimerWebPanel.getInstance().isRunning()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.webpanel.not_running"));
-            return 0;
-        }
-        TimerWebPanel.getInstance().stop();
-        ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.webpanel.stopped"), true);
-        return 1;
-    }
-
-    private static int webPanelInfo(CommandContext<CommandSourceStack> ctx) {
-        if (!TimerWebPanel.getInstance().isRunning()) {
-            ctx.getSource().sendSuccess(() -> Component.translatable("ontime.command.webpanel.not_running"), false);
-        } else {
-            String url = TimerWebPanel.getInstance().getAccessUrl();
-            int clients = TimerWebPanel.getInstance().getConnectedClients();
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.webpanel.info", url, clients), false);
-        }
-        return 1;
-    }
-
-    private static int createTimerWithExpr(CommandContext<CommandSourceStack> ctx, boolean countUp) {
-        String name = StringArgumentType.getString(ctx, "name");
-        String expression = StringArgumentType.getString(ctx, "expression");
-        ExpressionEvaluator.Result resolved = ExpressionEvaluator.evaluateDetailed(expression, ctx.getSource().getServer());
-        if (resolved.value.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.expr.invalid", expression)
-                    .append(Component.literal(" (" + resolved.error + ")")));
-            return 0;
-        }
-        long totalSeconds = resolved.value.getAsLong();
-        long maxSeconds = ModConfig.getInstance().getMaxTimerSeconds();
-        if (totalSeconds > maxSeconds) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.error.maxtime", formatTime(maxSeconds)));
-            return 0;
-        }
-        int h = (int)(totalSeconds / 3600), m = (int)((totalSeconds % 3600) / 60), s = (int)(totalSeconds % 60);
-        if (TimerManager.getInstance().createTimer(name, h, m, s, countUp)) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.create.success", name,
-                            String.format("%02d:%02d:%02d", h, m, s),
-                            Component.translatable(countUp ? "ontime.mode.countup" : "ontime.mode.countdown")), true);
-            return 1;
-        }
-        ctx.getSource().sendFailure(Component.translatable("ontime.command.create.exists", name));
-        return 0;
-    }
-
-    private static int setTimerExpr(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        String expression = StringArgumentType.getString(ctx, "expression");
-        ExpressionEvaluator.Result resolved = ExpressionEvaluator.evaluateDetailed(expression, ctx.getSource().getServer());
-        if (resolved.value.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.expr.invalid", expression)
-                    .append(Component.literal(" (" + resolved.error + ")")));
-            return 0;
-        }
-        long totalSeconds = resolved.value.getAsLong();
-        long maxSeconds = ModConfig.getInstance().getMaxTimerSeconds();
-        if (totalSeconds > maxSeconds) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.error.maxtime", formatTime(maxSeconds)));
-            return 0;
-        }
-        int h = (int)(totalSeconds / 3600), m = (int)((totalSeconds % 3600) / 60), s = (int)(totalSeconds % 60);
-        if (TimerManager.getInstance().setTimerTime(name, h, m, s)) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.set.success", name,
-                            String.format("%02d:%02d:%02d", h, m, s)), true);
-            syncIfActive(ctx, name);
-            return 1;
-        }
-        ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-        return 0;
-    }
-
-    private static int addTimerExpr(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        String expression = StringArgumentType.getString(ctx, "expression");
-        ExpressionEvaluator.Result resolved = ExpressionEvaluator.evaluateDetailed(expression, ctx.getSource().getServer());
-        if (resolved.value.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.expr.invalid", expression)
-                    .append(Component.literal(" (" + resolved.error + ")")));
-            return 0;
-        }
-        long addSeconds = resolved.value.getAsLong();
-        long maxSeconds = ModConfig.getInstance().getMaxTimerSeconds();
-
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-
-        long currentSeconds = timerOpt.get().getCurrentTicks() / 20L;
-        long newTotalSeconds = currentSeconds + addSeconds;
-        if (newTotalSeconds > maxSeconds) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.error.maxtime.add", formatTime(maxSeconds)));
-            return 0;
-        }
-
-        int h = (int)(addSeconds / 3600), m = (int)((addSeconds % 3600) / 60), s = (int)(addSeconds % 60);
-        if (TimerManager.getInstance().addTimerTime(name, h, m, s)) {
-            final String fmt = String.format("%02d:%02d:%02d", h, m, s);
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.add.success", fmt, name), true);
-            syncIfActive(ctx, name);
-            return 1;
-        }
-        ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-        return 0;
-    }
-
-    private static int setConditionExpression(CommandContext<CommandSourceStack> ctx, String expression, String action) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        Optional<Boolean> test = com.mateof24.command.ConditionEvaluator
-                .evaluate(expression, ctx.getSource().getServer(), timerOpt.get());
-        if (test.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.expr.invalid", expression));
-            return 0;
-        }
-        timerOpt.get().setConditionExpression(expression);
-        timerOpt.get().setConditionExpressionAction(action);
-        TimerManager.getInstance().saveTimers();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.condition.expr.set", name, expression, action), true);
-        return 1;
-    }
-
-    private static int setCondition(CommandContext<CommandSourceStack> ctx,
-                                    String objective, int score, String target, String action) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        timerOpt.get().setCondition(objective, score, target);
-        timerOpt.get().setScoreConditionAction(action);
-        TimerManager.getInstance().saveTimers();
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.condition.set", name, objective, score, target), true);
-        return 1;
-    }
-
-    private static int viewTrigger(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        String trigger = timerOpt.get().getTriggerType();
-        String action  = timerOpt.get().getTriggerAction();
-        ctx.getSource().sendSuccess(() ->
-                trigger != null
-                        ? Component.translatable("ontime.command.trigger.current", name, trigger, action)
-                        : Component.translatable("ontime.command.trigger.none", name), false);
-        return 1;
-    }
-
-    private static int setTrigger(CommandContext<CommandSourceStack> ctx, String type, String action) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        timerOpt.get().setTriggerType(type);
-        timerOpt.get().setTriggerAction(action);
-        TimerManager.getInstance().saveTimers();
-        com.mateof24.trigger.FTBQuestsPoller.resetFor(name);
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.trigger.set", name, type, action), true);
-        return 1;
-    }
-
-    private static int clearTrigger(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        timerOpt.get().setTriggerType(null);
-        TimerManager.getInstance().saveTimers();
-        com.mateof24.trigger.FTBQuestsPoller.resetFor(name);
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.trigger.cleared", name), true);
-        return 1;
-    }
-
-    // ---- /timer title <name> ... (counter titles, 4.0.0) ----
-
-    /** Maximum raw length of a single title spec. */
-    private static final int MAX_TITLE_LENGTH = 256;
-
-    private static final String[] TITLE_POSITIONS = {"above", "below", "left", "right"};
-
-    /**
-     * One position branch of /timer title: <pos> clear | <pos> <text...>.
-     * The 'clear' literal wins over the greedy text (Brigadier priority) —
-     * a literal title saying "clear" needs the JSON form {"text":"clear"}.
-     */
-    private static LiteralArgumentBuilder<CommandSourceStack> titlePosition(String position) {
-        return Commands.literal(position)
-                .then(Commands.literal("clear")
-                        .executes(ctx -> clearTitle(ctx, position)))
-                .then(Commands.argument("text", StringArgumentType.greedyString())
-                        .executes(ctx -> setTitle(ctx, position,
-                                StringArgumentType.getString(ctx, "text"))));
-    }
-
-    /** Pushes the current sync packet immediately when the edited timer is on screen. */
-    private static void resyncIfActive(CommandContext<CommandSourceStack> ctx, String name) {
-        TimerManager.getInstance().getActiveTimer()
-                .filter(t -> t.getName().equals(name))
-                .ifPresent(t -> Services.PLATFORM.sendTimerSyncPacket(
-                        ctx.getSource().getServer(), t.getName(), t.getCurrentTicks(),
-                        t.getTargetTicks(), t.isCountUp(), t.isRunning(), t.isSilent()));
-    }
-
-    private static int setTitle(CommandContext<CommandSourceStack> ctx, String position, String text) {
-        String name = StringArgumentType.getString(ctx, "name");
-        if (!TimerManager.getInstance().hasTimer(name)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        if (text.length() > MAX_TITLE_LENGTH) {
-            ctx.getSource().sendFailure(Component.translatable(
-                    "ontime.command.title.too_long", MAX_TITLE_LENGTH));
-            return 0;
-        }
-        // Validate now so a broken JSON spec is rejected instead of stored.
-        if (com.mateof24.util.TitleParser.parseTitle(text) == null) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.title.invalid_json"));
-            return 0;
-        }
-        TimerManager.getInstance().setTimerTitle(name, position, text);
-        resyncIfActive(ctx, name);
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.title.set", position, name, text), true);
-        return 1;
-    }
-
-    private static int clearTitle(CommandContext<CommandSourceStack> ctx, String position) {
-        String name = StringArgumentType.getString(ctx, "name");
-        if (!TimerManager.getInstance().setTimerTitle(name, position, null)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        resyncIfActive(ctx, name);
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.title.cleared", position, name), true);
-        return 1;
-    }
-
-    private static int clearAllTitles(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        if (!TimerManager.getInstance().clearTimerTitles(name)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        resyncIfActive(ctx, name);
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.title.cleared_all", name), true);
-        return 1;
-    }
-
-    private static int viewTitles(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        Timer timer = timerOpt.get();
-        if (!timer.hasTitles()) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.title.current.none", name), false);
-            return 1;
-        }
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.title.current.header", name), false);
-        for (String position : TITLE_POSITIONS) {
-            String raw = timer.getTitle(position);
-            if (raw == null) continue;
-            final Component line = Component.translatable("ontime.command.title.current.entry", position, raw);
-            ctx.getSource().sendSuccess(() -> line, false);
-        }
-        return 1;
-    }
-
-    // ---- /timer commands <name> ... (scheduled commands, 4.0.0) ----
-
-    private static String formatSeconds(long totalSeconds) {
-        long hours = totalSeconds / 3600;
-        long minutes = (totalSeconds % 3600) / 60;
-        long seconds = totalSeconds % 60;
-        return hours > 0
-                ? String.format("%02d:%02d:%02d", hours, minutes, seconds)
-                : String.format("%02d:%02d", minutes, seconds);
-    }
-
-    private static int addScheduledCommand(CommandContext<CommandSourceStack> ctx,
-                                           int hours, int minutes, int seconds, String command) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        com.mateof24.validation.CommandValidator.ValidationResult validation =
-                com.mateof24.validation.CommandValidator.validate(command);
-        if (!validation.isValid()) {
-            ctx.getSource().sendFailure(validation.getErrorMessage());
-            return 0;
-        }
-        long atSeconds = hours * 3600L + minutes * 60L + seconds;
-        long targetSeconds = timerOpt.get().getTargetTicks() / 20L;
-        if (atSeconds <= 0 || atSeconds >= targetSeconds) {
-            ctx.getSource().sendFailure(Component.translatable(
-                    "ontime.command.commands.invalid_time", formatSeconds(targetSeconds), name));
-            return 0;
-        }
-        if (!TimerManager.getInstance().addScheduledCommand(name, atSeconds, command)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.commands.limit",
-                    name, Timer.MAX_SCHEDULED_ENTRIES, Timer.MAX_COMMANDS_PER_POINT));
-            return 0;
-        }
-        ctx.getSource().sendSuccess(() -> Component.translatable(
-                "ontime.command.commands.added", formatSeconds(atSeconds), name, command), true);
-        return 1;
-    }
-
-    private static int addFinishCommand(CommandContext<CommandSourceStack> ctx, String command) {
-        String name = StringArgumentType.getString(ctx, "name");
-        if (!TimerManager.getInstance().hasTimer(name)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        com.mateof24.validation.CommandValidator.ValidationResult validation =
-                com.mateof24.validation.CommandValidator.validate(command);
-        if (!validation.isValid()) {
-            ctx.getSource().sendFailure(validation.getErrorMessage());
-            return 0;
-        }
-        if (!TimerManager.getInstance().addFinishCommand(name, command)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.commands.limit",
-                    name, Timer.MAX_SCHEDULED_ENTRIES, Timer.MAX_COMMANDS_PER_POINT));
-            return 0;
-        }
-        ctx.getSource().sendSuccess(() -> Component.translatable(
-                "ontime.command.commands.added_finish", name, command), true);
-        return 1;
-    }
-
-    private static int listScheduledCommands(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        Optional<Timer> timerOpt = TimerManager.getInstance().getTimer(name);
-        if (timerOpt.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        Timer timer = timerOpt.get();
-        java.util.List<Timer.ScheduledEntry> entries = timer.scheduledEntries();
-        if (entries.isEmpty()) {
-            ctx.getSource().sendSuccess(() ->
-                    Component.translatable("ontime.command.commands.list.empty", name), false);
-            return 1;
-        }
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.commands.list.header", name), false);
-        int index = 1;
-        for (Timer.ScheduledEntry entry : entries) {
-            final int shownIndex = index++;
-            final Component line = entry.atSeconds() == null
-                    ? Component.translatable("ontime.command.commands.list.finish", shownIndex, entry.command())
-                    : Component.translatable("ontime.command.commands.list.at", shownIndex,
-                            formatSeconds(entry.atSeconds()), entry.command());
-            ctx.getSource().sendSuccess(() -> line, false);
-        }
-        return 1;
-    }
-
-    private static int removeScheduledCommand(CommandContext<CommandSourceStack> ctx, int index) {
-        String name = StringArgumentType.getString(ctx, "name");
-        if (!TimerManager.getInstance().hasTimer(name)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        if (!TimerManager.getInstance().removeScheduledEntry(name, index - 1)) {
-            ctx.getSource().sendFailure(Component.translatable(
-                    "ontime.command.commands.invalid_index", index, name));
-            return 0;
-        }
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.commands.removed", index, name), true);
-        return 1;
-    }
-
-    private static int clearScheduledCommands(CommandContext<CommandSourceStack> ctx) {
-        String name = StringArgumentType.getString(ctx, "name");
-        if (!TimerManager.getInstance().clearScheduledCommands(name)) {
-            ctx.getSource().sendFailure(Component.translatable("ontime.command.notfound", name));
-            return 0;
-        }
-        ctx.getSource().sendSuccess(() ->
-                Component.translatable("ontime.command.commands.cleared", name), true);
-        return 1;
     }
 }

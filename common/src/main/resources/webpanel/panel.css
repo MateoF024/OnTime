@@ -1,0 +1,1139 @@
+/*
+ * OnTime web panel.
+ *
+ * A web application, and meant to read as one — a rail down the side, a content
+ * column, sheets and dialogs. Deliberately nothing like the in-game screen: the
+ * two do the same work and share no shapes.
+ *
+ * Written by hand end to end. The mod takes no dependencies and the panel has
+ * to serve from a machine with no route to the internet, so there is no
+ * framework, no CDN and no icon font: the icons are inline SVG strokes.
+ */
+
+/* ====================================================================== */
+/* Tokens                                                                 */
+/* ====================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  --bg: #0a0d12;
+  --bg-2: #0e131a;
+  --surface: #131a23;
+  --surface-2: #18212c;
+  --surface-3: #1e2935;
+  --line: #24303d;
+  --line-soft: #1b242f;
+
+  --text: #e8eef6;
+  --text-2: #a7b4c4;
+  --muted: #6f7f92;
+
+  --accent: #55b6ff;
+  --accent-2: #7c6bff;
+  --ok: #3fd07f;
+  --warn: #ffb648;
+  --bad: #ff6b7a;
+
+  --glow: color-mix(in srgb, var(--accent) 30%, transparent);
+  --tree: color-mix(in srgb, var(--text-2) 42%, transparent);
+  --r-sm: 8px;
+  --r: 12px;
+  --r-lg: 18px;
+  --rail: 232px;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .5);
+  --shadow-2: 0 10px 30px -12px rgba(0, 0, 0, .75), 0 2px 8px rgba(0, 0, 0, .35);
+  --shadow-3: 0 40px 80px -28px rgba(0, 0, 0, .85);
+
+  --ease: cubic-bezier(.22, .68, .28, 1);
+  --fast: .16s var(--ease);
+  --slow: .32s var(--ease);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f2f5f9;
+  --bg-2: #e9eef5;
+  --surface: #ffffff;
+  --surface-2: #f6f8fb;
+  --surface-3: #eef2f7;
+  --line: #dde4ed;
+  --line-soft: #e8edf3;
+  --text: #101720;
+  --text-2: #465366;
+  --muted: #6b788a;
+  --accent: #1f7ae0;
+  --accent-2: #6a4df0;
+  --ok: #16a45f;
+  --warn: #b8730a;
+  --bad: #d43c4e;
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, .05);
+  --shadow-2: 0 10px 28px -14px rgba(16, 24, 40, .28), 0 2px 6px rgba(16, 24, 40, .06);
+  --shadow-3: 0 40px 80px -30px rgba(16, 24, 40, .35);
+}
+
+* { box-sizing: border-box; }
+
+/*
+ * The browser hides [hidden] with display:none from its own stylesheet, and an
+ * author rule of any specificity beats it. Setting display on .empty and .view
+ * therefore stopped hidden from hiding, which is why an empty box sat under a
+ * card that plainly existed and the count above it disagreed with both.
+ */
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  color: var(--text);
+  background:
+    radial-gradient(900px 520px at 12% -8%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 62%),
+    radial-gradient(760px 460px at 96% 4%, color-mix(in srgb, var(--accent-2) 11%, transparent), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono, .clock, .cmd-at, input[type="number"] {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1.7;
+      stroke-linecap: round; stroke-linejoin: round; }
+
+/* ====================================================================== */
+/* Shell                                                                  */
+/* ====================================================================== */
+
+.shell { display: grid; grid-template-columns: var(--rail) 1fr; min-height: 100%; }
+
+.rail {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 22px 16px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  border-right: 1px solid var(--line);
+  backdrop-filter: blur(14px);
+}
+
+.mark { display: flex; align-items: center; gap: 11px; padding: 2px 8px 0; font-size: 17px; font-weight: 650; }
+.mark svg { width: 30px; height: 30px; }
+.mark .ring-bg { stroke: var(--line); }
+.mark .ring-fg {
+  stroke: url(#none);
+  stroke: var(--accent);
+  stroke-dasharray: 82;
+  stroke-dashoffset: 22;
+  transform-origin: 16px 16px;
+  animation: sweep 9s linear infinite;
+}
+@keyframes sweep { to { transform: rotate(360deg); } }
+
+.nav { display: grid; gap: 3px; }
+
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--fast), background var(--fast);
+}
+.nav-item svg { width: 18px; height: 18px; opacity: .85; }
+.nav-item:hover { color: var(--text); background: color-mix(in srgb, var(--surface-3) 70%, transparent); }
+
+.nav-item[aria-selected="true"] {
+  color: var(--text);
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--accent) 20%, transparent),
+    color-mix(in srgb, var(--accent) 6%, transparent));
+}
+/* The marker slides between items rather than blinking in place. */
+.nav-item[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(var(--accent), var(--accent-2));
+  box-shadow: 0 0 12px var(--glow);
+  animation: grow var(--slow);
+}
+@keyframes grow { from { transform: scaleY(.2); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.count {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: var(--surface-3);
+  border-radius: 999px;
+  padding: 1px 8px;
+  min-width: 22px;
+  text-align: center;
+}
+.count:empty { display: none; }
+
+.rail-foot { margin-top: auto; display: grid; gap: 12px; }
+.link-state { display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 12.5px; }
+.rail-tools { display: flex; gap: 8px; }
+.rail-tools select { flex: 1; min-width: 0; }
+.muted { color: var(--muted); }
+
+.dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--bad);
+  transition: background var(--slow);
+  flex: none;
+}
+.dot.live { background: var(--ok); animation: pulse 2.6s var(--ease) infinite; }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); }
+  55% { box-shadow: 0 0 0 7px transparent; }
+}
+
+/* ====================================================================== */
+/* Content                                                                */
+/* ====================================================================== */
+
+/* Fills the width beside the rail. It was clamped without being centred, so
+   on a wide screen everything huddled against the rail with a field of nothing
+   to its right. */
+.content { padding: 34px clamp(20px, 3.5vw, 56px) 72px; width: 100%; }
+.view { animation: fade var(--slow); }
+@keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.view-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 26px;
+  padding-bottom: 18px;
+  /* Runs the whole width and is meant to be seen: it is the line between what
+     this view is and what is in it. */
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 12%, transparent);
+}
+/* The action of a view sits against the right margin, whatever is beside it. */
+.view-head > .btn:last-child, .view-head > .tools { margin-left: auto; }
+.view-head h1 {
+  margin: 0;
+  font-size: clamp(21px, 2.4vw, 27px);
+  font-weight: 640;
+  letter-spacing: -.02em;
+}
+.lead { margin: 5px 0 0; color: var(--muted); font-size: 13.5px; }
+.tools { display: flex; gap: 10px; align-items: center; }
+
+.search { position: relative; display: flex; align-items: center; }
+.search svg { position: absolute; left: 11px; width: 15px; height: 15px; color: var(--muted); }
+.search input { padding-left: 34px; width: clamp(180px, 22vw, 280px); height: 38px; }
+.tools .btn { height: 38px; }
+
+/* ====================================================================== */
+/* Cards                                                                  */
+/* ====================================================================== */
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 16px; }
+
+.card {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 96%, transparent), var(--surface));
+  box-shadow: var(--shadow-1);
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform var(--fast), border-color var(--fast), box-shadow var(--fast);
+}
+/* Plays once, when the card first appears. Not on every refresh: the list is
+   rebuilt whenever the server speaks and it would never sit still. */
+.card.fresh { animation: rise .26s var(--ease) backwards; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); box-shadow: var(--shadow-2); }
+.card:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--glow); }
+.card .actions, .card .btn { cursor: default; }
+
+/* A wash of the state's colour across the top edge. */
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--muted);
+  opacity: .8;
+}
+.card.running::after { background: linear-gradient(90deg, var(--ok), color-mix(in srgb, var(--ok) 30%, transparent)); }
+.card.paused::after { background: linear-gradient(90deg, var(--warn), color-mix(in srgb, var(--warn) 30%, transparent)); }
+.card.cooldown::after { background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 30%, transparent)); }
+
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.card-name { font-weight: 600; letter-spacing: -.01em; word-break: break-word; }
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.state.running { color: var(--ok); }
+.state.paused { color: var(--warn); }
+.state.cooldown { color: var(--accent); }
+
+.clock { font-size: 34px; font-weight: 650; letter-spacing: -.03em; margin: 8px 0 0; line-height: 1.1; }
+.sub { font-size: 13px; color: var(--muted); }
+
+.progress {
+  position: relative;
+  height: 5px;
+  margin-top: 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 20%, transparent);
+  overflow: hidden;
+}
+.progress > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  /* Only the width eases. The colour is a threshold, and fading between two
+     of them would pass through a colour that means something else. */
+  transition: width .28s linear;
+}
+
+.actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+
+.tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
+/* ====================================================================== */
+/* Controls                                                               */
+/* ====================================================================== */
+
+.btn, button.icon, input, select, textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 8px 13px;
+  transition: border-color var(--fast), background var(--fast),
+              box-shadow var(--fast), transform .07s var(--ease), color var(--fast);
+}
+
+/*
+ * Buttons never move under the pointer. A hover that shifts the element can
+ * slide it out from under the cursor, which un-hovers it, which slides it
+ * back: the button strobes and swallows the click. Only :active displaces,
+ * because by then the press has already been registered.
+ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 15px;
+  cursor: pointer;
+  font-weight: 540;
+  font-size: 13.5px;
+  letter-spacing: -.005em;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn svg { width: 15px; height: 15px; flex: none; }
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  box-shadow: 0 2px 10px -6px var(--glow);
+}
+.btn:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
+.btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+
+.btn.primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border-color: transparent;
+  color: #04121f;
+  font-weight: 640;
+  box-shadow: 0 4px 16px -7px var(--glow);
+}
+:root[data-theme="light"] .btn.primary { color: #fff; }
+.btn.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent) 88%, #fff),
+    color-mix(in srgb, var(--accent-2) 88%, #fff));
+  border-color: transparent;
+  box-shadow: 0 6px 20px -7px var(--glow);
+}
+
+.btn.danger {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 34%, var(--line));
+  background: color-mix(in srgb, var(--bad) 7%, transparent);
+}
+.btn.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bad) 16%, transparent);
+  border-color: var(--bad);
+  box-shadow: 0 2px 10px -6px color-mix(in srgb, var(--bad) 55%, transparent);
+}
+
+.btn.small { min-height: 30px; padding: 0 11px; font-size: 12.5px; }
+
+button.icon {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-2);
+  -webkit-tap-highlight-color: transparent;
+}
+button.icon svg { width: 17px; height: 17px; }
+button.icon:hover {
+  color: var(--text);
+  background: var(--surface-3);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+}
+button.icon:active { transform: translateY(1px); }
+
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+.btn:focus-visible, button.icon:focus-visible, .nav-item:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--glow);
+}
+
+input.bad { border-color: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 22%, transparent); }
+input[type="color"] { padding: 3px; width: 56px; height: 36px; cursor: pointer; }
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
+input[type="color"]::-moz-color-swatch { border: none; border-radius: 3px; }
+input::placeholder { color: var(--muted); }
+
+/*
+ * A colour: the picker, and the value written out beside it.
+ *
+ * The picker is what a browser has and the game does not, so it stays -- but
+ * nothing can be pasted into one, and a colour is usually something already
+ * written down somewhere. The two follow each other. The text does not wear
+ * the colour the way the game makes it: the swatch next to it already is the
+ * reference, and a hex in its own colour is a hex you cannot always read.
+ */
+.colour { display: flex; align-items: center; gap: 8px; }
+.colour > input[type="color"] { flex: none; }
+.colour > .hex {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  text-transform: uppercase;
+}
+
+/* ====================================================================== */
+/* Empty states                                                           */
+/* ====================================================================== */
+
+/* Centred in the space the cards would have filled, and quiet enough not to
+   look like a card of its own. */
+.empty {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 16px;
+  min-height: 320px;
+  padding: 40px 20px;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface) 35%, transparent);
+}
+.empty svg { width: 40px; height: 40px; opacity: .3; stroke-width: 1.2; }
+.empty p { margin: 0; font-size: 14.5px; }
+
+/* ====================================================================== */
+/* Sheets and fields                                                      */
+/* ====================================================================== */
+
+.sheets { display: grid; gap: 18px; }
+
+.sheet {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  overflow: hidden;
+  /* overflow:hidden alone would let a flex or grid parent squash this to
+     nothing and clip the contents rather than let them overflow. */
+  flex: 0 0 auto;
+  min-height: min-content;
+}
+.sheet > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+.sheet > header h3 {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 660;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.sheet > .body { padding: 6px 18px 14px; }
+
+/*
+ * A setting: what it is called, what it says, and the control.
+ *
+ * The name and the explanation are one thing between them, and the control is
+ * centred against both -- not against the name alone. Centred on the name, a
+ * two-line explanation hung below everything and opened a gap before the next
+ * setting that belonged to nothing, which reads as bad spacing rather than as
+ * a sentence about the setting above it.
+ */
+.field {
+  display: grid;
+  grid-template-columns: 1fr minmax(150px, 260px);
+  grid-template-areas:
+    "name control"
+    "hint control";
+  align-items: center;
+  gap: 4px 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.field:last-child { border-bottom: 0; }
+.field > label { grid-area: name; align-self: end; font-size: 14px; color: var(--text-2); }
+/* Whatever the control turns out to be -- a box, a select, a swatch and its
+   hex, a button -- it is the one child that is neither the name nor the
+   sentence, and it stands against the pair of them. */
+.field > :not(label):not(.hint) { grid-area: control; align-self: center; }
+
+/*
+ * A control too wide to live in that column: a command, which is a line of
+ * text and not a value. The name goes above it, the way the in-game editor
+ * puts a label over its field, and the box has the whole width.
+ */
+.field.wide {
+  grid-template-columns: 1fr;
+  grid-template-areas: "name" "control" "hint";
+}
+.field.wide > label { align-self: start; }
+.field .units { display: flex; gap: 6px; }
+.field .units > input { width: 100%; min-width: 0; text-align: center; }
+
+/*
+ * The explanation, shown rather than hidden.
+ *
+ * The game has to keep this behind a hover; a browser has the room, so the
+ * line sits under the label it belongs to and is simply readable. Column one
+ * on purpose: it explains the name, and the control keeps its own lane.
+ */
+.field > .hint {
+  grid-area: hint;
+  align-self: start;
+  max-width: 72ch;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.field > .hint code {
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .92em;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; }
+  .rail {
+    position: static; height: auto; flex-direction: row; align-items: center;
+    gap: 14px; border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto;
+  }
+  .nav { grid-auto-flow: column; gap: 4px; }
+  .nav-item[aria-selected="true"]::before { display: none; }
+  .rail-foot { margin: 0 0 0 auto; grid-auto-flow: column; align-items: center; }
+  .content { padding: 22px 16px 48px; }
+  .field { grid-template-columns: 1fr; grid-template-areas: "name" "control" "hint"; gap: 7px; }
+}
+
+/* ====================================================================== */
+/* Dialog                                                                 */
+/* ====================================================================== */
+
+dialog {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0;
+  width: min(760px, 94vw);
+  max-height: min(86vh, 880px);
+  box-shadow: var(--shadow-3);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+}
+dialog:not([open]) { display: none; }
+dialog::backdrop { background: rgba(4, 7, 11, .68); }
+dialog[open] { animation: pop .2s var(--ease); }
+@keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 17px 20px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+.dialog-head h2 { margin: 0; font-size: 17px; font-weight: 620; letter-spacing: -.01em; }
+
+/*
+ * Only this scrolls. The heading and the buttons are rows of the grid above,
+ * so nothing inside here is sticky — a group heading that was would ride up
+ * and flatten itself against the top, over whatever it passed.
+ */
+#modal-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 20px;
+  /*
+   * Not a grid. The dialog caps its own height, so a grid here had a definite
+   * size to fill and its rows were free to shrink: a .sheet is a grid item
+   * with overflow:hidden, whose automatic minimum size is therefore zero, so
+   * every sheet was squashed to its header and its fields were clipped away.
+   * The fields were always in the tree; they had nowhere to be drawn. A column
+   * of items that refuse to shrink scrolls instead of compressing.
+   */
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+#modal-body::-webkit-scrollbar { width: 11px; }
+#modal-body::-webkit-scrollbar-track { background: transparent; }
+#modal-body::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+  border: 3px solid var(--surface);
+}
+#modal-body::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+.dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+
+/* ====================================================================== */
+/* Commands                                                               */
+/* ====================================================================== */
+
+.cmd-row {
+  display: grid;
+  grid-template-columns: 84px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.cmd-row:last-of-type { border-bottom: 0; }
+
+/* The moment, said once, with its commands hanging under it on the same
+   stems the trigger tree uses. One idiom for structure, not two. */
+.cmd-moment { padding: 10px 0 2px; }
+.cmd-moment:first-child { padding-top: 0; }
+.cmd-under { margin-left: 2px; }
+.cmd-under > .cmd-row { grid-template-columns: 1fr auto; }
+
+/* A condition is text and the button that takes it away -- no moment in front
+   of it. Left on the three-column grid the commands use, the text was squeezed
+   into the 84px meant for a clock and the button stretched across everything
+   the text was not using. */
+.trg-group .cmd-row { grid-template-columns: 1fr auto; }
+/* The moment a command runs at. Blue, which is the colour the game paints
+   a moment with, and italic for the one that has no clock time. */
+.cmd-at { font-size: 13px; color: var(--accent); }
+.cmd-at.end { font-style: italic; color: var(--muted); font-family: inherit; }
+
+/*
+ * What starts a timer and what ends it, in the two colours that mean exactly
+ * that everywhere else in the mod: green for starts, light red for ends. They
+ * used to be the accent blue and plain grey, which said nothing and did not
+ * match the game.
+ */
+.trg-when { font-size: 13px; font-weight: 600; }
+.trg-when.starts { color: var(--ok); }
+.trg-when.ends { color: var(--bad); }
+.cmd-text {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  word-break: break-all;
+  color: var(--text-2);
+}
+
+.cmd-add {
+  /* Four things in it -- the units, the command, its pause and the button --
+     and three columns put the pause on a line of its own. */
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 10px;
+  align-items: start;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+}
+.cmd-add .units { display: flex; gap: 5px; }
+.cmd-add .units > input { width: 58px; text-align: center; }
+.cmd-add .units > input,
+.cmd-add > .cmd-wait,
+.cmd-add > button { margin-top: 0; }
+
+/*
+ * The command box.
+ *
+ * The text is drawn twice: a layer underneath carrying the colour, and the
+ * real box on top with its own text made invisible. A plain input cannot paint
+ * half a line red, and half a line is exactly what needs it -- the half
+ * brigadier stopped being able to read. Both layers must agree on font,
+ * padding and wrapping to the pixel, so they are declared together.
+ */
+.cmd-field {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.cmd-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--glow);
+}
+.cmd-field > input,
+.cmd-field > .cmd-ghost {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 20px;
+  letter-spacing: 0;
+  white-space: pre;
+  overflow: hidden;
+}
+.cmd-field > .cmd-ghost {
+  position: absolute;
+  inset: 0;
+  color: var(--text);
+  pointer-events: none;
+}
+.cmd-field > .cmd-ghost .unparsed { color: var(--bad); }
+.cmd-field > input {
+  position: relative;
+  border: 0;
+  background: transparent;
+  /* The layer underneath is the one that is read; this one only holds the
+     caret and the selection. */
+  color: transparent;
+  caret-color: var(--text);
+}
+.cmd-field > input:focus { outline: none; box-shadow: none; }
+.cmd-field > input::selection { background: var(--glow); }
+.cmd-field > input::placeholder { color: var(--muted); }
+
+.suggest {
+  /* Anchored to the window, not to the field. The dialog it sits in scrolls,
+     and anything positioned inside a scrolling box is clipped by it: a command
+     near the bottom of the sheet would have had its list cut off at the edge.
+     Placed by the script, which is the only thing that knows where the box
+     ended up. */
+  position: fixed;
+  z-index: 30;
+  max-height: 232px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+  box-shadow: var(--shadow-2);
+}
+.suggest > li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.suggest > li.on { background: var(--surface); color: var(--text); }
+.suggest > li:hover { background: var(--surface); }
+.suggest > li > em {
+  margin-left: auto;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/*
+ * The composer, which is a sentence: the controls sit in the reading order of
+ * the words around them and wrap like text, rather than holding a column each
+ * whether the chosen kind uses them or not.
+ */
+.trg-say {
+  border: 1px dashed var(--accent);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  margin: 8px 0;
+  background: var(--surface-2, transparent);
+}
+.trg-say-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.trg-say-where { font-size: 12px; color: var(--muted); }
+.trg-say-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.trg-say-line > select { flex: 0 1 auto; min-width: 0; }
+.trg-say-line > input[type="text"] { flex: 1 1 180px; min-width: 0; }
+.trg-say-line .trg-num { flex: 0 0 84px; }
+.trg-word { font-size: 13px; color: var(--muted); }
+.trg-say-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* One of the two headings, and everything under it. */
+.trg-section { margin-bottom: 18px; }
+.trg-section:last-of-type { margin-bottom: 0; }
+.trg-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+@media (max-width: 620px) {
+  .cmd-add { grid-template-columns: 1fr; }
+  .cmd-row { grid-template-columns: 70px 1fr auto; }
+}
+
+/* ====================================================================== */
+/* The read-only sheet for one execution                                  */
+/* ====================================================================== */
+
+.detail { display: grid; gap: 18px; }
+
+.detail .hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background:
+    radial-gradient(420px 180px at 12% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+    var(--surface-2);
+}
+.detail .hero .clock { margin: 0; font-size: 46px; }
+.detail .hero .of { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+/* Two columns of facts, so a short value does not leave a bar of nothing
+   across the sheet. */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 2px 22px;
+  margin: 0;
+}
+.fact {
+  display: grid;
+  gap: 1px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.fact dt { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.fact dd { margin: 0; font-size: 14.5px; word-break: break-word; }
+.fact dd.strong { font-weight: 600; }
+
+/* ====================================================================== */
+/* Toasts                                                                 */
+/* ====================================================================== */
+
+#toasts { position: fixed; right: 18px; bottom: 18px; z-index: 60; display: grid; gap: 9px; justify-items: end; }
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ok);
+  border-radius: var(--r-sm);
+  padding: 11px 15px;
+  box-shadow: var(--shadow-2);
+  animation: slide .22s var(--ease);
+  max-width: min(440px, 88vw);
+  font-size: 14px;
+}
+.toast.bad { border-left-color: var(--bad); }
+@keyframes slide { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+
+/* Somebody who has asked for less motion is not asking for less panel. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+
+/*
+ * Triggers, two levels deep and no deeper. A rule is true when any of its
+ * groups is, and a group when all of its conditions are — indentation is the
+ * whole of the notation, which is why there is no tree widget here.
+ */
+.trg-rule {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.trg-rule-head { margin-bottom: 8px; }
+
+/*
+ * An alternative, and whatever is bracketed inside it.
+ *
+ * The box itself draws nothing: its rows carry the stems and the elbows, which
+ * is what makes a condition visibly hang off the level above it rather than
+ * merely sit next to a line.
+ */
+.trg-group { padding: 4px 0; margin-left: 2px; }
+.trg-group.nested { margin: 4px 0; }
+.trg-group-head {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: .03em;
+  margin-bottom: 4px;
+}
+/* Add and remove, together at the foot of the level they act on. Loose in the
+   box they sat wherever the last condition left them. */
+.trg-group-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* The seam between two groups, which is where the "or" lives. */
+.trg-or {
+  font-size: 11.5px;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  margin: 8px 0 8px 6px;
+}
+
+/* The pause after one command, beside the command it follows. */
+.cmd-wait { width: 64px; }
+
+/* ====================================================================== */
+/* The editor page                                                        */
+/* ====================================================================== */
+
+/*
+ * Not a section of its own: this is what Timers becomes while a timer is being
+ * edited. A dialog gave nine groups of settings and two trees a column of
+ * about six hundred pixels, most of it below the fold.
+ */
+#panel-editor .view-head > div { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+#editor-name { margin: 0; }
+.btn.ghost {
+  padding: 3px 9px 3px 4px;
+  margin-bottom: 4px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.btn.ghost:hover { color: var(--text); background: var(--surface-2); }
+.btn.ghost svg { width: 15px; height: 15px; }
+
+/* The tabs inside it. The rail says which view you are in; these say which
+   part of one timer, so they are quieter than the rail and wider apart. */
+.subtabs {
+  display: flex;
+  gap: 2px;
+  margin: -8px 0 22px;
+  border-bottom: 1px solid var(--line);
+}
+.subtab {
+  position: relative;
+  padding: 9px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--fast);
+}
+.subtab:hover { color: var(--text-2); }
+.subtab[aria-selected="true"] { color: var(--text); }
+.subtab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+/* Room to breathe, and a ceiling so a line of settings does not run the width
+   of a wide monitor -- but the two that are trees get all of it. */
+.editor-panel { max-width: 980px; }
+.editor-panel[data-tab="triggers"],
+.editor-panel[data-tab="commands"] { max-width: none; }
+
+/* ====================================================================== */
+/* Trees                                                                  */
+/* ====================================================================== */
+
+/*
+ * A stem down the left of every row and an arm reaching into it, with the last
+ * row's stem cut short so the run closes in an elbow. Two pseudo-elements and
+ * no drawing: the same shape the game paints, made the way HTML makes it.
+ *
+ * The arm meets the row 15px down, which is the middle of a single line of it.
+ * Not 50%, deliberately -- a condition that wraps to three lines would have its
+ * arm halfway down the block instead of at the top, and the joint would stop
+ * lining up with the stem above it.
+ */
+.trg-group > .cmd-row,
+.trg-group > .trg-group,
+.cmd-under > .cmd-row {
+  position: relative;
+  padding-left: 22px;
+}
+.trg-group > .cmd-row::before,
+.trg-group > .trg-group::before,
+.cmd-under > .cmd-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--tree);
+}
+/* The last of a run closes it: the stem stops where the arm meets it. */
+.trg-group > .cmd-row:last-child::before,
+.trg-group > .trg-group:last-child::before,
+.cmd-under > .cmd-row:last-child::before { bottom: auto; height: 15px; }
+.trg-group > .cmd-row::after,
+.trg-group > .trg-group::after,
+.cmd-under > .cmd-row::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 15px;
+  width: 14px;
+  height: 2px;
+  background: var(--tree);
+}
+/* A bracket inside an alternative keeps the accent, which is what says it is a
+   level and not another condition. */
+.trg-group > .trg-group::before,
+.trg-group > .trg-group::after { background: var(--accent); }
+
+/* The foot hangs off the same stem as the rows above it, so Add and Remove
+   read as belonging to this level rather than floating after it. */
+.trg-group-foot { padding-left: 22px; position: relative; }
+.trg-group-foot::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -8px;
+  height: 20px;
+  width: 2px;
+  background: var(--tree);
+}

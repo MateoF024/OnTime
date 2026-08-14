@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>OnTime</title>
+<link rel="stylesheet" href="panel.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>&#9201;</text></svg>">
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- A rail down the side, not a row of tabs: this is a web application and
+       it is meant to read as one, not as the in-game screen in a browser. -->
+  <aside class="rail">
+    <div class="mark">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <circle class="ring-bg" cx="16" cy="16" r="13"></circle>
+        <circle class="ring-fg" cx="16" cy="16" r="13"></circle>
+        <path d="M16 9v7.4l4.6 2.7" />
+      </svg>
+      <span>OnTime</span>
+    </div>
+
+    <nav class="nav" role="tablist">
+      <button class="nav-item" role="tab" data-tab="runs">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4.2l2.7 1.6M9 2h6"/></svg>
+        <span data-i18n="tab.runs">In progress</span>
+        <em class="count" id="count-runs"></em>
+      </button>
+      <button class="nav-item" role="tab" data-tab="timers">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        <span data-i18n="tab.timers">Timers</span>
+        <em class="count" id="count-timers"></em>
+      </button>
+      <button class="nav-item" role="tab" data-tab="settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"/></svg>
+        <span data-i18n="tab.settings">Settings</span>
+      </button>
+    </nav>
+
+    <div class="rail-foot">
+      <div class="link-state">
+        <span class="dot" id="link"></span>
+        <span id="link-text" class="muted"></span>
+      </div>
+      <div class="rail-tools">
+        <select id="lang" aria-label="Language"></select>
+        <button id="theme" class="icon" type="button" aria-label="Theme">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="content">
+    <!-- -------------------------------------------------------- runs -->
+    <section id="panel-runs" class="view">
+      <header class="view-head">
+        <div>
+          <h1 data-i18n="runs.title">Executions in progress</h1>
+          <p class="lead" id="runs-lead"></p>
+        </div>
+        <button id="stop-all" class="btn danger" type="button" data-i18n="runs.stopAll">Stop all</button>
+      </header>
+      <div id="runs" class="grid"></div>
+      <div id="runs-empty" class="empty">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4.2l2.7 1.6M9 2h6"/></svg>
+        <p data-i18n="runs.empty">No timers are running</p>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------ timers -->
+    <section id="panel-timers" class="view" hidden>
+      <header class="view-head">
+        <div>
+          <h1 data-i18n="tab.timers">Timers</h1>
+          <p class="lead" id="timers-lead"></p>
+        </div>
+        <div class="tools">
+          <label class="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M15.8 15.8L21 21"/></svg>
+            <input id="search" type="search" data-i18n-ph="timers.search" placeholder="Search">
+          </label>
+          <button id="new-timer" class="btn primary" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <span data-i18n="timers.new">New</span>
+          </button>
+        </div>
+      </header>
+      <div id="timers" class="grid"></div>
+      <div id="timers-empty" class="empty">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        <p data-i18n="timers.empty">No timers exist yet</p>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------ editor -->
+    <!-- Not a section of its own in the rail: this is what Timers becomes
+         while a timer is being edited. A dialog had about six hundred pixels
+         for nine groups of settings and two trees. -->
+    <section id="panel-editor" class="view" hidden>
+      <header class="view-head">
+        <div>
+          <button id="editor-back" class="btn ghost" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+            <span data-i18n="tab.timers">Timers</span>
+          </button>
+          <h1 id="editor-name"></h1>
+          <p class="lead" id="editor-lead"></p>
+        </div>
+        <div class="tools">
+          <button id="editor-discard" class="btn" type="button" data-i18n="discard">Discard</button>
+          <button id="editor-apply" class="btn primary" type="button" data-i18n="apply">Apply</button>
+        </div>
+      </header>
+      <nav id="editor-tabs" class="subtabs" role="tablist"></nav>
+      <div id="editor-body"></div>
+    </section>
+
+    <!-- ---------------------------------------------------- settings -->
+    <section id="panel-settings" class="view" hidden>
+      <header class="view-head">
+        <div>
+          <h1 data-i18n="settings.title">Server defaults</h1>
+          <p class="lead" id="settings-lead"></p>
+        </div>
+        <div class="tools">
+          <button id="settings-discard" class="btn" type="button" data-i18n="discard">Discard</button>
+          <button id="settings-apply" class="btn primary" type="button" data-i18n="apply">Apply</button>
+        </div>
+      </header>
+      <div id="settings" class="sheets"></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="modal">
+  <div class="dialog-head">
+    <h2 id="modal-title"></h2>
+    <button class="icon" type="button" id="modal-close" aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div id="modal-body"></div>
+  <div id="modal-actions" class="dialog-foot"></div>
+</dialog>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script src="panel.js"></script>
+</body>
+</html>

@@ -3,277 +3,289 @@ package com.mateof24.tick;
 import com.mateof24.manager.TimerManager;
 import com.mateof24.platform.Services;
 import com.mateof24.timer.Timer;
+import com.mateof24.timer.TimerRun;
 import com.mateof24.storage.TimerLogger;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.phys.Vec2;
-import net.minecraft.world.phys.Vec3;
 
-import java.util.Optional;
+import java.util.List;
 
+/**
+ * Drives every {@link TimerRun} once per server tick.
+ *
+ * <p>All the per-execution bookkeeping — cooldowns, the scheduled-command
+ * cursor, the paced command queue, the scoreboard cursor — used to be static
+ * fields here, which is the concrete reason a second execution was impossible:
+ * two runs would have shared one of each. It lives on the run now. What stays
+ * static is genuinely global: the broadcast cadences.</p>
+ */
 public class TimerTickHandler {
     private static int syncCounter = 0;
     private static final int SYNC_INTERVAL = 20;
-    private static int webPanelTickCounter = 0;
-    private static final int WEB_PANEL_TICK_INTERVAL = 4;
 
-    private static long cooldownRemaining = 0L;
-    private static boolean inRepeatCooldown = false;
-    private static String pendingSequenceTimerName = null;
     private static int startConditionCheckCounter = 0;
     private static final int START_CHECK_INTERVAL = 20;
 
-    // Scoreboard updates only need to happen when the displayed second changes (1 Hz),
-    // not every server tick (20 Hz). -1 forces a write on the first tick of a new timer.
-    private static long lastBroadcastedScoreboardSecond = -1L;
-    private static String lastBroadcastedScoreboardTimer = "";
-
-    // Scheduled-command progress (4.0.0). Tracks the last displayed second so
-    // events fire exactly once when the second boundary is crossed by natural
-    // ticking. Not persisted: after a restart the baseline is re-taken, so
-    // already-passed thresholds are not re-fired.
-    private static long lastCommandSecond = -1L;
-    private static String lastCommandTimer = "";
-
-    // Command pacing (4.0.0): when config commandDelayTicks > 0, commands of
-    // a same-moment sequence are queued here (placeholders ALREADY resolved,
-    // so {time}/{seconds} reflect the trigger instant) and drained one per
-    // delay window instead of all in one tick.
-    private static final java.util.ArrayDeque<String> pendingCommands = new java.util.ArrayDeque<>();
-    private static long commandDelayRemaining = 0L;
-
     /**
-     * Re-baselines the scheduled-command tracker without firing anything.
-     * Called on manual time jumps (/timer set|add) and on stop: a jump over
-     * a threshold must NOT fire it — only natural ticking does.
+     * Clears the pending state of every run. Used by /timer stop and reset.
+     *
+     * <p>A run waiting out a sequence cooldown is ended rather than revived:
+     * its timer already finished and was reset, and 4.0.0 had dropped the
+     * active pointer on entering that state. Keeping it registered would leave
+     * an idle run behind that rejects the next /timer start.</p>
      */
-    public static void resetCommandProgress() {
-        lastCommandSecond = -1L;
-        lastCommandTimer = "";
-    }
-
-    /** Drops queued (delay-paced) commands. Used by /timer stop via cancelCooldown. */
-    public static void clearPendingCommands() {
-        pendingCommands.clear();
-        commandDelayRemaining = 0L;
-    }
-
     public static void cancelCooldown() {
-        cooldownRemaining = 0;
-        inRepeatCooldown = false;
-        pendingSequenceTimerName = null;
-        lastBroadcastedScoreboardSecond = -1L;
-        lastBroadcastedScoreboardTimer = "";
-        resetCommandProgress();
-        clearPendingCommands();
-        com.mateof24.trigger.TriggerRegistry.resetAll();
+        TimerManager manager = TimerManager.getInstance();
+        for (TimerRun run : List.copyOf(manager.runsView())) {
+            if (run.isAwaitingSequence()) {
+                manager.endRun(run);
+            } else {
+                run.cancelPending();
+            }
+        }
+        com.mateof24.trigger.RuleEngine.resetAll();
+        // The tally of who has already acted goes with it: a round that starts
+        // again starts from nobody, or "all four have died" stays true for ever
+        // after the first round.
+        com.mateof24.trigger.TriggerProgress.resetAll();
     }
 
     public static boolean hasPendingCooldown() {
-        return inRepeatCooldown || pendingSequenceTimerName != null;
+        return TimerManager.getInstance().hasPendingCooldown();
     }
 
     public static void tick(MinecraftServer server) {
-        drainPendingCommands(server);
-        com.mateof24.trigger.FTBQuestsPoller.poll(server);
+        // Coalesced writes: the preference and config setters only mark
+        // themselves dirty, so a command touching many players or many config
+        // fields produces one file write here instead of one per change.
+        com.mateof24.storage.PlayerPreferences.flush();
+        com.mateof24.config.ModConfig.getInstance().flush();
+
+        // Every rule, every tick, armed or not. One place where there were
+        // two: the start side ran from here once a second and the finish side
+        // per running execution, and they had already drifted apart.
+        com.mateof24.trigger.RuleEngine.tick(server);
+
         startConditionCheckCounter++;
         if (startConditionCheckCounter >= START_CHECK_INTERVAL) {
             startConditionCheckCounter = 0;
-            checkStartConditions(server);
+            com.mateof24.command.PendingConfirmations.sweep();
         }
-        if (inRepeatCooldown) {
-            if (cooldownRemaining > 0) {
-                cooldownRemaining--;
-                return;
+
+        // Costs nothing while no panel is open, which is the normal case.
+        com.mateof24.admin.AdminSubscriptions.tick(server);
+
+        // Unconditionally, and above every early return below. The web panel
+        // serves a snapshot rather than reading the manager per request, so the
+        // moment it stops being ticked it starts serving the past. Ticking it
+        // only while something was running meant the last run to finish left
+        // its final snapshot published forever: the browser kept a card the
+        // server had already deleted, which then answered "No such run".
+        // Refreshing it costs one guarded call while no panel is listening.
+        com.mateof24.webpanel.TimerWebPanel.getInstance().onServerTick(server);
+
+        TimerManager manager = TimerManager.getInstance();
+        if (manager.runCount() == 0) {
+            com.mateof24.network.TimerState.flush(server);
+            return;
+        }
+
+        // The cadences only advance while something is actually ticking, so a
+        // paused timer does not drift the next broadcast, exactly as before.
+        boolean anyTicking = false;
+        for (TimerRun run : manager.runsView()) {
+            if (!run.isInCooldown() && run.isRunning()) {
+                anyTicking = true;
+                break;
             }
-            inRepeatCooldown = false;
-            Optional<Timer> opt = TimerManager.getInstance().getActiveTimer();
-            if (opt.isPresent()) {
-                Timer t = opt.get();
-                t.setRunning(true);
+        }
+
+        boolean syncNow = false;
+        if (anyTicking) {
+            syncCounter++;
+            if (syncCounter >= SYNC_INTERVAL) {
+                syncCounter = 0;
+                syncNow = true;
+            }
+        }
+
+        // Snapshot: finishing a run can start the next timer of a sequence,
+        // which adds and removes entries from the registry.
+        for (TimerRun run : List.copyOf(manager.runsView())) {
+            tickRun(server, run, syncNow);
+        }
+
+        // One send per tick at most, covering every change made above plus the
+        // 1 Hz heartbeat. Redundant sends within a tick collapse into this.
+        com.mateof24.network.TimerState.flush(server);
+    }
+
+    private static void tickRun(MinecraftServer server, TimerRun run, boolean syncNow) {
+        drainPendingCommands(server, run);
+
+        switch (run.phase()) {
+            case REPEAT_COOLDOWN -> {
+                if (run.tickCooldown()) return;
+                run.endCooldown();
+                run.setRunning(true);
                 TimerManager.getInstance().saveActiveTimer();
-                syncTimerToClients(server, t);
-            }
-            return;
-        }
-
-        if (pendingSequenceTimerName != null) {
-            if (cooldownRemaining > 0) {
-                cooldownRemaining--;
+                com.mateof24.network.TimerState.markDirty();
                 return;
             }
-            String next = pendingSequenceTimerName;
-            pendingSequenceTimerName = null;
-            if (TimerManager.getInstance().hasTimer(next)) {
-                TimerManager.getInstance().startTimer(next);
-                TimerManager.getInstance().getTimer(next).ifPresent(t -> syncTimerToClients(server, t));
-            } else {
-                Services.PLATFORM.clearScoreboardTimer(server);
-                lastBroadcastedScoreboardSecond = -1L;
-                lastBroadcastedScoreboardTimer = "";
-                Services.PLATFORM.sendTimerSyncPacket(server, "", 0, 0, false, false, false);
+            case SEQUENCE_COOLDOWN -> {
+                if (run.tickCooldown()) return;
+                String next = run.pendingSequenceTimer();
+                run.endCooldown();
+                TimerManager.getInstance().endRun(run);
+                if (TimerManager.getInstance().hasTimer(next)) {
+                    TimerManager.getInstance().startTimer(next);
+                    com.mateof24.network.TimerState.markDirty();
+                } else {
+                    clearDisplay(server);
+                }
+                return;
             }
-            return;
+            default -> { }
         }
 
-        Optional<Timer> activeTimerOpt = TimerManager.getInstance().getActiveTimer();
-        if (activeTimerOpt.isEmpty()) return;
+        if (!run.isRunning()) return;
 
-        Timer activeTimer = activeTimerOpt.get();
-        if (!activeTimer.isRunning()) return;
+        Timer timer = run.timer();
+        boolean finished = run.tick();
+        mirror(run);
 
-        boolean finished = activeTimer.tick();
-
-        if (!finished && activeTimer.getTriggerType() != null
-                && "finish".equals(activeTimer.getTriggerAction())) {
-            if (com.mateof24.trigger.TriggerRegistry.consumeFor(activeTimer.getName())) finished = true;
-        }
-
-        if (!finished && activeTimer.hasCondition() && "finish".equals(activeTimer.getScoreConditionAction())) {
-            finished = checkScoreboardCondition(server, activeTimer);
-        }
-
-        if (!finished && activeTimer.getConditionExpression() != null && "finish".equals(activeTimer.getConditionExpressionAction())) {
-            finished = com.mateof24.command.ConditionEvaluator
-                    .evaluate(activeTimer.getConditionExpression(), server, activeTimer)
-                    .orElse(false);
-        }
-
-        if (!finished && com.mateof24.event.TimerConditionRegistry.hasCondition(activeTimer.getName())) {
-            finished = com.mateof24.event.TimerConditionRegistry.evaluate(activeTimer.getName());
+        if (!finished && com.mateof24.event.TimerConditionRegistry.hasCondition(timer.getName())) {
+            finished = com.mateof24.event.TimerConditionRegistry.evaluate(timer.getName());
         }
 
         // Scheduled commands: fire when the displayed second crosses a
         // threshold. A finish tick resets currentTicks (jump away from zero),
         // which the crossing test naturally ignores — the baseline just moves.
-        long commandSecond = activeTimer.getCurrentTicks() / 20L;
-        if (!activeTimer.getName().equals(lastCommandTimer)) {
-            lastCommandTimer = activeTimer.getName();
-            lastCommandSecond = commandSecond;
-        } else if (commandSecond != lastCommandSecond) {
-            long previousSecond = lastCommandSecond;
-            lastCommandSecond = commandSecond;
-            if (!finished && activeTimer.hasScheduledCommands()) {
-                fireScheduledCommands(server, activeTimer, previousSecond, commandSecond);
+        long commandSecond = run.getCurrentTicks() / 20L;
+        if (run.lastCommandSecond() < 0) {
+            run.setLastCommandSecond(commandSecond);
+        } else if (commandSecond != run.lastCommandSecond()) {
+            long previousSecond = run.lastCommandSecond();
+            run.setLastCommandSecond(commandSecond);
+            if (!finished && timer.hasScheduledCommands()) {
+                fireScheduledCommands(server, run, previousSecond, commandSecond);
             }
         }
 
-        syncCounter++;
-        if (syncCounter >= SYNC_INTERVAL) {
-            syncCounter = 0;
-            syncTimerToClients(server, activeTimer);
+        if (syncNow) {
+            com.mateof24.network.TimerState.markDirty();
+            com.mateof24.event.TimerEventBus.fireTick(run);
         }
 
-        long currentSecond = activeTimer.getCurrentTicks() / 20L;
-        if (currentSecond != lastBroadcastedScoreboardSecond
-                || !activeTimer.getName().equals(lastBroadcastedScoreboardTimer)) {
-            Services.PLATFORM.updateScoreboardTimer(server,
-                    activeTimer.getName(),
-                    currentSecond,
-                    activeTimer.getTargetTicks() / 20L);
-            lastBroadcastedScoreboardSecond = currentSecond;
-            lastBroadcastedScoreboardTimer = activeTimer.getName();
+        long currentSecond = run.getCurrentTicks() / 20L;
+        if (currentSecond != run.lastScoreboardSecond()) {
+            updateScoreboard(server, run, currentSecond);
+            run.setLastScoreboardSecond(currentSecond);
         }
 
-        if (syncCounter == 0) {
-            com.mateof24.event.TimerEventBus.fireOnTick(toInfo(activeTimer));
-        }
+        if (!finished) return;
 
-        if (!finished) {
-            webPanelTickCounter++;
-            if (webPanelTickCounter >= WEB_PANEL_TICK_INTERVAL) {
-                webPanelTickCounter = 0;
-                com.mateof24.webpanel.TimerWebPanel.getInstance().onServerTick(activeTimer);
-            }
-        }
+        onRunFinished(server, run, timer);
+    }
 
-        if (finished) {
-            TimerLogger.logFinish(activeTimer);
-            com.mateof24.event.TimerEventBus.fireOnFinish(toInfo(activeTimer));
-            executeTimerCommand(server, activeTimer);
+    private static void onRunFinished(MinecraftServer server, TimerRun run, Timer timer) {
+        TimerLogger.logFinish(timer);
+        com.mateof24.event.TimerEventBus.fireFinish(run);
+        executeTimerCommand(server, run);
 
-            if (activeTimer.shouldRepeatAgain()) {
-                activeTimer.incrementRepeatsDone();
-                activeTimer.reset();
-                long cd = activeTimer.getRepeatCooldownTicks();
-                if (cd > 0) {
-                    TimerManager.getInstance().saveActiveTimer();
-                    cooldownRemaining = cd;
-                    inRepeatCooldown = true;
-                    syncTimerToClients(server, activeTimer);
-                } else {
-                    activeTimer.setRunning(true);
-                    TimerManager.getInstance().saveActiveTimer();
-                    syncTimerToClients(server, activeTimer);
-                }
+        if (run.shouldRepeatAgain()) {
+            run.incrementRepeatsDone();
+            run.reset();
+            long cd = timer.getRepeatCooldownTicks();
+            if (cd > 0) {
+                run.beginRepeatCooldown(cd);
             } else {
-                String nextTimerName = activeTimer.getNextTimer();
-                long seqCd = activeTimer.getSequenceCooldownTicks();
-                activeTimer.resetRepeatsDone();
-                activeTimer.reset();
-                Timer finishedTimer = activeTimer;
-                TimerManager.getInstance().clearActiveTimer();
-                TimerManager.getInstance().saveTimer(finishedTimer);
+                run.setRunning(true);
+            }
+            TimerManager.getInstance().saveActiveTimer();
+            com.mateof24.network.TimerState.markDirty();
+            return;
+        }
 
-                if (nextTimerName != null && TimerManager.getInstance().hasTimer(nextTimerName)) {
-                    if (seqCd > 0) {
-                        pendingSequenceTimerName = nextTimerName;
-                        cooldownRemaining = seqCd;
-                        Services.PLATFORM.sendTimerSyncPacket(server, "", 0, 0, false, false, false);
-                    } else {
-                        TimerManager.getInstance().startTimer(nextTimerName);
-                        TimerManager.getInstance().getTimer(nextTimerName).ifPresent(next ->
-                                syncTimerToClients(server, next));
-                    }
-                } else {
-                    Services.PLATFORM.clearScoreboardTimer(server);
-                    lastBroadcastedScoreboardSecond = -1L;
-                    lastBroadcastedScoreboardTimer = "";
-                    Services.PLATFORM.sendTimerSyncPacket(server, "", 0, 0, false, false, false);
-                }
+        String nextTimerName = timer.getNextTimer();
+        long seqCd = timer.getSequenceCooldownTicks();
+        run.resetRepeatsDone();
+        run.reset();
+
+        boolean hasNext = nextTimerName != null && TimerManager.getInstance().hasTimer(nextTimerName);
+
+        if (hasNext && seqCd > 0) {
+            // The run stays registered to hold the cooldown, but reports itself
+            // as awaiting a sequence, so nothing treats it as the active timer.
+            run.beginSequenceCooldown(nextTimerName, seqCd);
+            TimerManager.getInstance().saveTimer(timer);
+            com.mateof24.network.TimerState.markDirty();
+            return;
+        }
+
+        TimerManager.getInstance().endRun(run);
+        TimerManager.getInstance().saveTimer(timer);
+
+        if (hasNext) {
+            TimerManager.getInstance().startTimer(nextTimerName);
+            com.mateof24.network.TimerState.markDirty();
+        } else {
+            clearDisplay(server);
+        }
+    }
+
+    /**
+     * Keeps the definition's stored clock in step with its primary run, so
+     * every existing reader, the timer file and the downgrade hatch stay
+     * correct without knowing runs exist.
+     */
+    private static void mirror(TimerRun run) {
+        if (TimerManager.getInstance().isPrimaryRunOf(run)) run.mirrorToTimer();
+    }
+
+    /**
+     * Publishes the run's clock to the {@code ontime_active} objective.
+     *
+     * <p>The timer-name holder keeps meaning what it did in 4.0.0 — the
+     * primary run's clock — so existing {@code /execute if score} setups are
+     * untouched. A run bound to a player <em>adds</em> a holder under that
+     * player's name, which is what makes {@code @s} work per player without
+     * anyone having to create an objective. Both holders can be live at once;
+     * they answer different questions.</p>
+     */
+    private static void updateScoreboard(MinecraftServer server, TimerRun run, long currentSecond) {
+        long targetSecond = run.getTargetTicks() / 20L;
+        if (TimerManager.getInstance().isPrimaryRunOf(run)) {
+            Services.PLATFORM.updateScoreboardTimer(server, run.timerName(), currentSecond, targetSecond);
+        }
+        if (run.owner() != null) {
+            var player = server.getPlayerList().getPlayer(run.owner());
+            if (player != null) {
+                Services.PLATFORM.updateScoreboardTimer(server,
+                        player.getScoreboardName(), currentSecond, targetSecond);
             }
         }
     }
 
-    private static void checkStartConditions(MinecraftServer server) {
-        if (TimerManager.getInstance().getActiveTimer().isPresent()) return;
-        if (inRepeatCooldown || pendingSequenceTimerName != null) return;
-        for (Timer t : TimerManager.getInstance().timersView()) {
-            if (t.isRunning()) continue;
-            boolean shouldStart = false;
-            if (t.getTriggerType() != null && "start".equals(t.getTriggerAction())) {
-                if (com.mateof24.trigger.TriggerRegistry.consumeFor(t.getName())) shouldStart = true;
-            }
-            if (!shouldStart && t.hasCondition() && "start".equals(t.getScoreConditionAction())) {
-                shouldStart = checkScoreboardCondition(server, t);
-            }
-            if (!shouldStart && t.getConditionExpression() != null && "start".equals(t.getConditionExpressionAction())) {
-                shouldStart = com.mateof24.command.ConditionEvaluator
-                        .evaluate(t.getConditionExpression(), server, t)
-                        .orElse(false);
-            }
-            if (shouldStart) {
-                TimerManager.getInstance().startTimer(t.getName());
-                TimerManager.getInstance().getTimer(t.getName()).ifPresent(started ->
-                        syncTimerToClients(server, started));
-                return;
-            }
-        }
+    private static void clearDisplay(MinecraftServer server) {
+        Services.PLATFORM.clearScoreboardTimer(server);
+        com.mateof24.network.TimerState.markDirty();
     }
 
-    private static void syncTimerToClients(MinecraftServer server, Timer timer) {
-        Services.PLATFORM.sendTimerSyncPacket(server,
-                timer.getName(), timer.getCurrentTicks(), timer.getTargetTicks(),
-                timer.isCountUp(), timer.isRunning(), timer.isSilent());
-    }
-
-    private static void executeTimerCommand(MinecraftServer server, Timer timer) {
-        java.util.List<String> toRun = new java.util.ArrayList<>();
-        String legacy = timer.getCommand();
-        if (legacy != null && !legacy.trim().isEmpty()) toRun.add(legacy);
-        toRun.addAll(timer.getFinishCommands());
-        runCommandList(server, timer, toRun);
+    /**
+     * Starts any timer whose start trigger or start condition is met.
+     *
+     * <p>Up to 4.0.0 this bailed out entirely while anything was running, and
+     * stopped at the first match — it had to, because starting a timer cleared
+     * the single active pointer, so evaluating past a live run would have
+     * silently killed it. That is the long-standing limitation where a timer
+     * with a start trigger could never fire while another one ran. Concurrent
+     * runs make both guards unnecessary: every eligible timer starts, each in
+     * its own run.</p>
+     */
+    private static void executeTimerCommand(MinecraftServer server, TimerRun run) {
+        runCommandList(server, run, run.timer().getFinishCommands());
     }
 
     /**
@@ -282,8 +294,9 @@ public class TimerTickHandler {
      * prev < at <= curr). Normal ticking crosses at most one boundary, but a
      * laggy catch-up can cross several — they fire in time order.
      */
-    private static void fireScheduledCommands(MinecraftServer server, Timer timer,
+    private static void fireScheduledCommands(MinecraftServer server, TimerRun run,
                                               long previousSecond, long currentSecond) {
+        Timer timer = run.timer();
         java.util.List<Timer.CommandEvent> crossed = new java.util.ArrayList<>();
         for (Timer.CommandEvent event : timer.getCommandEvents()) {
             long at = event.getAtSeconds();
@@ -296,69 +309,88 @@ public class TimerTickHandler {
         // getCommandEvents() is ascending; countdown visits thresholds high-to-low.
         if (!timer.isCountUp()) java.util.Collections.reverse(crossed);
         for (Timer.CommandEvent event : crossed) {
-            runCommandList(server, timer, event.getCommands());
+            runCommandList(server, run, event.getCommands());
         }
     }
 
     /**
-     * Runs the commands in order; one failing command does not stop the
-     * rest. With config commandDelayTicks > 0 the (placeholder-resolved)
-     * commands are queued instead and drained one per delay window.
+     * Runs the commands in order; one failing command does not stop the rest.
+     *
+     * <p>They go on the run's queue whenever any of them asks for a pause,
+     * and straight out when none does — which is nearly always, and is what a
+     * batch of commands did before delays existed at all. Placeholders are
+     * resolved on the way in, at the moment the batch was reached, not at the
+     * moment each one eventually runs.</p>
      */
-    private static void runCommandList(MinecraftServer server, Timer timer, java.util.List<String> commands) {
+    private static void runCommandList(MinecraftServer server, TimerRun run,
+                                       java.util.List<com.mateof24.timer.TimedCommand> commands) {
         if (commands.isEmpty()) return;
-        int delayTicks = com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks();
-        if (delayTicks > 0) {
-            for (String command : commands) {
-                pendingCommands.add(com.mateof24.command.PlaceholderSystem.replacePlaceholders(command, timer));
+
+        boolean anyWaits = false;
+        for (com.mateof24.timer.TimedCommand entry : commands) {
+            if (entry.delayTicks() > 0) {
+                anyWaits = true;
+                break;
+            }
+        }
+
+        if (!anyWaits) {
+            for (com.mateof24.timer.TimedCommand entry : commands) {
+                executeResolvedCommand(server, run, com.mateof24.command.PlaceholderSystem
+                        .replacePlaceholders(entry.command(), run, server));
             }
             return;
         }
-        for (String command : commands) {
-            executeResolvedCommand(server,
-                    com.mateof24.command.PlaceholderSystem.replacePlaceholders(command, timer));
+        for (com.mateof24.timer.TimedCommand entry : commands) {
+            run.queueCommand(new com.mateof24.timer.TimedCommand(
+                    com.mateof24.command.PlaceholderSystem
+                            .replacePlaceholders(entry.command(), run, server),
+                    entry.delayTicks()));
         }
     }
 
-    /** One queued command per delay window, preserving enqueue order. */
-    private static void drainPendingCommands(MinecraftServer server) {
-        if (pendingCommands.isEmpty()) return;
-        if (commandDelayRemaining > 0) {
-            commandDelayRemaining--;
-            return;
-        }
-        executeResolvedCommand(server, pendingCommands.poll());
-        if (!pendingCommands.isEmpty()) {
-            commandDelayRemaining = Math.max(1,
-                    com.mateof24.config.ModConfig.getInstance().getCommandDelayTicks());
+    /**
+     * One queued command per window, in the order they were queued.
+     *
+     * <p>The window is the one the command just run asked for: the pause
+     * belongs to the command in front of it, so a batch can wait a second
+     * after the first and nothing after the second.</p>
+     */
+    private static void drainPendingCommands(MinecraftServer server, TimerRun run) {
+        if (!run.hasPendingCommands()) return;
+        if (run.tickCommandDelay()) return;
+        com.mateof24.timer.TimedCommand entry = run.pollPendingCommand();
+        if (entry == null) return;
+        executeResolvedCommand(server, run, entry.command());
+        if (run.hasPendingCommands() && entry.delayTicks() > 0) {
+            run.setCommandDelay(entry.delayTicks());
         }
     }
 
-    private static void executeResolvedCommand(MinecraftServer server, String processedCommand) {
+    /**
+     * Runs the command as the run's own player when it has one, so {@code @s}
+     * and relative coordinates mean that player. A shared or global run has no
+     * owner and keeps the synthetic overworld source.
+     */
+    private static void executeResolvedCommand(MinecraftServer server, TimerRun run, String processedCommand) {
         try {
-            ServerLevel overworld = server.getLevel(ServerLevel.OVERWORLD);
-            if (overworld == null) return;
-            CommandSourceStack source = new CommandSourceStack(server, Vec3.ZERO, Vec2.ZERO, overworld, 4,
-                    "OnTime", net.minecraft.network.chat.Component.literal("OnTime"), server, null);
+            CommandSourceStack source = null;
+            if (run != null && run.owner() != null) {
+                var player = server.getPlayerList().getPlayer(run.owner());
+                if (player != null) {
+                    source = com.mateof24.compat.VanillaCompat.createPlayerCommandSource(server, player);
+                }
+            }
+            if (source == null) {
+                ServerLevel overworld = server.getLevel(ServerLevel.OVERWORLD);
+                if (overworld == null) return;
+                source = com.mateof24.compat.VanillaCompat.createCommandSource(server, overworld, "OnTime");
+            }
             server.getCommands().performPrefixedCommand(source, processedCommand);
         } catch (Exception e) {
             com.mateof24.OnTimeConstants.LOGGER.error("Failed to execute timer command: " + processedCommand, e);
         }
     }
 
-    private static boolean checkScoreboardCondition(MinecraftServer server, Timer timer) {
-        try {
-            return Services.PLATFORM.checkScoreboardCondition(server,
-                    timer.getConditionObjective(), timer.getConditionScore(), timer.getConditionTarget());
-        } catch (Exception e) {
-            com.mateof24.OnTimeConstants.LOGGER.warn("Failed to evaluate scoreboard condition for timer '{}'", timer.getName(), e);
-            return false;
-        }
-    }
 
-    private static com.mateof24.api.TimerInfo toInfo(Timer t) {
-        return new com.mateof24.api.TimerInfo(t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
-                t.isCountUp(), t.isRunning(), t.isSilent(), t.getCommand(),
-                t.isRepeat(), t.getRepeatCount(), t.getRepeatsDone());
-    }
 }

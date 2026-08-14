@@ -1,45 +1,99 @@
 package com.mateof24.webpanel;
 
-import com.google.gson.*;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.mojang.brigadier.ParseResults;
+import com.mojang.brigadier.context.ParsedCommandNode;
+import com.mojang.brigadier.suggestion.Suggestion;
+import com.mojang.brigadier.suggestion.Suggestions;
 import com.mateof24.OnTimeConstants;
-import com.mateof24.api.TimerInfo;
+import com.mateof24.admin.AdminOps;
 import com.mateof24.config.ModConfig;
 import com.mateof24.event.TimerEventBus;
-import com.mateof24.manager.TimerManager;
-import com.mateof24.platform.Services;
-import com.mateof24.tick.TimerTickHandler;
-import com.mateof24.timer.Timer;
+import com.mateof24.compat.VanillaCompat;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import net.minecraft.network.chat.Component;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerPlayer;
 
-import java.io.*;
-import java.net.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.stream.Collectors;
+import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
+/**
+ * The web panel: HTTP, routes and a live stream. Nothing else.
+ *
+ * <p>It used to be a thousand lines with the page inside it as a text block and
+ * the business logic beside it. The page now lives in the jar as three files a
+ * browser can cache, and every action goes through one door —
+ * {@link AdminOps} — which is what makes the panel able to do what the commands
+ * and the in-game screen can do without anybody keeping three lists in step.</p>
+ *
+ * <p>No CDN and no framework: the resources are inside the jar, so the panel
+ * works on a server with no route to the internet.</p>
+ */
 public class TimerWebPanel {
 
     private static TimerWebPanel instance;
 
     private HttpServer httpServer;
     private ExecutorService executor;
-    private ScheduledExecutorService scheduler;
-    private boolean running = false;
+    private volatile boolean running = false;
     private boolean listenersRegistered = false;
     private int port;
     private MinecraftServer mcServer;
-    private final CopyOnWriteArrayList<PrintWriter> sseClients = new CopyOnWriteArrayList<>();
-    private long lastClientActivityTime = 0L;
-    private boolean shutdownWarned = false;
 
-    private static final long INACTIVITY_MS = 5 * 60 * 1000L;
-    private static final long WARN_AHEAD_MS = 60 * 1000L;
+    private final CopyOnWriteArrayList<PrintWriter> sseClients = new CopyOnWriteArrayList<>();
+
+    /**
+     * Access token, regenerated on every start().
+     *
+     * <p>Every request carries it, as {@code ?t=} for the page and the stream —
+     * neither can set a header — or as {@code X-OnTime-Token} for everything
+     * else. Without it the panel would hand timer command editing, which the
+     * server runs at operator level, to whoever can reach the port.</p>
+     */
+    private volatile String accessToken = null;
+
+    /** Built on the server thread, read by the handlers. */
+    private volatile String publishedState = "{}";
+
+    /**
+     * Whether the snapshot above is older than the world it describes.
+     *
+     * <p>Set instead of rebuilding whenever nobody is listening. Building it
+     * means walking every timer, every run, every player and <em>every
+     * advancement on the server</em> and serialising the lot to a string;
+     * doing that on a cadence, for no one, is the one thing on the tick path
+     * that costs a measurable amount. A request finds it stale and pays for it
+     * then, which is the only moment the answer is wanted.</p>
+     */
+    private volatile boolean stateStale = true;
+
+    private final ConcurrentHashMap<String, long[]> rateWindows = new ConcurrentHashMap<>();
+
+    private static final String TOKEN_HEADER = "X-OnTime-Token";
+    private static final String TOKEN_QUERY = "t";
+    private static final long RATE_WINDOW_MS = 10_000L;
+    private static final int RATE_MAX_PER_WINDOW = 60;
+    // Called from the server tick handler, so once per tick: twenty of them is
+    // one second. It used to say "every 4 ticks", which it never was -- the
+    // snapshot was being rebuilt and pushed four times a second rather than
+    // the once this was meant to be.
+    private static final int STATE_REFRESH_EVERY = 20;
+    private int stateRefreshCounter = 0;
 
     private TimerWebPanel() {}
 
@@ -48,987 +102,449 @@ public class TimerWebPanel {
         return instance;
     }
 
+    // ==================================================================
+    // Lifecycle
+    // ==================================================================
+
     public void start(int port, MinecraftServer server) {
         if (running) return;
         this.port = port;
         this.mcServer = server;
-        this.lastClientActivityTime = System.currentTimeMillis();
-        this.shutdownWarned = false;
+        this.accessToken = generateToken();
+        this.rateWindows.clear();
 
         try {
-            httpServer = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
+            String bind = ModConfig.getInstance().getWebPanelBindAddress();
+            httpServer = HttpServer.create(new InetSocketAddress(bind, port), 0);
             executor = Executors.newCachedThreadPool(r -> {
                 Thread t = new Thread(r, "ontime-webpanel");
                 t.setDaemon(true);
                 return t;
             });
             httpServer.setExecutor(executor);
-            httpServer.createContext("/", this::serveRoot);
+
+            httpServer.createContext("/", this::serveStatic);
             httpServer.createContext("/api/state", this::serveState);
-            httpServer.createContext("/api/history", this::serveHistory);
             httpServer.createContext("/api/action", this::serveAction);
-            httpServer.createContext("/api/timer", this::serveTimerCrud);
-            httpServer.createContext("/api/config", this::serveConfig);
-            httpServer.createContext("/events", this::serveSSE);
+            httpServer.createContext("/api/lang", this::serveLang);
+            httpServer.createContext("/api/suggest", this::serveSuggest);
+            httpServer.createContext("/events", this::serveEvents);
             httpServer.start();
             running = true;
+            // Seeded here rather than waiting for the first tick: a panel
+            // opened in the moment between the two would otherwise be handed
+            // an empty board and believe it.
+            republish(server);
 
             if (!listenersRegistered) {
-                TimerEventBus.registerOnStart(info -> { if (running) { broadcastSSE(buildEvent("START", info)); broadcastState(); } });
-                TimerEventBus.registerOnFinish(info -> { if (running) { broadcastSSE(buildEvent("FINISH", info)); broadcastState(); } });
-                TimerEventBus.registerOnPause(info -> { if (running) { broadcastSSE(buildEvent("PAUSE", info)); broadcastState(); } });
-                TimerEventBus.registerOnResume(info -> { if (running) { broadcastSSE(buildEvent("RESUME", info)); broadcastState(); } });
+                // Any of them means the board moved; the panel asks for the
+                // whole state rather than trying to patch it from an event,
+                // which is one fewer thing that can drift out of step.
+                TimerEventBus.registerOnRunStart(info -> nudge("START"));
+                TimerEventBus.registerOnRunFinish(info -> nudge("FINISH"));
+                TimerEventBus.registerOnRunPause(info -> nudge("PAUSE"));
+                TimerEventBus.registerOnRunResume(info -> nudge("RESUME"));
                 listenersRegistered = true;
             }
 
-            scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-                Thread t = new Thread(r, "ontime-webpanel-watchdog");
-                t.setDaemon(true);
-                return t;
-            });
-            scheduler.scheduleAtFixedRate(this::checkInactivity, 30, 30, TimeUnit.SECONDS);
-
-            OnTimeConstants.LOGGER.info("OnTime WebPanel started on port {}", port);
+            OnTimeConstants.LOGGER.info("OnTime web panel: {}", getAccessUrlWithToken());
         } catch (IOException e) {
-            running = false;
-            OnTimeConstants.LOGGER.error("Failed to start OnTime WebPanel on port {}", port, e);
+            OnTimeConstants.LOGGER.error("Could not start the web panel on port {}", port, e);
         }
     }
 
     public void stop() {
         if (!running) return;
         running = false;
-        if (scheduler != null) { scheduler.shutdownNow(); scheduler = null; }
-        sseClients.forEach(w -> { try { w.close(); } catch (Exception ignored) {} });
+        // Invalidate the token first: any request already in flight is refused.
+        accessToken = null;
+        sseClients.forEach(writer -> {
+            try {
+                writer.close();
+            } catch (Exception ignored) {
+            }
+        });
         sseClients.clear();
-        if (httpServer != null) { httpServer.stop(0); httpServer = null; }
-        if (executor != null) { executor.shutdownNow(); executor = null; }
-        mcServer = null;
-        OnTimeConstants.LOGGER.info("OnTime WebPanel stopped");
+        if (httpServer != null) httpServer.stop(0);
+        if (executor != null) executor.shutdownNow();
+        rateWindows.clear();
+        OnTimeConstants.LOGGER.info("OnTime web panel stopped");
     }
 
     public boolean isRunning() { return running; }
+
     public int getPort() { return port; }
+
     public int getConnectedClients() { return sseClients.size(); }
 
-    public String getAccessUrl() {
-        try {
-            Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
-            while (ifaces.hasMoreElements()) {
-                NetworkInterface iface = ifaces.nextElement();
-                if (iface.isLoopback() || !iface.isUp()) continue;
-                Enumeration<InetAddress> addrs = iface.getInetAddresses();
-                while (addrs.hasMoreElements()) {
-                    InetAddress addr = addrs.nextElement();
-                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
-                        return "http://" + addr.getHostAddress() + ":" + port + "/";
-                    }
-                }
-            }
-        } catch (Exception ignored) {}
-        return "http://localhost:" + port + "/";
+    public String getAccessUrl() { return "http://localhost:" + port + "/"; }
+
+    /** The address to hand the operator, token included. */
+    public String getAccessUrlWithToken() {
+        String token = accessToken;
+        return token == null ? getAccessUrl() : getAccessUrl() + "?" + TOKEN_QUERY + "=" + token;
     }
 
-    public void onServerTick(Timer activeTimer) {
-        if (!running || sseClients.isEmpty()) return;
-        JsonObject obj = new JsonObject();
-        obj.addProperty("name", activeTimer.getName());
-        obj.addProperty("currentSeconds", activeTimer.getCurrentTicks() / 20L);
-        obj.addProperty("formattedTime", activeTimer.getFormattedTime());
-        float pct = activeTimer.getTargetTicks() > 0
-                ? (activeTimer.getCurrentTicks() * 100f) / activeTimer.getTargetTicks() : 100f;
-        obj.addProperty("percentage", activeTimer.isCountUp() ? 100f - pct : pct);
-        obj.addProperty("running", activeTimer.isRunning());
-        broadcastSSE("event: TICK\ndata: " + obj + "\n\n");
-    }
-
-    private void broadcastState() {
-        if (!running || sseClients.isEmpty()) return;
-        broadcastSSE("event: STATE\ndata: " + buildStateJson() + "\n\n");
-    }
-
-    private void checkInactivity() {
+    /** Called from the tick handler; rebuilds the snapshot the panel reads. */
+    public void onServerTick(MinecraftServer server) {
         if (!running) return;
-        if (!sseClients.isEmpty()) {
-            lastClientActivityTime = System.currentTimeMillis();
-            shutdownWarned = false;
+        this.mcServer = server;
+        // Nobody is listening, so nothing is built: the next request will find
+        // the snapshot stale and build it then. The panel used to be ticked
+        // unconditionally to stop it serving the past, which it still cannot
+        // do -- but it can stop paying for a board no one has asked for.
+        if (sseClients.isEmpty()) {
+            stateStale = true;
             return;
         }
-        long idle = System.currentTimeMillis() - lastClientActivityTime;
-        if (!shutdownWarned && idle >= INACTIVITY_MS - WARN_AHEAD_MS) {
-            shutdownWarned = true;
-            notifyOps(Component.literal("\u00a7e[OnTime] \u00a7fWebPanel has no connections. It will close in 1 minute."));
-        }
-        if (idle >= INACTIVITY_MS) {
-            notifyOps(Component.literal("\u00a7e[OnTime] \u00a7fWebPanel closed due to inactivity."));
-            stop();
-        }
+        if (++stateRefreshCounter < STATE_REFRESH_EVERY) return;
+        stateRefreshCounter = 0;
+        republish(server);
+        // The clock moved. Cheap to say, and the panel decides what to do.
+        broadcast("STATE", "{}");
     }
 
-    private void notifyOps(Component message) {
-        if (mcServer == null) return;
-        mcServer.execute(() -> {
-            mcServer.sendSystemMessage(message);
-            for (ServerPlayer player : mcServer.getPlayerList().getPlayers()) {
-                if (player.hasPermissions(4)) player.sendSystemMessage(message);
+    private void nudge(String event) {
+        if (!running) return;
+        if (sseClients.isEmpty()) {
+            stateStale = true;
+            return;
+        }
+        republish(mcServer);
+        broadcast(event, "{}");
+    }
+
+    /** Rebuilds the snapshot. Only ever called with somebody to send it to. */
+    private void republish(MinecraftServer server) {
+        publishedState = AdminOps.state(server).toString();
+        stateStale = false;
+    }
+
+    // ==================================================================
+    // Routes
+    // ==================================================================
+
+    /** The page and its two resources, straight out of the jar. */
+    private void serveStatic(HttpExchange ex) throws IOException {
+        String path = ex.getRequestURI().getPath();
+        if (path.equals("/")) {
+            if (!authorized(ex)) return;
+            byte[] page = resource("index.html");
+            if (page == null) {
+                send(ex, 500, "text/plain", "Panel resources missing from the jar".getBytes(StandardCharsets.UTF_8));
+                return;
             }
-        });
-    }
-
-    private void serveSSE(HttpExchange ex) throws IOException {
-        lastClientActivityTime = System.currentTimeMillis();
-        shutdownWarned = false;
-        ex.getResponseHeaders().set("Content-Type", "text/event-stream");
-        ex.getResponseHeaders().set("Cache-Control", "no-cache");
-        ex.getResponseHeaders().set("Connection", "keep-alive");
-        ex.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-        ex.sendResponseHeaders(200, 0);
-
-        PrintWriter writer = new PrintWriter(
-                new BufferedWriter(new OutputStreamWriter(ex.getResponseBody(), StandardCharsets.UTF_8)), true);
-        sseClients.add(writer);
-        lastClientActivityTime = System.currentTimeMillis();
-        sseWrite(writer, "INIT", buildStateJson().toString());
-
-        try {
-            while (running && !writer.checkError()) {
-                try { Thread.sleep(10000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
-                if (!writer.checkError()) { writer.print(": ping\n\n"); writer.flush(); }
-            }
-        } finally {
-            sseClients.remove(writer);
-            lastClientActivityTime = System.currentTimeMillis();
-            try { ex.getResponseBody().close(); } catch (IOException ignored) {}
+            // The page carries the token so its own calls can present it
+            // without it having to be parsed out of the address bar.
+            String html = new String(page, StandardCharsets.UTF_8).replace(
+                    "<script src=\"panel.js\"></script>",
+                    "<script>window.ONTIME_TOKEN=\"" + accessToken + "\";</script>\n"
+                            + "<script src=\"panel.js\"></script>");
+            ex.getResponseHeaders().set("Cache-Control", "no-store, must-revalidate");
+            send(ex, 200, "text/html; charset=utf-8", html.getBytes(StandardCharsets.UTF_8));
+            return;
         }
-    }
 
-    private void sseWrite(PrintWriter writer, String event, String data) {
-        writer.print("event: " + event + "\n");
-        writer.print("data: " + data + "\n\n");
-        writer.flush();
-    }
-
-    private void broadcastSSE(String message) {
-        sseClients.removeIf(w -> { w.print(message); w.flush(); return w.checkError(); });
-    }
-
-    private String buildEvent(String type, TimerInfo info) {
-        JsonObject obj = new JsonObject();
-        obj.addProperty("name", info.name());
-        obj.addProperty("currentSeconds", info.getCurrentSeconds());
-        obj.addProperty("targetSeconds", info.getTargetSeconds());
-        obj.addProperty("formattedTime", info.getFormattedTime());
-        obj.addProperty("percentage", info.getPercentage());
-        obj.addProperty("countUp", info.countUp());
-        obj.addProperty("running", info.running());
-        obj.addProperty("repeat", info.repeat());
-        obj.addProperty("repeatCount", info.repeatCount());
-        obj.addProperty("repeatsDone", info.repeatsDone());
-        return "event: " + type + "\ndata: " + obj + "\n\n";
-    }
-
-    private void serveRoot(HttpExchange ex) throws IOException {
-        if (!ex.getRequestMethod().equalsIgnoreCase("GET")) { ex.sendResponseHeaders(405, -1); return; }
-        byte[] body = getDashboardHtml().getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
-        ex.sendResponseHeaders(200, body.length);
-        try (OutputStream os = ex.getResponseBody()) { os.write(body); }
+        // The two resources are public on purpose: they hold nothing, and
+        // demanding a token for a stylesheet only breaks the browser's cache.
+        String name = path.substring(1);
+        if (!name.matches("[a-z0-9_.-]+")) {
+            send(ex, 404, "text/plain", "Not found".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        byte[] body = resource(name);
+        if (body == null) {
+            send(ex, 404, "text/plain", "Not found".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        // These ship inside the jar and change with every update, and their
+        // address never does. Without this the browser is entitled to keep the
+        // copy it fetched the first time, so an updated mod serves a page whose
+        // script and stylesheet are from whichever version was installed when
+        // the tab was first opened.
+        ex.getResponseHeaders().set("Cache-Control", "no-store, must-revalidate");
+        send(ex, 200, contentType(name), body);
     }
 
     private void serveState(HttpExchange ex) throws IOException {
-        if (!ex.getRequestMethod().equalsIgnoreCase("GET")) { ex.sendResponseHeaders(405, -1); return; }
-        setCors(ex);
-        byte[] body = buildStateJson().toString().getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "application/json");
-        ex.sendResponseHeaders(200, body.length);
-        try (OutputStream os = ex.getResponseBody()) { os.write(body); }
+        if (!authorized(ex)) return;
+        // Stale means the tick handler stopped building it because no stream
+        // was open, so this is where it gets built. It also covers the case it
+        // always covered: a request arriving before anything has published,
+        // which would otherwise be answered with an empty board that looks
+        // exactly like a real one.
+        if (stateStale || "{}".equals(publishedState)) republish(mcServer);
+        send(ex, 200, "application/json", publishedState.getBytes(StandardCharsets.UTF_8));
     }
 
-    private void serveHistory(HttpExchange ex) throws IOException {
-        if (!ex.getRequestMethod().equalsIgnoreCase("GET")) { ex.sendResponseHeaders(405, -1); return; }
-        setCors(ex);
-        String content = "[]";
-        java.nio.file.Path histFile = Services.PLATFORM.getConfigDir().resolve("ontime").resolve("history.json");
-        if (Files.exists(histFile)) {
-            try { content = new String(Files.readAllBytes(histFile), StandardCharsets.UTF_8); }
-            catch (IOException ignored) {}
-        }
-        byte[] body = content.getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "application/json");
-        ex.sendResponseHeaders(200, body.length);
-        try (OutputStream os = ex.getResponseBody()) { os.write(body); }
-    }
-
+    /**
+     * The one door.
+     *
+     * <p>{@code {"op": "...", "args": {...}}} — the same names the in-game
+     * screen sends and the same the commands land on. The panel has no
+     * operations of its own, which is what "the same things" means in
+     * practice.</p>
+     */
     private void serveAction(HttpExchange ex) throws IOException {
-        setCors(ex);
-        if (ex.getRequestMethod().equalsIgnoreCase("OPTIONS")) { ex.sendResponseHeaders(204, -1); return; }
-        if (!ex.getRequestMethod().equalsIgnoreCase("POST")) { ex.sendResponseHeaders(405, -1); return; }
-
-        String reqBody;
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(ex.getRequestBody(), StandardCharsets.UTF_8))) {
-            reqBody = r.lines().collect(Collectors.joining());
+        if (!authorized(ex)) return;
+        if (!"POST".equals(ex.getRequestMethod())) {
+            send(ex, 405, "application/json", "{\"error\":\"POST only\"}".getBytes(StandardCharsets.UTF_8));
+            return;
         }
+        if (rateLimited(ex)) return;
 
-        JsonObject resp = new JsonObject();
-        try {
-            JsonObject req = new Gson().fromJson(reqBody, JsonObject.class);
-            String action = req.get("action").getAsString();
-            String timerName = req.has("timer") && !req.get("timer").isJsonNull()
-                    ? req.get("timer").getAsString() : null;
-            scheduleAction(action, timerName);
-            resp.addProperty("success", true);
+        JsonObject request;
+        try (InputStream in = ex.getRequestBody()) {
+            request = JsonParser.parseString(new String(in.readAllBytes(), StandardCharsets.UTF_8))
+                    .getAsJsonObject();
         } catch (Exception e) {
-            resp.addProperty("success", false);
-            resp.addProperty("error", e.getMessage());
+            send(ex, 400, "application/json", "{\"error\":\"Malformed request\"}".getBytes(StandardCharsets.UTF_8));
+            return;
         }
 
-        byte[] body = resp.toString().getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "application/json");
-        ex.sendResponseHeaders(200, body.length);
-        try (OutputStream os = ex.getResponseBody()) { os.write(body); }
+        String op = request.has("op") ? request.get("op").getAsString() : null;
+        JsonObject args = request.has("args") && request.get("args").isJsonObject()
+                ? request.getAsJsonObject("args") : new JsonObject();
+
+        AdminOps.Result result = AdminOps.apply(mcServer, AdminOps.Caller.web("web panel"), op, args);
+        if (result.stateChanged()) {
+            // Through the same door as everything else, so the staleness flag
+            // cannot end up saying the opposite of what the snapshot is.
+            republish(mcServer);
+            broadcast("STATE", "{}");
+        }
+
+        JsonObject answer = new JsonObject();
+        answer.addProperty("success", result.success());
+        if (result.message() != null && !result.message().isEmpty()) {
+            answer.addProperty("message", result.message());
+        }
+        send(ex, 200, "application/json", answer.toString().getBytes(StandardCharsets.UTF_8));
     }
 
-    private void serveTimerCrud(HttpExchange ex) throws IOException {
-        setCors(ex);
-        if (ex.getRequestMethod().equalsIgnoreCase("OPTIONS")) { ex.sendResponseHeaders(204, -1); return; }
-        if (!ex.getRequestMethod().equalsIgnoreCase("POST")) { ex.sendResponseHeaders(405, -1); return; }
+    /**
+     * Which language the panel should open in.
+     *
+     * <p>The server's own, which is the closest thing there is to "the game's":
+     * a browser is not the game and knows nothing about it. Whoever is looking
+     * can pick another, and the panel remembers that instead.</p>
+     */
+    private void serveLang(HttpExchange ex) throws IOException {
+        if (!authorized(ex)) return;
+        JsonObject answer = new JsonObject();
+        answer.addProperty("language", Locale.getDefault().getLanguage());
+        send(ex, 200, "application/json", answer.toString().getBytes(StandardCharsets.UTF_8));
+    }
 
-        String reqBody;
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(ex.getRequestBody(), StandardCharsets.UTF_8))) {
-            reqBody = r.lines().collect(Collectors.joining());
-        }
+    /**
+     * What the server would offer somebody typing this command.
+     *
+     * <p>The in-game field is the command block's own, and it is the game that
+     * answers it. A browser has no dispatcher, so this is the same question
+     * asked over the wire: brigadier parses the text against a level-4 source
+     * and says what could come next, where the word being completed starts,
+     * and how far the whole thing parsed before it gave up.</p>
+     *
+     * <p>Answered on the server thread. Completion reads the world — which
+     * players are on, which objectives exist, which functions are loaded — and
+     * the HTTP pool is not the thread allowed to look.</p>
+     */
+    private void serveSuggest(HttpExchange ex) throws IOException {
+        if (!authorized(ex)) return;
+        MinecraftServer server = mcServer;
 
-        JsonObject resp = new JsonObject();
-        try {
-            JsonObject req = new Gson().fromJson(reqBody, JsonObject.class);
-            String action = req.get("action").getAsString();
-            String name = req.has("name") ? req.get("name").getAsString().trim() : "";
-            if (name.isEmpty()) throw new Exception("Name is required");
-            if (mcServer == null) throw new Exception("Server not available");
-
-            switch (action) {
-                case "create" -> {
-                    int hours = req.has("hours") ? req.get("hours").getAsInt() : 0;
-                    int minutes = req.has("minutes") ? req.get("minutes").getAsInt() : 0;
-                    int seconds = req.has("seconds") ? req.get("seconds").getAsInt() : 0;
-                    boolean countUp = req.has("countUp") && req.get("countUp").getAsBoolean();
-                    mcServer.execute(() -> {
-                        if (TimerManager.getInstance().createTimer(name, hours, minutes, seconds, countUp)) {
-                            TimerManager.getInstance().getTimer(name).ifPresent(t -> {
-                                if (req.has("command")) t.setCommand(req.get("command").getAsString());
-                                applyTimerProps(t, req);
-                                TimerManager.getInstance().saveTimers();
-                            });
-                            broadcastState();
-                        }
-                    });
-                }
-                case "update" -> mcServer.execute(() ->
-                        TimerManager.getInstance().getTimer(name).ifPresent(t -> {
-                            if (req.has("command")) t.setCommand(req.get("command").getAsString());
-                            applyTimerProps(t, req);
-                            TimerManager.getInstance().saveTimers();
-                            broadcastState();
-                        })
-                );
-                case "delete" -> mcServer.execute(() -> {
-                    if (TimerManager.getInstance().removeTimer(name)) {
-                        Services.PLATFORM.sendTimerSyncPacket(mcServer, "", 0, 0, false, false, false);
-                        broadcastState();
-                    }
-                });
-                default -> throw new Exception("Unknown action: " + action);
+        // One list, asked for once and kept: every sound event the game knows.
+        // The board carries the advancements, the dimensions, the players and
+        // the timers already, and the selectors are fixed by the game -- this
+        // is the only one of the six the panel cannot work out for itself, and
+        // it is far too long to repeat in a snapshot four times a second.
+        if ("sounds".equals(queryParam(ex, "kind"))) {
+            JsonObject list = new JsonObject();
+            JsonArray ids = new JsonArray();
+            list.add("list", ids);
+            // Not named: this is ResourceLocation up to 1.21.11 and Identifier
+            // from 26.1, and all that is wanted of it is how it prints.
+            for (Object id : BuiltInRegistries.SOUND_EVENT.keySet()) {
+                ids.add(String.valueOf(id));
             }
-            resp.addProperty("success", true);
-        } catch (Exception e) {
-            resp.addProperty("success", false);
-            resp.addProperty("error", e.getMessage());
+            ex.getResponseHeaders().set("Cache-Control", "private, max-age=3600");
+            send(ex, 200, "application/json", list.toString().getBytes(StandardCharsets.UTF_8));
+            return;
         }
 
-        byte[] body = resp.toString().getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "application/json");
-        ex.sendResponseHeaders(200, body.length);
-        try (OutputStream os = ex.getResponseBody()) { os.write(body); }
-    }
+        String query = queryParam(ex, "q");
+        if (query == null) query = "";
+        // Nothing sensible completes past this, and it caps what one request
+        // can ask the dispatcher to chew on.
+        if (query.length() > 256) query = query.substring(0, 256);
 
-    private void serveConfig(HttpExchange ex) throws IOException {
-        setCors(ex);
-        if (ex.getRequestMethod().equalsIgnoreCase("OPTIONS")) { ex.sendResponseHeaders(204, -1); return; }
-        if (!ex.getRequestMethod().equalsIgnoreCase("POST")) { ex.sendResponseHeaders(405, -1); return; }
+        JsonObject answer = new JsonObject();
+        JsonArray offers = new JsonArray();
+        JsonArray parsed = new JsonArray();
+        answer.add("suggestions", offers);
+        answer.add("parsed", parsed);
 
-        String reqBody;
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(ex.getRequestBody(), StandardCharsets.UTF_8))) {
-            reqBody = r.lines().collect(Collectors.joining());
+        if (server == null) {
+            send(ex, 200, "application/json", answer.toString().getBytes(StandardCharsets.UTF_8));
+            return;
         }
 
-        JsonObject resp = new JsonObject();
+        final String text = query;
         try {
-            JsonObject req = new Gson().fromJson(reqBody, JsonObject.class);
-            if (mcServer == null) throw new Exception("Server not available");
-            mcServer.execute(() -> {
-                ModConfig cfg = ModConfig.getInstance();
-                if (req.has("positionPreset"))
-                    cfg.setPositionPreset(com.mateof24.config.TimerPositionPreset.fromString(req.get("positionPreset").getAsString()));
-                if (req.has("scale")) cfg.setTimerScale(req.get("scale").getAsFloat());
-                if (req.has("colorHigh")) cfg.setColorHigh(parseHexColor(req.get("colorHigh").getAsString()));
-                if (req.has("colorMid")) cfg.setColorMid(parseHexColor(req.get("colorMid").getAsString()));
-                if (req.has("colorLow")) cfg.setColorLow(parseHexColor(req.get("colorLow").getAsString()));
-                if (req.has("thresholdMid")) cfg.setThresholdMid(req.get("thresholdMid").getAsInt());
-                if (req.has("thresholdLow")) cfg.setThresholdLow(req.get("thresholdLow").getAsInt());
-                if (req.has("soundId")) cfg.setTimerSoundId(req.get("soundId").getAsString());
-                if (req.has("soundVolume")) cfg.setTimerSoundVolume(req.get("soundVolume").getAsFloat());
-                if (req.has("soundPitch")) cfg.setTimerSoundPitch(req.get("soundPitch").getAsFloat());
-                cfg.save();
-                broadcastState();
-            });
-            resp.addProperty("success", true);
+            server.submit(() -> {
+                CommandSourceStack source = VanillaCompat.createCommandSource(
+                        server, server.overworld(), "OnTime web panel");
+                ParseResults<CommandSourceStack> results =
+                        server.getCommands().getDispatcher().parse(text, source);
+                // How far it got. Everything from here on is what the field
+                // paints red, the same as the game does.
+                answer.addProperty("cursor", results.getReader().getCursor());
+                for (ParsedCommandNode<CommandSourceStack> node : results.getContext().getNodes()) {
+                    JsonObject range = new JsonObject();
+                    range.addProperty("start", node.getRange().getStart());
+                    range.addProperty("end", node.getRange().getEnd());
+                    parsed.add(range);
+                }
+                Suggestions suggestions = server.getCommands().getDispatcher()
+                        .getCompletionSuggestions(results).join();
+                answer.addProperty("start", suggestions.getRange().getStart());
+                answer.addProperty("end", suggestions.getRange().getEnd());
+                for (Suggestion suggestion : suggestions.getList()) {
+                    JsonObject one = new JsonObject();
+                    one.addProperty("text", suggestion.getText());
+                    if (suggestion.getTooltip() != null) {
+                        one.addProperty("tip", suggestion.getTooltip().getString());
+                    }
+                    offers.add(one);
+                }
+                return null;
+            }).get(2, TimeUnit.SECONDS);
         } catch (Exception e) {
-            resp.addProperty("success", false);
-            resp.addProperty("error", e.getMessage());
+            // A suggestion nobody gets is a field that still works. Never a 500:
+            // the panel would show an error toast on every keystroke.
+            OnTimeConstants.LOGGER.debug("Could not complete '{}'", text, e);
         }
-
-        byte[] body = resp.toString().getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "application/json");
-        ex.sendResponseHeaders(200, body.length);
-        try (OutputStream os = ex.getResponseBody()) { os.write(body); }
+        send(ex, 200, "application/json", answer.toString().getBytes(StandardCharsets.UTF_8));
     }
 
-    private void scheduleAction(String action, String timerName) {
-        if (mcServer == null) return;
-        mcServer.execute(() -> {
-            switch (action) {
-                case "start" -> {
-                    if (timerName == null || !TimerManager.getInstance().hasTimer(timerName)) return;
-                    if (TimerManager.getInstance().getActiveTimer().isPresent()) return;
-                    if (TimerManager.getInstance().startTimer(timerName)) {
-                        TimerManager.getInstance().getTimer(timerName).ifPresent(t ->
-                                Services.PLATFORM.sendTimerSyncPacket(mcServer,
-                                        t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
-                                        t.isCountUp(), t.isRunning(), t.isSilent()));
-                    }
-                }
-                case "pause" -> TimerManager.getInstance().getActiveTimer().ifPresent(t -> {
-                    t.setRunning(!t.isRunning());
-                    TimerManager.getInstance().saveTimers();
-                    Services.PLATFORM.sendTimerSyncPacket(mcServer,
-                            t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
-                            t.isCountUp(), t.isRunning(), t.isSilent());
-                    broadcastState();
-                });
-                case "stop" -> {
-                    TimerTickHandler.cancelCooldown();
-                    TimerManager.getInstance().getActiveTimer().ifPresent(t -> {
-                        t.resetRepeatsDone();
-                        t.reset();
-                        TimerManager.getInstance().clearActiveTimer();
-                    });
-                    TimerManager.getInstance().saveTimers();
-                    Services.PLATFORM.sendTimerSyncPacket(mcServer, "", 0, 0, false, false, false);
-                    broadcastState();
-                }
-                case "reset" -> {
-                    if (timerName == null) return;
-                    TimerManager.getInstance().getTimer(timerName).ifPresent(t -> {
-                        boolean wasActive = TimerManager.getInstance().getActiveTimer()
-                                .map(a -> a.getName().equals(timerName)).orElse(false);
-                        t.reset();
-                        TimerManager.getInstance().saveTimers();
-                        if (wasActive) Services.PLATFORM.sendTimerSyncPacket(mcServer,
-                                t.getName(), t.getCurrentTicks(), t.getTargetTicks(),
-                                t.isCountUp(), false, t.isSilent());
-                        broadcastState();
-                    });
-                }
-            }
+    private void serveEvents(HttpExchange ex) throws IOException {
+        if (!authorized(ex)) return;
+        ex.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
+        ex.getResponseHeaders().set("Cache-Control", "no-cache");
+        ex.getResponseHeaders().set("Connection", "keep-alive");
+        ex.sendResponseHeaders(200, 0);
+
+        PrintWriter writer = new PrintWriter(
+                new OutputStreamWriter(ex.getResponseBody(), StandardCharsets.UTF_8), true);
+        sseClients.add(writer);
+        writer.write("event: STATE\ndata: {}\n\n");
+        writer.flush();
+        // The exchange stays open; the writer is closed by stop() or by the
+        // broadcast that finds it broken.
+    }
+
+    private void broadcast(String event, String data) {
+        if (sseClients.isEmpty()) return;
+        String message = "event: " + event + "\ndata: " + data + "\n\n";
+        sseClients.removeIf(writer -> {
+            writer.write(message);
+            writer.flush();
+            return writer.checkError();
         });
     }
 
-    private void applyTimerProps(Timer t, JsonObject req) {
-        if (req.has("silent")) t.setSilent(req.get("silent").getAsBoolean());
-        if (req.has("repeat")) t.setRepeat(req.get("repeat").getAsBoolean());
-        if (req.has("repeatCount")) t.setRepeatCount(req.get("repeatCount").getAsInt());
-        if (req.has("repeatCooldown")) t.setRepeatCooldownTicks(req.get("repeatCooldown").getAsLong() * 20L);
-        if (req.has("nextTimer")) {
-            String next = req.get("nextTimer").getAsString();
-            t.setNextTimer(next.isEmpty() ? null : next);
+    // ==================================================================
+    // Plumbing
+    // ==================================================================
+
+    private static byte[] resource(String name) {
+        try (InputStream in = TimerWebPanel.class.getResourceAsStream("/webpanel/" + name)) {
+            return in == null ? null : in.readAllBytes();
+        } catch (IOException e) {
+            return null;
         }
-        if (req.has("sequenceCooldown")) t.setSequenceCooldownTicks(req.get("sequenceCooldown").getAsLong() * 20L);
-        if (req.has("conditionObjective")) {
-            String obj = req.get("conditionObjective").getAsString();
-            if (obj.isEmpty()) {
-                t.clearCondition();
-            } else {
-                int score = req.has("conditionScore") ? req.get("conditionScore").getAsInt() : 0;
-                String target = req.has("conditionTarget") ? req.get("conditionTarget").getAsString() : "*";
-                t.setCondition(obj, score, target.isEmpty() ? "*" : target);
+    }
+
+    private static String contentType(String name) {
+        if (name.endsWith(".css")) return "text/css; charset=utf-8";
+        if (name.endsWith(".js")) return "text/javascript; charset=utf-8";
+        if (name.endsWith(".html")) return "text/html; charset=utf-8";
+        return "application/octet-stream";
+    }
+
+    private static void send(HttpExchange ex, int status, String type, byte[] body) throws IOException {
+        ex.getResponseHeaders().set("Content-Type", type);
+        // The panel loads nothing from anywhere else, so it may as well say so.
+        ex.getResponseHeaders().set("Content-Security-Policy",
+                "default-src 'self'; style-src 'self'; script-src 'self' 'unsafe-inline'; img-src 'self' data:");
+        ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        ex.getResponseHeaders().set("Referrer-Policy", "no-referrer");
+        ex.sendResponseHeaders(status, body.length);
+        try (OutputStream out = ex.getResponseBody()) {
+            out.write(body);
+        }
+    }
+
+    private static String generateToken() {
+        byte[] bytes = new byte[16];
+        new java.security.SecureRandom().nextBytes(bytes);
+        StringBuilder out = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            out.append(Character.forDigit((b >> 4) & 0xF, 16)).append(Character.forDigit(b & 0xF, 16));
+        }
+        return out.toString();
+    }
+
+    private static String queryParam(HttpExchange ex, String key) {
+        String query = ex.getRequestURI().getRawQuery();
+        if (query == null || query.isEmpty()) return null;
+        for (String pair : query.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq <= 0) continue;
+            if (pair.substring(0, eq).equals(key)) {
+                return java.net.URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8);
             }
         }
+        return null;
     }
 
-    private int parseHexColor(String hex) {
-        try { return Integer.parseInt(hex.replace("#", ""), 16); }
-        catch (NumberFormatException e) { return 0xFFFFFF; }
-    }
+    /**
+     * Refuses the exchange with 401 unless it carries the current token.
+     * Compared in constant time, so a wrong one gives nothing away by timing.
+     */
+    private boolean authorized(HttpExchange ex) throws IOException {
+        String expected = accessToken;
+        String provided = ex.getRequestHeaders().getFirst(TOKEN_HEADER);
+        if (provided == null) provided = queryParam(ex, TOKEN_QUERY);
 
-    private JsonObject buildStateJson() {
-        JsonObject root = new JsonObject();
-        JsonArray timers = new JsonArray();
-        for (Timer t : TimerManager.getInstance().getAllTimers().values()) {
-            timers.add(timerJson(t));
+        boolean ok = expected != null && provided != null
+                && java.security.MessageDigest.isEqual(
+                        expected.getBytes(StandardCharsets.UTF_8),
+                        provided.getBytes(StandardCharsets.UTF_8));
+        if (!ok) {
+            send(ex, 401, "application/json",
+                    "{\"error\":\"unauthorized\"}".getBytes(StandardCharsets.UTF_8));
         }
-        root.add("timers", timers);
-        TimerManager.getInstance().getActiveTimer().ifPresent(t -> root.addProperty("active", t.getName()));
-
-        ModConfig cfg = ModConfig.getInstance();
-        JsonObject config = new JsonObject();
-        config.addProperty("positionPreset", cfg.getPositionPreset().name());
-        config.addProperty("scale", cfg.getTimerScale());
-        config.addProperty("colorHigh", String.format("#%06X", cfg.getColorHigh()));
-        config.addProperty("colorMid", String.format("#%06X", cfg.getColorMid()));
-        config.addProperty("colorLow", String.format("#%06X", cfg.getColorLow()));
-        config.addProperty("thresholdMid", cfg.getThresholdMid());
-        config.addProperty("thresholdLow", cfg.getThresholdLow());
-        config.addProperty("soundId", cfg.getTimerSoundId());
-        config.addProperty("soundVolume", cfg.getTimerSoundVolume());
-        config.addProperty("soundPitch", cfg.getTimerSoundPitch());
-        root.add("config", config);
-        return root;
+        return ok;
     }
 
-    private JsonObject timerJson(Timer t) {
-        JsonObject json = new JsonObject();
-        json.addProperty("name", t.getName());
-        json.addProperty("currentSeconds", t.getCurrentTicks() / 20L);
-        json.addProperty("targetSeconds", t.getTargetTicks() / 20L);
-        json.addProperty("formattedTime", t.getFormattedTime());
-        json.addProperty("running", t.isRunning());
-        json.addProperty("countUp", t.isCountUp());
-        json.addProperty("silent", t.isSilent());
-        json.addProperty("command", t.getCommand() != null ? t.getCommand() : "");
-        json.addProperty("repeat", t.isRepeat());
-        json.addProperty("repeatCount", t.getRepeatCount());
-        json.addProperty("repeatsDone", t.getRepeatsDone());
-        json.addProperty("repeatCooldownSeconds", t.getRepeatCooldownTicks() / 20L);
-        json.addProperty("nextTimer", t.getNextTimer() != null ? t.getNextTimer() : "");
-        json.addProperty("sequenceCooldownSeconds", t.getSequenceCooldownTicks() / 20L);
-        json.addProperty("hasCondition", t.hasCondition());
-        json.addProperty("conditionObjective", t.getConditionObjective() != null ? t.getConditionObjective() : "");
-        json.addProperty("conditionScore", t.getConditionScore());
-        json.addProperty("conditionTarget", t.getConditionTarget() != null ? t.getConditionTarget() : "*");
-        float pct = t.getTargetTicks() > 0 ? (t.getCurrentTicks() * 100f) / t.getTargetTicks() : 100f;
-        json.addProperty("percentage", t.isCountUp() ? 100f - pct : pct);
-        // Scheduled commands (4.0.0) — additive, read-only in the panel.
-        JsonArray commandEvents = new JsonArray();
-        for (Timer.CommandEvent event : t.getCommandEvents()) {
-            JsonObject e = new JsonObject();
-            e.addProperty("atSeconds", event.getAtSeconds());
-            JsonArray cmds = new JsonArray();
-            for (String c : event.getCommands()) cmds.add(c);
-            e.add("commands", cmds);
-            commandEvents.add(e);
+    /** A coarse per-address cap, so the one mutating route cannot be hammered. */
+    private boolean rateLimited(HttpExchange ex) throws IOException {
+        String address = ex.getRemoteAddress() == null ? "?"
+                : ex.getRemoteAddress().getAddress().getHostAddress();
+        long now = System.currentTimeMillis();
+        long[] window = rateWindows.computeIfAbsent(address, key -> new long[]{now, 0});
+        synchronized (window) {
+            if (now - window[0] > RATE_WINDOW_MS) {
+                window[0] = now;
+                window[1] = 0;
+            }
+            if (++window[1] > RATE_MAX_PER_WINDOW) {
+                send(ex, 429, "application/json",
+                        "{\"error\":\"Too many requests\"}".getBytes(StandardCharsets.UTF_8));
+                return true;
+            }
         }
-        json.add("commandEvents", commandEvents);
-        JsonArray finishCommands = new JsonArray();
-        for (String c : t.getFinishCommands()) finishCommands.add(c);
-        json.add("finishCommands", finishCommands);
-        // Counter titles (4.0.0) — additive, read-only in the panel.
-        JsonObject titles = new JsonObject();
-        titles.addProperty("above", t.getTitleAbove() != null ? t.getTitleAbove() : "");
-        titles.addProperty("below", t.getTitleBelow() != null ? t.getTitleBelow() : "");
-        titles.addProperty("left", t.getTitleLeft() != null ? t.getTitleLeft() : "");
-        titles.addProperty("right", t.getTitleRight() != null ? t.getTitleRight() : "");
-        json.add("titles", titles);
-        return json;
-    }
-
-    private void setCors(HttpExchange ex) {
-        ex.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-        ex.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        ex.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
-    }
-
-    private String getDashboardHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OnTime Panel</title>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0d1117;--s1:#161b22;--s2:#21262d;--bd:#30363d;--tx:#e6edf3;--mu:#7d8590;--ac:#3fb950;--ach:#2ea043;--wa:#d29922;--er:#f85149;--bl:#58a6ff;--r:10px;--rs:6px}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
-.hdr{background:var(--s1);border-bottom:1px solid var(--bd);padding:12px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
-.logo{font-size:1rem;font-weight:700;display:flex;align-items:center;gap:8px}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--er);flex-shrink:0;transition:.3s}
-.dot.ok{background:var(--ac)}
-#cst{font-size:.78rem;color:var(--mu)}
-.hurl{margin-left:auto;font-size:.75rem;color:var(--mu);font-family:monospace;background:var(--s2);padding:4px 10px;border-radius:var(--rs);border:1px solid var(--bd)}
-.nav{display:flex;gap:2px;padding:8px 20px;background:var(--s1);border-bottom:1px solid var(--bd)}
-.nb{padding:6px 14px;border:none;background:transparent;color:var(--mu);cursor:pointer;border-radius:var(--rs);font-size:.83rem;transition:.15s;border-bottom:2px solid transparent}
-.nb:hover{color:var(--tx);background:var(--s2)}
-.nb.on{color:var(--ac);border-bottom-color:var(--ac)}
-.wrap{max-width:1080px;margin:0 auto;padding:20px}
-.tab{display:none}.tab.on{display:block}
-.card{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:18px;margin-bottom:14px}
-.ct{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mu);margin-bottom:12px}
-.empty{text-align:center;color:var(--mu);padding:28px 0;font-size:.88rem}
-.at-name{text-align:center;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:var(--mu);margin-bottom:4px}
-.at-time{text-align:center;font-size:3.2rem;font-weight:900;font-variant-numeric:tabular-nums;letter-spacing:2px;font-family:'Courier New',monospace;transition:color .3s}
-.at-bar{height:5px;background:var(--s2);border-radius:3px;margin:12px 0;overflow:hidden}
-.at-fill{height:100%;border-radius:3px;transition:width .4s,background .4s}
-.at-meta{display:flex;justify-content:center;gap:18px;margin-bottom:14px;font-size:.78rem;color:var(--mu)}
-.at-meta span{color:var(--tx)}
-.at-ctrl{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
-.tr{display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--bg);border-radius:8px;margin-bottom:7px;border:1px solid var(--bd);transition:.15s}
-.tr:last-child{margin-bottom:0}
-.tr:hover{border-color:var(--s2)}
-.tr-time{font-variant-numeric:tabular-nums;font-weight:700;min-width:76px;font-family:'Courier New',monospace;transition:color .3s}
-.tr-info{flex:1;min-width:0}
-.tr-name{font-weight:600;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tr-meta{font-size:.7rem;color:var(--mu);margin-top:2px}
-.tr-act{display:flex;gap:5px;flex-shrink:0}
-.bdg{display:inline-flex;align-items:center;padding:1px 7px;border-radius:4px;font-size:.65rem;font-weight:700;margin-left:5px;vertical-align:middle}
-.b-run{background:rgba(63,185,80,.12);color:#3fb950;border:1px solid rgba(63,185,80,.3)}
-.b-act{background:rgba(210,153,34,.12);color:#d29922;border:1px solid rgba(210,153,34,.3)}
-.b-stp{background:rgba(125,133,144,.1);color:var(--mu);border:1px solid var(--bd)}
-.add-row{display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border:1px dashed var(--bd);border-radius:8px;color:var(--mu);cursor:pointer;transition:.15s;font-size:.83rem;margin-top:4px}
-.add-row:hover{border-color:var(--ac);color:var(--ac)}
-.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border:none;border-radius:var(--rs);cursor:pointer;font-size:.8rem;font-weight:600;transition:.15s;white-space:nowrap}
-.btn-sm{padding:4px 9px;font-size:.73rem}
-.btn-ic{padding:4px 7px}
-.bp{background:var(--ac);color:#0d1117}.bp:hover{background:var(--ach)}
-.bs{background:var(--s2);color:var(--tx);border:1px solid var(--bd)}.bs:hover{background:var(--bd)}
-.bw{background:rgba(210,153,34,.12);color:var(--wa);border:1px solid rgba(210,153,34,.3)}.bw:hover{background:rgba(210,153,34,.22)}
-.be{background:rgba(248,81,73,.12);color:var(--er);border:1px solid rgba(248,81,73,.3)}.be:hover{background:rgba(248,81,73,.22)}
-.bg{background:transparent;color:var(--mu);border:1px solid var(--bd)}.bg:hover{color:var(--tx);border-color:var(--s2)}
-.mo{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:200;padding:16px}
-.mo.op{display:flex}
-.md{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:22px;width:100%;max-width:540px;max-height:88vh;overflow-y:auto}
-.md-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
-.md-ttl{font-size:.98rem;font-weight:700}
-.md-x{background:none;border:none;color:var(--mu);cursor:pointer;font-size:1.1rem;padding:3px;line-height:1}.md-x:hover{color:var(--tx)}
-.md-ft{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid var(--bd)}
-.fg{margin-bottom:14px}
-.fr2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.fr3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
-label{display:block;font-size:.76rem;font-weight:600;color:var(--mu);margin-bottom:5px}
-input[type=text],input[type=number],select,textarea{width:100%;padding:7px 11px;background:var(--bg);border:1px solid var(--bd);border-radius:var(--rs);color:var(--tx);font-size:.88rem;transition:.15s;outline:none}
-input:focus,select:focus{border-color:var(--ac)}
-input[type=range]{width:100%;accent-color:var(--ac)}
-input[type=color]{width:38px;height:30px;padding:2px;border:1px solid var(--bd);border-radius:var(--rs);background:var(--bg);cursor:pointer}
-input[type=checkbox],input[type=radio]{accent-color:var(--ac);width:14px;height:14px}
-.ck{display:flex;align-items:center;gap:7px;font-size:.85rem;cursor:pointer;user-select:none}
-.sec{border:1px solid var(--bd);border-radius:var(--rs);margin-bottom:10px}
-.sec-h{padding:9px 13px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:.8rem;font-weight:600;user-select:none;transition:.15s}
-.sec-h:hover{background:var(--s2);border-radius:var(--rs)}
-.chev{transition:transform .2s;font-size:.75rem}
-.chev.op{transform:rotate(180deg)}
-.sec-b{padding:13px;border-top:1px solid var(--bd);display:none}
-.sec-b.op{display:block}
-.sg{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.cr{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.ci{display:flex;align-items:center;gap:6px;font-size:.8rem}
-.rv{font-size:.8rem;color:var(--tx);min-width:32px;text-align:right}
-.toast-wrap{position:fixed;bottom:18px;right:18px;z-index:300;display:flex;flex-direction:column;gap:7px}
-.toast{padding:10px 14px;border-radius:var(--rs);font-size:.82rem;animation:tsi .2s ease;max-width:280px}
-.t-ok{background:rgba(63,185,80,.18);border:1px solid rgba(63,185,80,.4);color:#3fb950}
-.t-er{background:rgba(248,81,73,.18);border:1px solid rgba(248,81,73,.4);color:#f85149}
-@keyframes tsi{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
-@media(max-width:600px){.wrap{padding:14px}.sg{grid-template-columns:1fr}.at-time{font-size:2.4rem}}
-</style>
-</head>
-<body>
-<header class="hdr">
-  <div class="logo"><span class="dot" id="dot"></span><span>⏱ OnTime</span></div>
-  <span id="cst" class="mu">Connecting...</span>
-  <div class="hurl" id="hurl"></div>
-</header>
-<nav class="nav">
-  <button class="nb on" onclick="sw('dash',this)">Dashboard</button>
-  <button class="nb" onclick="sw('settings',this)">Settings</button>
-  <button class="nb" onclick="sw('history',this)">History</button>
-</nav>
-<main class="wrap">
-  <div id="tab-dash" class="tab on">
-    <div class="card" id="acard"><div class="empty">No active timer</div></div>
-    <div class="card">
-      <div class="ct">All Timers</div>
-      <div id="tlist"></div>
-      <div class="add-row" onclick="openCreate()"><span>＋</span><span>Create Timer</span></div>
-    </div>
-  </div>
-  <div id="tab-settings" class="tab">
-    <div class="card">
-      <div class="ct">Display Settings</div>
-      <div class="sg">
-        <div class="fg"><label>Position Preset</label>
-          <select id="c-preset">
-            <option value="BOSSBAR">Boss Bar</option><option value="ACTIONBAR">Action Bar</option>
-            <option value="TOP_LEFT">Top Left</option><option value="TOP_CENTER">Top Center</option>
-            <option value="TOP_RIGHT">Top Right</option><option value="CENTER">Center</option>
-            <option value="BOTTOM_LEFT">Bottom Left</option><option value="BOTTOM_CENTER">Bottom Center</option>
-            <option value="BOTTOM_RIGHT">Bottom Right</option><option value="CUSTOM">Custom</option>
-          </select>
-        </div>
-        <div class="fg"><label>Scale — <span id="c-sv">1.0</span></label>
-          <input type="range" id="c-scale" min="0.1" max="5" step="0.1" value="1" oninput="gid('c-sv').textContent=parseFloat(this.value).toFixed(1)">
-        </div>
-      </div>
-      <div class="fg"><label>Timer Colors</label>
-        <div class="cr">
-          <div class="ci"><input type="color" id="c-ch" value="#ffffff"> <span>High</span></div>
-          <div class="ci"><input type="color" id="c-cm" value="#ffff00"> <span>Mid</span></div>
-          <div class="ci"><input type="color" id="c-cl" value="#ff0000"> <span>Low</span></div>
-        </div>
-      </div>
-      <div class="sg">
-        <div class="fg"><label>Mid Threshold % — <span id="c-tmv">30</span></label>
-          <input type="range" id="c-tm" min="0" max="100" value="30" oninput="gid('c-tmv').textContent=this.value">
-        </div>
-        <div class="fg"><label>Low Threshold % — <span id="c-tlv">10</span></label>
-          <input type="range" id="c-tl" min="0" max="100" value="10" oninput="gid('c-tlv').textContent=this.value">
-        </div>
-      </div>
-      <div class="fg"><label>Tick Sound ID</label><input type="text" id="c-sid" value="minecraft:block.note_block.hat"></div>
-      <div class="sg">
-        <div class="fg"><label>Volume — <span id="c-svv">1.00</span></label>
-          <input type="range" id="c-sv2" min="0" max="1" step="0.05" value="1" oninput="gid('c-svv').textContent=parseFloat(this.value).toFixed(2)">
-        </div>
-        <div class="fg"><label>Pitch — <span id="c-spv">2.00</span></label>
-          <input type="range" id="c-sp" min="0.5" max="2" step="0.05" value="2" oninput="gid('c-spv').textContent=parseFloat(this.value).toFixed(2)">
-        </div>
-      </div>
-      <button class="btn bp" onclick="saveSettings()">Save Settings</button>
-    </div>
-  </div>
-  <div id="tab-history" class="tab">
-    <div class="card"><div class="ct">Completion History</div><div id="hlist"><div class="empty">Loading...</div></div></div>
-  </div>
-</main>
-
-<div class="mo" id="tmo">
-  <div class="md">
-    <div class="md-hdr"><span class="md-ttl" id="mttl">Create Timer</span><button class="md-x" onclick="closeM()">✕</button></div>
-    <div class="fg"><label>Name</label><input type="text" id="f-name" placeholder="e.g. speedrun"></div>
-    <div id="f-dur" class="fg"><label>Duration</label>
-      <div class="fr3">
-        <div><label>Hours</label><input type="number" id="f-h" min="0" value="0"></div>
-        <div><label>Minutes</label><input type="number" id="f-m" min="0" max="59" value="0"></div>
-        <div><label>Seconds</label><input type="number" id="f-s" min="0" max="59" value="0"></div>
-      </div>
-    </div>
-    <div id="f-mode" class="fg"><label>Mode</label>
-      <div style="display:flex;gap:16px">
-        <label class="ck"><input type="radio" name="cu" value="false" checked> ↓ Countdown</label>
-        <label class="ck"><input type="radio" name="cu" value="true"> ↑ Count-up</label>
-      </div>
-    </div>
-    <div class="sec">
-      <div class="sec-h" onclick="tog(this)"><span>⚡ Command</span><span class="chev">▼</span></div>
-      <div class="sec-b">
-        <div class="fg"><label>On Finish (without /)</label><input type="text" id="f-cmd" placeholder="say Timer {name} finished!"></div>
-        <label class="ck"><input type="checkbox" id="f-sil"> Silent timer (no tick sound)</label>
-      </div>
-    </div>
-    <div class="sec">
-      <div class="sec-h" onclick="tog(this)"><span>🔁 Repeat</span><span class="chev">▼</span></div>
-      <div class="sec-b">
-        <div class="fg"><label class="ck"><input type="checkbox" id="f-rep" onchange="updRep()"> Enable repeat</label></div>
-        <div id="f-repf" style="display:none">
-          <div class="fr2">
-            <div class="fg"><label>Count (-1 = infinite)</label><input type="number" id="f-rc" value="-1" min="-1"></div>
-            <div class="fg"><label>Cooldown (seconds)</label><input type="number" id="f-rcd" value="0" min="0"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="sec">
-      <div class="sec-h" onclick="tog(this)"><span>➡ Sequence</span><span class="chev">▼</span></div>
-      <div class="sec-b">
-        <div class="fr2">
-          <div class="fg"><label>Next Timer</label><select id="f-nt"><option value="">— none —</option></select></div>
-          <div class="fg"><label>Cooldown (seconds)</label><input type="number" id="f-scd" value="0" min="0"></div>
-        </div>
-      </div>
-    </div>
-    <div class="sec">
-      <div class="sec-h" onclick="tog(this)"><span>📊 Scoreboard Condition</span><span class="chev">▼</span></div>
-      <div class="sec-b">
-        <div class="fr3">
-          <div class="fg"><label>Objective</label><input type="text" id="f-co" placeholder="kills"></div>
-          <div class="fg"><label>Score ≥</label><input type="number" id="f-cs" value="0" min="0"></div>
-          <div class="fg"><label>Target (* = any)</label><input type="text" id="f-ct" value="*"></div>
-        </div>
-        <small style="color:var(--mu)">Leave Objective empty to clear condition.</small>
-      </div>
-    </div>
-    <div class="md-ft">
-      <button class="btn bg" onclick="closeM()">Cancel</button>
-      <button class="btn bp" id="msave" onclick="saveTimer()">Create</button>
-    </div>
-  </div>
-</div>
-
-<div class="mo" id="dmo">
-  <div class="md" style="max-width:360px;text-align:center">
-    <div style="font-size:2rem;margin-bottom:10px">⚠️</div>
-    <div style="font-size:1rem;font-weight:700;margin-bottom:8px">Delete Timer</div>
-    <p id="dmsg" style="color:var(--mu);font-size:.88rem;margin-bottom:18px"></p>
-    <div style="display:flex;gap:8px;justify-content:center">
-      <button class="btn bg" onclick="closeDel()">Cancel</button>
-      <button class="btn be" onclick="doDel()">Delete</button>
-    </div>
-  </div>
-</div>
-
-<div class="toast-wrap" id="tw"></div>
-
-<script>
-let S={timers:{},active:null,config:{}},es=null,editing=null,deleting=null;
-
-function gid(i){return document.getElementById(i)}
-function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
-function gc(p){const{thresholdMid:m=30,thresholdLow:l=10,colorHigh:h='#3fb950',colorMid:cm='#d29922',colorLow:cl='#f85149'}=S.config;return p>m?h:p>l?cm:cl}
-
-function connect(){
-  if(es)es.close();
-  es=new EventSource('/events');
-  es.addEventListener('INIT',e=>{applyState(JSON.parse(e.data));setConn(true);});
-  es.addEventListener('STATE',e=>{applyState(JSON.parse(e.data));});
-  ['START','FINISH','PAUSE','RESUME'].forEach(ev=>{
-    es.addEventListener(ev,e=>{
-      const d=JSON.parse(e.data);
-      if(ev==='START')S.active=d.name;
-      if(ev==='FINISH'&&S.active===d.name)S.active=null;
-      if(S.timers[d.name])Object.assign(S.timers[d.name],d);
-      render();
-    });
-  });
-  es.addEventListener('TICK',e=>{
-    const d=JSON.parse(e.data);
-    if(S.timers[d.name]){
-      Object.assign(S.timers[d.name],d);
-      if(S.active===d.name)updActive();
-      updRow(d.name,d);
-    }
-  });
-  es.onopen=()=>setConn(true);
-  es.onerror=()=>{setConn(false);setTimeout(connect,3000);};
-}
-
-function applyState(d){
-  S.timers={};
-  for(const t of d.timers||[])S.timers[t.name]=t;
-  S.active=d.active||null;
-  if(d.config){S.config=d.config;loadCfg(d.config);}
-  render();
-}
-function setConn(ok){gid('dot').className='dot'+(ok?' ok':'');gid('cst').textContent=ok?'Connected':'Reconnecting...';}
-
-function sw(name,btn){
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
-  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
-  gid('tab-'+name).classList.add('on');btn.classList.add('on');
-  if(name==='history')loadHist();
-}
-
-function render(){renderActive();renderList();}
-
-function renderActive(){
-  const el=gid('acard'),t=S.active?S.timers[S.active]:null;
-  if(!t){el.innerHTML='<div class="empty">No active timer</div>';return;}
-  const p=Math.max(0,Math.min(100,t.percentage||0)),c=gc(p);
-  const pause=t.running?'⏸ Pause':'▶ Resume';
-  el.innerHTML=`<div class="at-name">${esc(t.name)}</div>
-<div class="at-time" id="atd" style="color:${c}">${esc(t.formattedTime)}</div>
-<div class="at-bar"><div class="at-fill" id="atb" style="width:${p}%;background:${c}"></div></div>
-<div class="at-meta">
-  <div>${t.countUp?'↑ count-up':'↓ countdown'}</div>
-  <div>Progress: <span id="atp">${p.toFixed(1)}%</span></div>
-  ${t.repeat?`<div>Repeat: <span>${t.repeatCount===-1?'∞':t.repeatsDone+'/'+t.repeatCount}</span></div>`:''}
-</div>
-<div class="at-ctrl">
-  <button class="btn bw" onclick="act('pause')">${pause}</button>
-  <button class="btn be" onclick="act('stop')">⏹ Stop</button>
-  <button class="btn bs" onclick="act('reset','${esc(t.name)}')">↺ Reset</button>
-  <button class="btn bg btn-sm" onclick="openEdit('${esc(t.name)}')">✎ Edit</button>
-</div>`;
-}
-
-function updActive(){
-  const t=S.active?S.timers[S.active]:null;if(!t)return;
-  const p=Math.max(0,Math.min(100,t.percentage||0)),c=gc(p);
-  const d=gid('atd'),b=gid('atb'),pt=gid('atp');
-  if(!d){renderActive();return;}
-  d.textContent=t.formattedTime;d.style.color=c;
-  b.style.width=p+'%';b.style.background=c;
-  pt.textContent=p.toFixed(1)+'%';
-}
-
-function updRow(name,data){
-  const el=document.querySelector(`[data-ttime="${CSS.escape(name)}"]`);
-  if(el){const p=Math.max(0,Math.min(100,data.percentage||0));el.textContent=data.formattedTime;el.style.color=gc(p);}
-}
-
-function renderList(){
-  const el=gid('tlist'),ts=Object.values(S.timers);
-  if(!ts.length){el.innerHTML='<div class="empty" style="padding:16px">No timers created yet</div>';return;}
-  el.innerHTML=ts.map(t=>{
-    const isA=t.name===S.active,p=Math.max(0,Math.min(100,t.percentage||0)),c=gc(p);
-    const bdg=isA?'<span class="bdg b-act">ACTIVE</span>':t.running?'<span class="bdg b-run">RUNNING</span>':'<span class="bdg b-stp">STOPPED</span>';
-    const meta=[];
-    if(t.repeat)meta.push(t.repeatCount===-1?'∞ repeat':'×'+t.repeatCount);
-    if(t.nextTimer)meta.push('→ '+t.nextTimer);
-    if(t.hasCondition)meta.push('⚡ '+t.conditionObjective+'≥'+t.conditionScore);
-    const canStart=!isA&&!t.running&&!S.active;
-    return `<div class="tr">
-  <div class="tr-time" data-ttime="${esc(t.name)}" style="color:${c}">${esc(t.formattedTime)}</div>
-  <div class="tr-info"><div class="tr-name">${esc(t.name)}${bdg}</div>${meta.length?`<div class="tr-meta">${meta.map(esc).join(' · ')}</div>`:''}</div>
-  <div class="tr-act">
-    ${canStart?`<button class="btn bp btn-sm" onclick="act('start','${esc(t.name)}')">▶</button>`:''}
-    <button class="btn bg btn-sm btn-ic" onclick="openEdit('${esc(t.name)}')" title="Edit">✎</button>
-    <button class="btn be btn-sm btn-ic" onclick="openDel('${esc(t.name)}')" title="Delete">✕</button>
-  </div>
-</div>`;
-  }).join('');
-}
-
-async function act(action,timer){
-  await fetch('/api/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,timer:timer||null})});
-}
-
-function openCreate(){
-  editing=null;
-  gid('mttl').textContent='Create Timer';gid('msave').textContent='Create';
-  gid('f-name').value='';gid('f-name').disabled=false;
-  gid('f-h').value=0;gid('f-m').value=0;gid('f-s').value=0;
-  document.querySelectorAll('[name=cu]')[0].checked=true;
-  gid('f-cmd').value='';gid('f-sil').checked=false;
-  gid('f-rep').checked=false;gid('f-rc').value=-1;gid('f-rcd').value=0;
-  gid('f-nt').value='';gid('f-scd').value=0;
-  gid('f-co').value='';gid('f-cs').value=0;gid('f-ct').value='*';
-  gid('f-dur').style.display='';gid('f-mode').style.display='';
-  updRep();popNT(null);
-  gid('tmo').classList.add('op');
-}
-
-function openEdit(name){
-  const t=S.timers[name];if(!t)return;
-  editing=name;
-  gid('mttl').textContent='Edit Timer';gid('msave').textContent='Save';
-  gid('f-name').value=name;gid('f-name').disabled=true;
-  gid('f-dur').style.display='none';gid('f-mode').style.display='none';
-  gid('f-cmd').value=t.command||'';gid('f-sil').checked=t.silent||false;
-  gid('f-rep').checked=t.repeat||false;
-  gid('f-rc').value=t.repeatCount!=null?t.repeatCount:-1;
-  gid('f-rcd').value=t.repeatCooldownSeconds||0;
-  popNT(name);
-  gid('f-nt').value=t.nextTimer||'';gid('f-scd').value=t.sequenceCooldownSeconds||0;
-  gid('f-co').value=t.conditionObjective||'';gid('f-cs').value=t.conditionScore||0;
-  gid('f-ct').value=t.conditionTarget||'*';
-  updRep();gid('tmo').classList.add('op');
-}
-
-function closeM(){gid('tmo').classList.remove('op');editing=null;}
-function updRep(){gid('f-repf').style.display=gid('f-rep').checked?'block':'none';}
-
-function popNT(ex){
-  const sel=gid('f-nt'),cur=sel.value;
-  sel.innerHTML='<option value="">— none —</option>';
-  Object.keys(S.timers).filter(n=>n!==ex).forEach(n=>{
-    const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);
-  });
-  sel.value=cur;
-}
-
-async function saveTimer(){
-  const name=gid('f-name').value.trim();
-  if(!name){toast('Name is required','er');return;}
-  const p={action:editing?'update':'create',name};
-  if(!editing){
-    const h=parseInt(gid('f-h').value)||0,m=parseInt(gid('f-m').value)||0,s=parseInt(gid('f-s').value)||0;
-    if(h+m+s===0){toast('Duration must be greater than 0','er');return;}
-    p.hours=h;p.minutes=m;p.seconds=s;
-    p.countUp=document.querySelector('[name=cu]:checked').value==='true';
-  }
-  p.command=gid('f-cmd').value.trim();p.silent=gid('f-sil').checked;
-  p.repeat=gid('f-rep').checked;p.repeatCount=parseInt(gid('f-rc').value)||-1;
-  p.repeatCooldown=parseInt(gid('f-rcd').value)||0;
-  p.nextTimer=gid('f-nt').value;p.sequenceCooldown=parseInt(gid('f-scd').value)||0;
-  p.conditionObjective=gid('f-co').value.trim();p.conditionScore=parseInt(gid('f-cs').value)||0;
-  p.conditionTarget=gid('f-ct').value.trim()||'*';
-  const r=await fetch('/api/timer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
-  const d=await r.json();
-  if(d.success){toast(editing?'Timer updated':'Timer created','ok');closeM();}
-  else toast(d.error||'Operation failed','er');
-}
-
-function openDel(name){deleting=name;gid('dmsg').textContent=`Delete "${name}"? This cannot be undone.`;gid('dmo').classList.add('op');}
-function closeDel(){gid('dmo').classList.remove('op');deleting=null;}
-async function doDel(){
-  if(!deleting)return;const name=deleting;closeDel();
-  const r=await fetch('/api/timer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',name})});
-  const d=await r.json();
-  if(d.success)toast('Timer deleted','ok');else toast(d.error||'Failed','er');
-}
-
-function loadCfg(c){
-  if(!c)return;
-  const v=(id,val)=>{const e=gid(id);if(e&&val!=null)e.value=val;};
-  v('c-preset',c.positionPreset);
-  if(c.scale!=null){gid('c-scale').value=c.scale;gid('c-sv').textContent=parseFloat(c.scale).toFixed(1);}
-  v('c-ch',c.colorHigh);v('c-cm',c.colorMid);v('c-cl',c.colorLow);
-  if(c.thresholdMid!=null){gid('c-tm').value=c.thresholdMid;gid('c-tmv').textContent=c.thresholdMid;}
-  if(c.thresholdLow!=null){gid('c-tl').value=c.thresholdLow;gid('c-tlv').textContent=c.thresholdLow;}
-  v('c-sid',c.soundId);
-  if(c.soundVolume!=null){gid('c-sv2').value=c.soundVolume;gid('c-svv').textContent=parseFloat(c.soundVolume).toFixed(2);}
-  if(c.soundPitch!=null){gid('c-sp').value=c.soundPitch;gid('c-spv').textContent=parseFloat(c.soundPitch).toFixed(2);}
-}
-
-async function saveSettings(){
-  const p={
-    positionPreset:gid('c-preset').value,scale:parseFloat(gid('c-scale').value),
-    colorHigh:gid('c-ch').value,colorMid:gid('c-cm').value,colorLow:gid('c-cl').value,
-    thresholdMid:parseInt(gid('c-tm').value),thresholdLow:parseInt(g('c-tl').value),
-soundId:gid('c-sid').value,soundVolume:parseFloat(gid('c-sv2').value),soundPitch:parseFloat(gid('c-sp').value)
-};
-const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
-const d=await r.json();
-if(d.success)toast('Settings saved','ok');else toast(d.error||'Failed','er');
-}
-function loadHist(){
-fetch('/api/history').then(r=>r.json()).then(data=>{
-const el=gid('hlist');
-if(!data||!data.length){el.innerHTML='<div class="empty">No history yet</div>';return;}
-el.innerHTML=[...data].reverse().slice(0,150).map(h=>{
-const rd=h.repeatsDone?`<span class="bdg b-run">×${h.repeatsDone}</span>`:'';
-return `<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--bd)">
-<span style="color:var(--mu);font-size:.72rem;min-width:140px;flex-shrink:0">${esc(h.timestamp)}</span>
-<span style="flex:1;font-size:.85rem;font-weight:600">${esc(h.name)}</span>
-<span style="color:var(--mu);font-size:.8rem">${esc(h.duration)}</span>
-<span class="bdg b-stp" style="font-size:.65rem">${esc(h.mode)}</span>${rd}
-</div>`;
-    }).join('');
-  });
-}
-function tog(hdr){
-hdr.querySelector('.chev').classList.toggle('op');
-const b=hdr.nextElementSibling;b.classList.toggle('op');
-}
-function toast(msg,t){
-const w=gid('tw'),el=document.createElement('div');
-el.className='toast t-'+(t||'ok');el.textContent=msg;w.appendChild(el);
-setTimeout(()=>{if(el.parentNode)el.parentNode.removeChild(el);},3200);
-}
-function g(id){return document.getElementById(id);}
-window.addEventListener('load',()=>{
-gid('hurl').textContent=location.href;
-connect();
-});
-</script>
-</body>
-</html>
-""";
+        return false;
     }
 }

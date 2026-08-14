@@ -2,21 +2,21 @@ package com.mateof24.command;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /*
- * SYNC NOTE: common/src/v1 and common/src/v2 keep separate copies of this
- * class on purpose (ClickEvent/HoverEvent API drift at 1.21.6); apply logic
- * changes to both. The legacy § codes in the decorative headers are kept
- * deliberately: they rely on the color-code style reset, are still fully
- * supported through 26.2, and replicating them with Style would change the
- * rendered output. Revisit only if Mojang actually removes § parsing.
+ * The version-specific part lives in HelpStyle (common/src/v1 and v2): the
+ * ClickEvent/HoverEvent API changed shape in 1.21.5, and that was the only
+ * reason this whole class used to be duplicated.
+ *
+ * The legacy § codes in the decorative headers are kept deliberately: they
+ * rely on the color-code style reset, are still fully supported through 26.2,
+ * and replicating them with Style would change the rendered output. Revisit
+ * only if Mojang actually removes § parsing.
  */
 public class HelpSystem {
 
@@ -44,6 +44,13 @@ public class HelpSystem {
      */
     private static final List<HelpEntry> HELP_ENTRIES = new ArrayList<>();
 
+    /** The subcommand names help can talk about, for the tree to suggest. */
+    public static List<String> topics() {
+        List<String> names = new ArrayList<>(HELP_ENTRIES.size());
+        for (HelpEntry entry : HELP_ENTRIES) names.add(entry.command);
+        return names;
+    }
+
     static {
         // Comandos básicos
         HELP_ENTRIES.add(new HelpEntry(
@@ -59,30 +66,60 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "start",
                 "ontime.help.start.desc",
-                "/timer start <name>",
-                "/timer start speedrun"
+                "/timer start <name> [targets] [shared|each]",
+                "/timer start speedrun",
+                "/timer start speedrun @a[team=red]",
+                "/timer start speedrun @a each"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
                 "pause",
                 "ontime.help.pause.desc",
-                "/timer pause",
-                "/timer pause"
+                "/timer pause <name|all> [targets]",
+                "/timer pause all",
+                "/timer pause speedrun",
+                "/timer pause speedrun @a[team=red]"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "resume",
+                "ontime.help.resume.desc",
+                "/timer resume <name|all> [targets]",
+                "/timer resume all",
+                "/timer resume speedrun"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
                 "stop",
                 "ontime.help.stop.desc",
-                "/timer stop",
-                "/timer stop"
+                "/timer stop <name|all> [targets]",
+                "/timer stop all",
+                "/timer stop speedrun",
+                "/timer stop speedrun Bob"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
                 "reset",
                 "ontime.help.reset.desc",
-                "/timer reset [name]",
-                "/timer reset",
+                "/timer reset <name|all> [targets]",
+                "/timer reset all",
                 "/timer reset speedrun"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "confirm",
+                "ontime.help.confirm.desc",
+                "/timer confirm",
+                "/timer confirm"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "audience",
+                "ontime.help.audience.desc",
+                "/timer audience <name> <list|add|remove> [targets]",
+                "/timer audience speedrun list",
+                "/timer audience speedrun add Bob",
+                "/timer audience speedrun remove @a[team=red]"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
@@ -111,28 +148,19 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "hide",
                 "ontime.help.hide.desc",
-                "/timer hide [targets]",
-                "/timer hide",
-                "/timer hide @a",
-                "/timer hide PlayerName"
+                "/timer hide <targets> <show|hide|toggle>",
+                "/timer hide @s toggle",
+                "/timer hide @a hide",
+                "/timer hide PlayerName show"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
                 "silent",
                 "ontime.help.silent.desc",
-                "/timer silent [targets]",
-                "/timer silent",
-                "/timer silent @a",
-                "/timer silent PlayerName"
-        ));
-        HELP_ENTRIES.add(new HelpEntry(
-                "position",
-                "ontime.help.position.desc",
-                "/timer position <preset>",
-                "/timer position bossbar",
-                "/timer position actionbar",
-                "/timer position top_left",
-                "/timer position center"
+                "/timer silent <targets> <mute|unmute|toggle>",
+                "/timer silent @s toggle",
+                "/timer silent @a mute",
+                "/timer silent PlayerName unmute"
         ));
 
         // Información
@@ -141,6 +169,30 @@ public class HelpSystem {
                 "ontime.help.list.desc",
                 "/timer list",
                 "/timer list"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "gui",
+                "ontime.help.gui.desc",
+                "/timer gui",
+                "/timer gui"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "status",
+                "ontime.help.status.desc",
+                "/timer status <name>",
+                "/timer status speedrun"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "position",
+                "ontime.help.position.desc",
+                "/timer position <timer> [preset|reset] [x] [y]",
+                "/timer position speedrun",
+                "/timer position speedrun top_left",
+                "/timer position speedrun custom 40 80",
+                "/timer position speedrun reset"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
@@ -155,28 +207,20 @@ public class HelpSystem {
         HELP_ENTRIES.add(new HelpEntry(
                 "sound",
                 "ontime.help.sound.desc",
-                "/timer sound <soundId> [volume] [pitch]",
-                "/timer sound block.note_block.hat",
-                "/timer sound entity.experience_orb.pickup 0.5",
-                "/timer sound ui.button.click 0.8 1.5"
+                "/timer sound <timer> [soundId|reset] [volume] [pitch]",
+                "/timer sound speedrun",
+                "/timer sound speedrun block.note_block.hat",
+                "/timer sound speedrun ui.button.click 0.8 1.5",
+                "/timer sound speedrun reset"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
                 "scale",
                 "ontime.help.scale.desc",
-                "/timer scale <value>",
-                "/timer scale 1.0",
-                "/timer scale 1.5",
-                "/timer scale 0.8"
-        ));
-
-        HELP_ENTRIES.add(new HelpEntry(
-                "command",
-                "ontime.help.command.desc",
-                "/timer command <name> [command]",
-                "/timer command speedrun",
-                "/timer command speedrun say {name} finished in {time}!",
-                "/timer command event title @a [{\"text\":\"\"}] [{\"text\":\"Event over!\"}]"
+                "/timer scale <timer> [value|reset]",
+                "/timer scale speedrun",
+                "/timer scale speedrun 1.5",
+                "/timer scale speedrun reset"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
@@ -221,12 +265,26 @@ public class HelpSystem {
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
-                "condition",
-                "ontime.help.condition.desc",
-                "/timer condition <name> <objective> <score> [target|clear]",
-                "/timer condition event kills 10",
-                "/timer condition event kills 10 PlayerName",
-                "/timer condition event clear"
+                "trigger",
+                "ontime.help.trigger.desc",
+                "/timer trigger <name> [list|add|remove|clear]",
+                "/timer trigger event",
+                "/timer trigger event add player_death finish",
+                "/timer trigger event add dimension_change minecraft:the_nether start",
+                "/timer trigger event add advancement minecraft:story/mine_stone finish",
+                "/timer trigger event add scoreboard kills 10 finish all players Bob,Ann",
+                "/timer trigger event add dimension_change minecraft:the_nether finish at_least 3 selector @a[team=red]",
+                "/timer trigger event add expression finish players_online > 4",
+                "/timer trigger event remove 1"
+        ));
+
+        HELP_ENTRIES.add(new HelpEntry(
+                "expr",
+                "ontime.help.expr.desc",
+                "/timer expr <create|set|add> <name> <expression>",
+                "/timer expr create round 60 * players_online",
+                "/timer expr set round 300",
+                "/timer expr add round 30"
         ));
 
         HELP_ENTRIES.add(new HelpEntry(
@@ -263,7 +321,6 @@ public class HelpSystem {
                 "/timer webpanel stop"
         ));
 
-
     }
 
     /**
@@ -292,11 +349,8 @@ public class HelpSystem {
             HelpEntry entry = HELP_ENTRIES.get(i);
 
             MutableComponent commandComponent = Component.literal("§a/timer " + entry.command)
-                    .withStyle(style -> style
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/timer " + entry.command + " "))
-                            .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                                    Component.translatable("ontime.help.click_to_use")))
-                    );
+                    .withStyle(style -> HelpStyle.suggest(style, "/timer " + entry.command + " ",
+                            Component.translatable("ontime.help.click_to_use")));
 
             source.sendSuccess(() -> commandComponent, false);
             source.sendSuccess(() -> Component.literal("  §7" + Component.translatable(entry.description).getString()), false);
@@ -309,21 +363,15 @@ public class HelpSystem {
 
         if (page > 1) {
             footer.append(Component.literal("§a[< Previous]")
-                    .withStyle(style -> style
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/timer help " + (page - 1)))
-                            .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                                    Component.literal("Go to page " + (page - 1))))
-                    ));
+                    .withStyle(style -> HelpStyle.run(style, "/timer help " + (page - 1),
+                            Component.literal("Go to page " + (page - 1)))));
             footer.append(Component.literal(" "));
         }
 
         if (page < totalPages) {
             footer.append(Component.literal("§a[Next >]")
-                    .withStyle(style -> style
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/timer help " + (page + 1)))
-                            .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                                    Component.literal("Go to page " + (page + 1))))
-                    ));
+                    .withStyle(style -> HelpStyle.run(style, "/timer help " + (page + 1),
+                            Component.literal("Go to page " + (page + 1)))));
         }
 
         source.sendSuccess(() -> footer, false);
@@ -375,11 +423,8 @@ public class HelpSystem {
 
             for (String example : entry.examples) {
                 MutableComponent exampleComponent = Component.literal("  §7• §f" + example)
-                        .withStyle(style -> style
-                                .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, example))
-                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                                        Component.translatable("ontime.help.click_to_use")))
-                        );
+                        .withStyle(style -> HelpStyle.suggest(style, example,
+                                Component.translatable("ontime.help.click_to_use")));
                 source.sendSuccess(() -> exampleComponent, false);
             }
         }
