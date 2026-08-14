@@ -27,4 +27,17 @@ final class PoseScale {
     static void pop(net.minecraft.client.gui.GuiGraphics graphics) {
         graphics.pose().popMatrix();
     }
+
+    /**
+     * Puts everything queued so far on the screen, so what is drawn next is
+     * genuinely on top of it.
+     *
+     * <p>Needed because text and fills go through different render types and
+     * the text pass is drawn last: a label queued early lands over a box
+     * filled late. This is flush() up to 1.21.5 and nextStratum() from
+     * 1.21.6 — the same boundary the pose stack moved on.</p>
+     */
+    static void nextLayer(net.minecraft.client.gui.GuiGraphics graphics) {
+        graphics.nextStratum();
+    }
 }

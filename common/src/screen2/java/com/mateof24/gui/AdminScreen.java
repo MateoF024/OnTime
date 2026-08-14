@@ -61,6 +61,10 @@ public class AdminScreen extends Screen implements PanelHost {
         panel.drawBands(painter, mouseX, mouseY);
         super.render(graphics, mouseX, mouseY, partialTick);
         panel.drawContent(painter);
+        // Everything queued so far, on screen before the list paints over it:
+        // text and fills go through different render types and the text pass
+        // is drawn last, so a label queued early lands over a box filled late.
+        PoseScale.nextLayer(graphics);
         // Over everything, the way it is over the chat line.
         commandField.tick();
         if (commandField.suggestions() != null) {
@@ -83,9 +87,26 @@ public class AdminScreen extends Screen implements PanelHost {
         if (commandField.suggestions() != null && commandField.suggestions().mouseClicked(event)) {
             return true;
         }
-        if (panel.mouseClicked(event.x(), event.y(), event.button())) return true;
-        return super.mouseClicked(event, doubled);
+        boolean handled = panel.mouseClicked(event.x(), event.y(), event.button())
+                || super.mouseClicked(event, doubled);
+        letGoIfOutside(event.x(), event.y());
+        return handled;
     }
+
+    /**
+     * Lets go of a box the click did not land in.
+     *
+     * <p>Asked after the click has been handled, so whatever it landed on has
+     * already taken the focus if it wanted it. What is left is a box holding
+     * the caret with the pointer somewhere else, and that is nobody's.</p>
+     */
+    private void letGoIfOutside(double mouseX, double mouseY) {
+        if (getFocused() instanceof net.minecraft.client.gui.components.EditBox box
+                && !box.isMouseOver(mouseX, mouseY)) {
+            setFocused(null);
+        }
+    }
+
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
