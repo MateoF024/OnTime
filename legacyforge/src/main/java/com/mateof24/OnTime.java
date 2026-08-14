@@ -25,6 +25,22 @@ import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
 
+/**
+ * The Forge 47 entry point.
+ *
+ * <p>It does what the NeoForge one on 'main' does, in the shape Forge 1.20.1
+ * asks for: the mod bus comes from {@code FMLJavaModLoadingContext} rather than
+ * the constructor, game events are subscribed by annotation rather than by
+ * method reference, ticking arrives as one event with a phase instead of a
+ * {@code Post} class of its own, and the packets are registered in common setup
+ * because there is no payload-registration event to wait for.</p>
+ *
+ * <p>What changed with 5.0.0 rather than with the loader: a joining player is
+ * sent <em>their</em> view of the executions instead of the single active
+ * timer, the display config no longer travels on its own channel — every
+ * execution carries its own — and the three game events name the player they
+ * happened to, because a trigger can be watching particular people.</p>
+ */
 @Mod(OnTimeConstants.MOD_ID)
 public class OnTime {
     public static final Logger LOGGER = LoggerFactory.getLogger(OnTimeConstants.MOD_ID);
@@ -49,7 +65,6 @@ public class OnTime {
     @SubscribeEvent
     public void onServerStarted(ServerStartedEvent event) {
         serverInstance = event.getServer();
-        ModConfig.onSaveHook = () -> Services.PLATFORM.sendDisplayConfigPacketToAll(serverInstance);
         com.mateof24.integration.FTBQuestsIntegration.tryInit();
 
         TimerManager.getInstance().loadTimers();
@@ -59,7 +74,10 @@ public class OnTime {
         }
         TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
             if (timer.wasRunningBeforeShutdown()) {
-                timer.setRunning(true);
+                TimerManager.getInstance().getActiveRun().ifPresent(run -> {
+                    run.setRunning(true);
+                    run.mirrorToTimer();
+                });
                 timer.setWasRunningBeforeShutdown(false);
                 TimerManager.getInstance().saveTimers();
                 LOGGER.info("Timer '{}' auto-resumed after server restart at {}",
@@ -75,8 +93,6 @@ public class OnTime {
     public void onServerStopping(ServerStoppingEvent event) {
         com.mateof24.websocket.TimerWebSocketServer.getInstance().stop();
         com.mateof24.webpanel.TimerWebPanel.getInstance().stop();
-        com.mateof24.trigger.FTBQuestsPoller.resetAll();
-        ModConfig.onSaveHook = null;
         serverInstance = null;
 
         TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
@@ -87,6 +103,8 @@ public class OnTime {
             }
         });
         TimerManager.getInstance().saveTimers();
+        PlayerPreferences.flush();
+        ModConfig.getInstance().flush();
         LOGGER.info("Timers saved on server shutdown");
     }
 
@@ -109,19 +127,10 @@ public class OnTime {
         UUID playerUUID = player.getUUID();
         Services.PLATFORM.sendVisibilityPacket(player, PlayerPreferences.getTimerVisibility(playerUUID));
         Services.PLATFORM.sendSilentPacket(player, PlayerPreferences.getTimerSilent(playerUUID));
-        Services.PLATFORM.sendDisplayConfigPacket(player);
 
-        TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
-            Services.PLATFORM.sendTimerSyncPacket(
-                    player.getServer(),
-                    timer.getName(),
-                    timer.getCurrentTicks(),
-                    timer.getTargetTicks(),
-                    timer.isCountUp(),
-                    timer.isRunning(),
-                    timer.isSilent()
-            );
-        });
+        // The joiner gets their own view: global runs plus any fixed audience
+        // they belong to.
+        Services.PLATFORM.sendTimerState(player);
     }
 
     private void processIMC(InterModProcessEvent event) {
@@ -141,16 +150,26 @@ public class OnTime {
 
     @SubscribeEvent
     public void onPlayerDeath(net.minecraftforge.event.entity.living.LivingDeathEvent event) {
-        if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer)) return;
-        com.mateof24.trigger.TriggerDispatcher.dispatch("player_death", null);
-    }
-    @SubscribeEvent
-    public void onDimensionChange(net.minecraftforge.event.entity.player.PlayerEvent.PlayerChangedDimensionEvent event) {
-        com.mateof24.trigger.TriggerDispatcher.dispatch("dimension_change", event.getTo().location().toString());
-    }
-    @SubscribeEvent
-    public void onAdvancementEarned(net.minecraftforge.event.entity.player.AdvancementEvent.AdvancementEarnEvent event) {
-        com.mateof24.trigger.TriggerDispatcher.dispatch("advancement", event.getAdvancement().getId().toString());
+        if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        com.mateof24.trigger.TriggerDispatcher.dispatch(
+                com.mateof24.trigger.Trigger.Kind.PLAYER_DEATH, null, player);
     }
 
+    @SubscribeEvent
+    public void onDimensionChange(net.minecraftforge.event.entity.player.PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        com.mateof24.trigger.TriggerDispatcher.dispatch(
+                com.mateof24.trigger.Trigger.Kind.DIMENSION_CHANGE,
+                com.mateof24.compat.VanillaCompat.keyId(event.getTo()), player);
+    }
+
+    @SubscribeEvent
+    public void onAdvancementEarned(net.minecraftforge.event.entity.player.AdvancementEvent.AdvancementEarnEvent event) {
+        if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        // getId() rather than id(): 1.20.1 has no AdvancementHolder, the same
+        // difference the mixin and the probe carry.
+        com.mateof24.trigger.TriggerDispatcher.dispatch(
+                com.mateof24.trigger.Trigger.Kind.ADVANCEMENT,
+                event.getAdvancement().getId().toString(), player);
+    }
 }

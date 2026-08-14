@@ -1,14 +1,23 @@
 package com.mateof24.platform;
 
-import com.mateof24.config.ModConfig;
 import com.mateof24.network.NetworkHandler;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.loading.FMLPaths;
+import net.minecraftforge.fml.ModList;
 
 import java.nio.file.Path;
 
+/**
+ * The loader seam for Forge 47, and the one class on this branch with no
+ * counterpart on 'main' — there the second loader is NeoForge.
+ *
+ * <p>It is the same shape as the Fabric one beside it: everything to do with
+ * packets goes to {@link NetworkHandler}, and everything to do with the
+ * scoreboard goes to {@link ScoreboardHelper}, which is plain vanilla API and
+ * common to both. What is left here is the three things only the loader can
+ * answer.</p>
+ */
 public class ForgePlatformHelper implements IPlatformHelper {
 
     @Override
@@ -21,9 +30,13 @@ public class ForgePlatformHelper implements IPlatformHelper {
     public Path getConfigDir() { return FMLPaths.CONFIGDIR.get(); }
 
     @Override
-    public void sendTimerSyncPacket(MinecraftServer server, String name, long currentTicks,
-                                    long targetTicks, boolean countUp, boolean running, boolean silent) {
-        NetworkHandler.syncTimerToClients(server, name, currentTicks, targetTicks, countUp, running, silent);
+    public void sendTimerState(MinecraftServer server) {
+        NetworkHandler.sendTimerState(server);
+    }
+
+    @Override
+    public void sendTimerState(ServerPlayer player) {
+        NetworkHandler.sendTimerState(player);
     }
 
     @Override
@@ -37,68 +50,30 @@ public class ForgePlatformHelper implements IPlatformHelper {
     }
 
     @Override
-    public void sendDisplayConfigPacket(ServerPlayer player) {
-        NetworkHandler.syncDisplayConfigToClient(player, ModConfig.getInstance());
+    public void registerPackets() { NetworkHandler.registerPackets(); }
+
+    @Override
+    public void sendAdminState(ServerPlayer player, String json) {
+        NetworkHandler.sendAdminState(player, json);
     }
 
     @Override
-    public void sendDisplayConfigPacketToAll(MinecraftServer server) {
-        NetworkHandler.syncDisplayConfigToAllClients(server, ModConfig.getInstance());
+    public boolean checkScoreboardCondition(MinecraftServer server, String objective, int score, String target) {
+        return ScoreboardHelper.checkScoreboardCondition(server, objective, score, target);
     }
-
-    @Override
-    public void registerPackets() {
-        NetworkHandler.registerPackets();
-    }
-
-    @Override
-    public boolean checkScoreboardCondition(MinecraftServer server, String objectiveName, int score, String target) {
-        net.minecraft.world.scores.Scoreboard scoreboard = server.getScoreboard();
-        net.minecraft.world.scores.Objective objective = scoreboard.getObjective(objectiveName);
-        if (objective == null) return false;
-
-        if ("*".equals(target)) {
-            for (net.minecraft.server.level.ServerPlayer player : server.getPlayerList().getPlayers()) {
-                if (scoreboard.hasPlayerScore(player.getScoreboardName(), objective)) {
-                    if (scoreboard.getOrCreatePlayerScore(player.getScoreboardName(), objective).getScore() >= score) return true;
-                }
-            }
-            return false;
-        }
-
-        if (!scoreboard.hasPlayerScore(target, objective)) return false;
-        return scoreboard.getOrCreatePlayerScore(target, objective).getScore() >= score;
-    }
-
-    private static final String OBJECTIVE_NAME = "ontime_active";
 
     @Override
     public void updateScoreboardTimer(MinecraftServer server, String timerName, long currentSeconds, long targetSeconds) {
-        net.minecraft.world.scores.Scoreboard sb = server.getScoreboard();
-        net.minecraft.world.scores.Objective obj = sb.getObjective(OBJECTIVE_NAME);
-        if (obj == null) {
-            obj = sb.addObjective(OBJECTIVE_NAME,
-                    net.minecraft.world.scores.criteria.ObjectiveCriteria.DUMMY,
-                    net.minecraft.network.chat.Component.literal("OnTime"),
-                    net.minecraft.world.scores.criteria.ObjectiveCriteria.RenderType.INTEGER);
-        }
-        sb.getOrCreatePlayerScore(timerName, obj).setScore((int) currentSeconds);
+        ScoreboardHelper.updateScoreboardTimer(server, timerName, currentSeconds, targetSeconds);
     }
 
     @Override
     public void clearScoreboardTimer(MinecraftServer server) {
-        net.minecraft.world.scores.Scoreboard sb = server.getScoreboard();
-        if (sb.getObjective(OBJECTIVE_NAME) != null) {
-            sb.removeObjective(sb.getObjective(OBJECTIVE_NAME));
-        }
+        ScoreboardHelper.clearScoreboardTimer(server);
     }
 
     @Override
-    public long getScoreboardValue(MinecraftServer server, String objectiveName, String holderName) {
-        net.minecraft.world.scores.Scoreboard sb = server.getScoreboard();
-        net.minecraft.world.scores.Objective obj = sb.getObjective(objectiveName);
-        if (obj == null) return 0;
-        if (!sb.hasPlayerScore(holderName, obj)) return 0;
-        return sb.getOrCreatePlayerScore(holderName, obj).getScore();
+    public long getScoreboardValue(MinecraftServer server, String objective, String holder) {
+        return ScoreboardHelper.getScoreboardValue(server, objective, holder);
     }
 }

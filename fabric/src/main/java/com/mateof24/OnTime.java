@@ -25,7 +25,7 @@ public class OnTime implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        ModConfig.getInstance().load();
+        ModConfig.getInstance();
         PlayerPreferences.load();
         Services.PLATFORM.registerPackets();
         com.mateof24.trigger.FabricTriggerHandler.register();
@@ -37,7 +37,6 @@ public class OnTime implements ModInitializer {
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             serverInstance = server;
-            ModConfig.onSaveHook = () -> Services.PLATFORM.sendDisplayConfigPacketToAll(serverInstance);
             com.mateof24.integration.FTBQuestsIntegration.tryInit();
 
             TimerManager.getInstance().loadTimers();
@@ -47,7 +46,10 @@ public class OnTime implements ModInitializer {
             }
             TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
                 if (timer.wasRunningBeforeShutdown()) {
-                    timer.setRunning(true);
+                    TimerManager.getInstance().getActiveRun().ifPresent(run -> {
+                        run.setRunning(true);
+                        run.mirrorToTimer();
+                    });
                     timer.setWasRunningBeforeShutdown(false);
                     TimerManager.getInstance().saveTimers();
                     OnTimeConstants.LOGGER.info("Timer '{}' auto-resumed after server restart at {}",
@@ -63,26 +65,15 @@ public class OnTime implements ModInitializer {
             UUID playerUUID = handler.getPlayer().getUUID();
             Services.PLATFORM.sendVisibilityPacket(handler.getPlayer(), PlayerPreferences.getTimerVisibility(playerUUID));
             Services.PLATFORM.sendSilentPacket(handler.getPlayer(), PlayerPreferences.getTimerSilent(playerUUID));
-            Services.PLATFORM.sendDisplayConfigPacket(handler.getPlayer());
 
-            TimerManager.getInstance().getActiveTimer().ifPresent(timer ->
-                    Services.PLATFORM.sendTimerSyncPacket(
-                            server,
-                            timer.getName(),
-                            timer.getCurrentTicks(),
-                            timer.getTargetTicks(),
-                            timer.isCountUp(),
-                            timer.isRunning(),
-                            timer.isSilent()
-                    )
-            );
+            // The joiner gets their own view: global runs plus any fixed
+            // audience they belong to.
+            Services.PLATFORM.sendTimerState(handler.getPlayer());
         });
 
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             com.mateof24.websocket.TimerWebSocketServer.getInstance().stop();
             com.mateof24.webpanel.TimerWebPanel.getInstance().stop();
-            com.mateof24.trigger.FTBQuestsPoller.resetAll();
-            ModConfig.onSaveHook = null;
             serverInstance = null;
 
             TimerManager.getInstance().getActiveTimer().ifPresent(timer -> {
@@ -93,6 +84,8 @@ public class OnTime implements ModInitializer {
                 }
             });
             TimerManager.getInstance().saveTimers();
+            PlayerPreferences.flush();
+            ModConfig.getInstance().flush();
             OnTimeConstants.LOGGER.info("Timers saved on server shutdown");
         });
 

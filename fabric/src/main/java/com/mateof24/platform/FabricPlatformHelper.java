@@ -1,6 +1,5 @@
 package com.mateof24.platform;
 
-import com.mateof24.config.ModConfig;
 import com.mateof24.network.NetworkHandler;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
@@ -20,9 +19,13 @@ public class FabricPlatformHelper implements IPlatformHelper {
     public Path getConfigDir() { return FabricLoader.getInstance().getConfigDir(); }
 
     @Override
-    public void sendTimerSyncPacket(MinecraftServer server, String name, long currentTicks,
-                                    long targetTicks, boolean countUp, boolean running, boolean silent) {
-        NetworkHandler.syncTimerToClients(server, name, currentTicks, targetTicks, countUp, running, silent);
+    public void sendTimerState(MinecraftServer server) {
+        NetworkHandler.sendTimerState(server);
+    }
+
+    @Override
+    public void sendTimerState(ServerPlayer player) {
+        NetworkHandler.sendTimerState(player);
     }
 
     @Override
@@ -36,13 +39,8 @@ public class FabricPlatformHelper implements IPlatformHelper {
     }
 
     @Override
-    public void sendDisplayConfigPacket(ServerPlayer player) {
-        NetworkHandler.syncDisplayConfigToClient(player, ModConfig.getInstance());
-    }
-
-    @Override
-    public void sendDisplayConfigPacketToAll(MinecraftServer server) {
-        NetworkHandler.syncDisplayConfigToAllClients(server, ModConfig.getInstance());
+    public void sendAdminState(ServerPlayer player, String json) {
+        NetworkHandler.sendAdminState(player, json);
     }
 
     @Override
@@ -50,21 +48,21 @@ public class FabricPlatformHelper implements IPlatformHelper {
 
     @Override
     public boolean checkScoreboardCondition(MinecraftServer server, String objectiveName, int score, String target) {
-        return FabricScoreboardHelper.checkScoreboardCondition(server, objectiveName, score, target);
+        return ScoreboardHelper.checkScoreboardCondition(server, objectiveName, score, target);
     }
 
     @Override
     public void updateScoreboardTimer(MinecraftServer server, String timerName, long currentSeconds, long targetSeconds) {
-        FabricScoreboardHelper.updateScoreboardTimer(server, timerName, currentSeconds, targetSeconds);
+        ScoreboardHelper.updateScoreboardTimer(server, timerName, currentSeconds, targetSeconds);
     }
 
     @Override
     public void clearScoreboardTimer(MinecraftServer server) {
-        FabricScoreboardHelper.clearScoreboardTimer(server);
+        ScoreboardHelper.clearScoreboardTimer(server);
     }
 
     @Override
     public long getScoreboardValue(MinecraftServer server, String objective, String holder) {
-        return FabricScoreboardHelper.getScoreboardValue(server, objective, holder);
+        return ScoreboardHelper.getScoreboardValue(server, objective, holder);
     }
 }

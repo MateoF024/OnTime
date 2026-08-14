@@ -1,7 +1,6 @@
 package com.mateof24.network;
 
 import com.mateof24.OnTimeConstants;
-import com.mateof24.config.ModConfig;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -10,13 +9,31 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
+/**
+ * The five messages, over Forge 47's SimpleChannel.
+ *
+ * <p>The other half of the same protocol Fabric speaks on this branch and both
+ * loaders speak on 'main'. What is sent is decided above this class — by
+ * {@link TimerState}, which works out who sees which executions — and the
+ * shapes are the same fields in the same order. What differs is only the
+ * plumbing: Forge registers typed messages on one channel where Fabric names a
+ * channel per message.</p>
+ *
+ * <p>The protocol version is bumped to 2. A 4.0.0 client and a 5.0.0 server
+ * now refuse each other at the handshake rather than agreeing to exchange
+ * packets neither of them understands.</p>
+ */
 public class NetworkHandler {
-    private static final String PROTOCOL_VERSION = "1";
+
+    private static final String PROTOCOL_VERSION = "2";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
-            ResourceLocation.fromNamespaceAndPath(OnTimeConstants.MOD_ID, "main"),
+            new ResourceLocation(OnTimeConstants.MOD_ID, "main"),
             () -> PROTOCOL_VERSION,
             PROTOCOL_VERSION::equals,
             PROTOCOL_VERSION::equals
@@ -25,8 +42,8 @@ public class NetworkHandler {
     private static int packetId = 0;
 
     public static void registerPackets() {
-        CHANNEL.registerMessage(packetId++, TimerSyncPayload.class,
-                TimerSyncPayload::encode, TimerSyncPayload::decode, TimerSyncPayload::handle,
+        CHANNEL.registerMessage(packetId++, TimerStatePayload.class,
+                TimerStatePayload::encode, TimerStatePayload::decode, TimerStatePayload::handle,
                 Optional.of(NetworkDirection.PLAY_TO_CLIENT));
 
         CHANNEL.registerMessage(packetId++, TimerVisibilityPayload.class,
@@ -37,9 +54,35 @@ public class NetworkHandler {
                 TimerSilentPayload::encode, TimerSilentPayload::decode, TimerSilentPayload::handle,
                 Optional.of(NetworkDirection.PLAY_TO_CLIENT));
 
-        CHANNEL.registerMessage(packetId++, TimerDisplayConfigPayload.class,
-                TimerDisplayConfigPayload::encode, TimerDisplayConfigPayload::decode, TimerDisplayConfigPayload::handle,
+        CHANNEL.registerMessage(packetId++, AdminStatePayload.class,
+                AdminStatePayload::encode, AdminStatePayload::decode, AdminStatePayload::handle,
                 Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+
+        CHANNEL.registerMessage(packetId++, AdminActionPayload.class,
+                AdminActionPayload::encode, AdminActionPayload::decode, AdminActionPayload::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
+    }
+
+    /**
+     * One payload per distinct view: with a single global run that is one
+     * payload for the whole server, exactly as cheap as the old broadcast.
+     */
+    public static void sendTimerState(MinecraftServer server) {
+        List<UUID> online = new ArrayList<>();
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) online.add(player.getUUID());
+
+        for (var entry : TimerState.groupByView(online).entrySet()) {
+            TimerStatePayload payload = new TimerStatePayload(entry.getKey());
+            for (UUID id : entry.getValue()) {
+                ServerPlayer player = server.getPlayerList().getPlayer(id);
+                if (player != null) CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), payload);
+            }
+        }
+    }
+
+    public static void sendTimerState(ServerPlayer player) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new TimerStatePayload(TimerState.viewFor(player.getUUID())));
     }
 
     public static void syncVisibilityToClient(ServerPlayer player, boolean visible) {
@@ -50,33 +93,12 @@ public class NetworkHandler {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new TimerSilentPayload(silent));
     }
 
-    public static void syncTimerToClients(MinecraftServer server, String name,
-                                          long currentTicks, long targetTicks,
-                                          boolean countUp, boolean running, boolean silent) {
-        // Counter titles (4.0.0) ride the sync packet and are resolved HERE
-        // by timer name, so every existing send site stays title-correct.
-        com.mateof24.timer.TimerTitles titles = com.mateof24.manager.TimerManager.getInstance()
-                .getTimer(name).map(com.mateof24.timer.TimerTitles::of)
-                .orElse(com.mateof24.timer.TimerTitles.EMPTY);
-        CHANNEL.send(PacketDistributor.ALL.noArg(),
-                new TimerSyncPayload(name, currentTicks, targetTicks, countUp, running, silent,
-                        titles.above(), titles.below(), titles.left(), titles.right()));
+    public static void sendAdminState(ServerPlayer player, String json) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new AdminStatePayload(json));
     }
 
-    public static void syncDisplayConfigToClient(ServerPlayer player, ModConfig cfg) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), buildDisplayConfigPayload(cfg));
-    }
-
-    public static void syncDisplayConfigToAllClients(MinecraftServer server, ModConfig cfg) {
-        CHANNEL.send(PacketDistributor.ALL.noArg(), buildDisplayConfigPayload(cfg));
-    }
-
-    private static TimerDisplayConfigPayload buildDisplayConfigPayload(ModConfig cfg) {
-        return new TimerDisplayConfigPayload(
-                cfg.getTimerX(), cfg.getTimerY(), cfg.getPositionPreset().name(), cfg.getTimerScale(),
-                cfg.getColorHigh(), cfg.getColorMid(), cfg.getColorLow(),
-                cfg.getThresholdMid(), cfg.getThresholdLow(),
-                cfg.getTimerSoundId(), cfg.getTimerSoundVolume(), cfg.getTimerSoundPitch()
-        );
+    /** Sends one panel action. The server decides whether it is allowed. */
+    public static void sendAdminAction(String json) {
+        CHANNEL.sendToServer(new AdminActionPayload(json));
     }
 }
