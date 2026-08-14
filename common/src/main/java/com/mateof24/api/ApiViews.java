@@ -63,7 +63,4 @@ public final class ApiViews {
                 timer.display().scale());
     }
 
-    private static String emptyToNull(String value) {
-        return value == null || value.trim().isEmpty() ? null : value;
-    }
 }

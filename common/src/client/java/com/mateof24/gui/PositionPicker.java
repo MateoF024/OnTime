@@ -1,0 +1,406 @@
+package com.mateof24.gui;
+
+import net.minecraft.network.chat.Component;
+
+/**
+ * Placing a timer by dragging it over the running game.
+ *
+ * <p>Everything here is arithmetic and state. {@link Painter} does the
+ * drawing and the per-version screen supplies the input, which is the only
+ * part that differs between 1.21.1 and 26.2.</p>
+ *
+ * <p>Nothing of the mod's own interface is drawn while placing: no header, no
+ * rail, and above all no Save and Exit buttons. Buttons would sit on top of
+ * the screen and the whole point is that every part of the screen is somewhere
+ * the counter might go. Leaving is ESC, and ESC asks.</p>
+ */
+public final class PositionPicker {
+
+    /** Told where the counter ended up, when the operator chooses to keep it. */
+    @FunctionalInterface
+    public interface Save {
+        void at(int x, int y);
+    }
+
+    /** What ESC offers. Cancel is first because it is the one that undoes a mis-key. */
+    public enum Choice { CANCEL, DISCARD, SAVE }
+
+    /** Space between the counter and a title beside it. */
+    private static final int TITLE_GAP = 4;
+
+    /** Whole steps, and round: the point is to see the size, not to tune it. */
+    private static final float MIN_SCALE = 1.0f;
+    private static final float MAX_SCALE = 5.0f;
+
+    /** Vanilla draws its overlay message here, so the hint lands where the eye already looks. */
+    private static final int ACTION_BAR_FROM_BOTTOM = 68;
+
+    private static final long HINT_FADE_IN_MS = 400L;
+    private static final long HINT_HOLD_MS = 6000L;
+    private static final long HINT_FADE_OUT_MS = 900L;
+
+    private static final int WHITE = 0xFFFFFF;
+    private static final int BOUNDS_RED = 0xFFFF4040;
+    /**
+     * The warning, in the shape every warning in this mod has.
+     *
+     * <p>The screen dims and the words sit on it. The width is what the three
+     * buttons need, and it is stated once here so the drawing and the screen
+     * that places them cannot disagree.</p>
+     */
+    private static final int DIALOG_SCRIM = 0xC0000000;
+    private static final int DIALOG_WIDTH = 360;
+    private static final int DIALOG_HEIGHT = 92;
+    private static final int TEXT = 0xFFFFFFFF;
+    private static final int TEXT_DIM = 0xFFA0A0A8;
+    private final String timerName;
+    private final String preset;
+    private final String timeText;
+    /** above, below, left, right. A blank entry is a title this timer does not have. */
+    private final String[] titles;
+    private final Save save;
+    /** Until the first draw the screen size is unknown, so a preset cannot be resolved. */
+    private boolean placed;
+    private final long openedAt = System.currentTimeMillis();
+
+    private int x;
+    private int y;
+    private boolean dragging;
+    private int grabX;
+    private int grabY;
+
+    private boolean showTitles;
+    private float previewScale = 1.0f;
+
+    /** While true the placement is frozen and the three choices are on screen. */
+    private boolean asking;
+
+    public PositionPicker(String timerName, String preset, int x, int y, float scale,
+                          String timeText, String[] titles, Save save) {
+        this.timerName = timerName;
+        this.preset = preset == null ? "CUSTOM" : preset;
+        this.x = x;
+        this.y = y;
+        this.previewScale = clampScale(scale);
+        this.timeText = timeText == null || timeText.isEmpty() ? "00:00:00" : timeText;
+        this.titles = titles == null ? new String[4] : titles;
+        this.save = save;
+        // -1 is the sentinel the preset table uses for "centred", so it is
+        // also what a never-placed counter carries. Anything else is a
+        // position somebody chose, and it is kept.
+        this.placed = x != -1;
+    }
+
+    /**
+     * Starts where the counter is now, not in the corner.
+     *
+     * <p>Only CUSTOM keeps coordinates of its own; every other preset works
+     * its anchor out from the screen. Opening on the stored x and y meant
+     * opening on {@code -1, 4} — the corner — for anybody who had never used
+     * CUSTOM, which is everybody the first time.</p>
+     */
+    private void placeFromPreset(Painter painter, int screenW, int screenH) {
+        if (placed) return;
+        placed = true;
+        int[] local = localBox(painter);
+        int w = Math.round(local[2] * previewScale);
+        int h = Math.round(local[3] * previewScale);
+
+        com.mateof24.config.TimerPositionPreset resolved;
+        try {
+            resolved = com.mateof24.config.TimerPositionPreset.valueOf(
+                    preset.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return;
+        }
+        int px = resolved.calculateX(screenW, w, x);
+        int py = resolved.calculateY(screenH, h, y);
+        // -1 is the enum's way of saying "centred", which only the caller can work out.
+        x = px == -1 ? (screenW - w) / 2 : px;
+        y = py == -1 ? (screenH - h) / 2 : py;
+        // The box is measured from the counter, so undo the titles' overhang.
+        x -= Math.round(local[0] * previewScale);
+        y -= Math.round(local[1] * previewScale);
+    }
+
+    private boolean hasTitle(int slot) {
+        return titles.length > slot && titles[slot] != null && !titles[slot].isEmpty();
+    }
+
+    private Component titleAt(int slot) {
+        return Component.literal(titles[slot]);
+    }
+
+    private boolean anyTitle() {
+        for (int i = 0; i < 4; i++) if (hasTitle(i)) return true;
+        return false;
+    }
+
+    private static float clampScale(float value) {
+        float rounded = Math.round(value);
+        if (rounded < MIN_SCALE) return MIN_SCALE;
+        if (rounded > MAX_SCALE) return MAX_SCALE;
+        return rounded;
+    }
+
+    public boolean asking() { return asking; }
+
+    /**
+     * Changes scale without the counter appearing to walk sideways.
+     *
+     * <p>Drawing is anchored at the top-left, because that is what the anchor
+     * saved with a timer means and what the renderer does with it. Growing
+     * from there sends the counter right and down, so at the same stored
+     * position two scales look like two different placements. Moving the
+     * anchor so the middle of the overlay stays where it was makes it grow
+     * evenly in every direction, which is what somebody choosing a spot is
+     * actually looking at.</p>
+     *
+     * <p>The measurement needs a font, so the correction is deferred to the
+     * next frame, where a {@link Painter} exists.</p>
+     */
+    private void scaleAboutCentre(float next) {
+        pendingScale = next;
+    }
+
+    /** Set while a scale change is waiting for a frame to be measured against. */
+    private float pendingScale;
+
+    private void applyPendingScale(Painter painter) {
+        if (pendingScale == 0f) return;
+        int[] before = bounds(painter);
+        int centreX = before[0] + before[2] / 2;
+        int centreY = before[1] + before[3] / 2;
+
+        previewScale = pendingScale;
+        pendingScale = 0f;
+
+        int[] after = bounds(painter);
+        x += centreX - (after[0] + after[2] / 2);
+        y += centreY - (after[1] + after[3] / 2);
+    }
+
+    // ---- what the counter takes up ----
+
+    /**
+     * The overlay in unscaled pixels, relative to the counter's top-left.
+     *
+     * <p>{@code {left, top, width, height}}. Everything — the red box, the
+     * titles, the hit test — is derived from this one rectangle and then run
+     * through the same scale, which is what keeps them agreeing. Computing the
+     * box separately from the drawing is what let it drift by a pixel at the
+     * bottom and by a whole title at scale three.</p>
+     */
+    private int[] localBox(Painter painter) {
+        int line = painter.lineHeight();
+        int glyphs = glyphHeight(painter);
+        int width = painter.textWidth(Component.literal(timeText));
+        int left = 0;
+        int top = 0;
+        int right = width;
+        int bottom = glyphs;
+
+        if (showTitles) {
+            if (hasTitle(0)) top -= line;
+            if (hasTitle(1)) bottom += line;
+            if (hasTitle(2)) left -= painter.textWidth(titleAt(2)) + TITLE_GAP;
+            if (hasTitle(3)) right += painter.textWidth(titleAt(3)) + TITLE_GAP;
+        }
+        return new int[]{left, top, right - left, bottom - top};
+    }
+
+    /**
+     * The ink, not the line box.
+     *
+     * <p>A font line is taller than the glyphs in it: the descender row is
+     * empty for digits, so measuring the box with the line height left one
+     * blank pixel along the bottom and nowhere else.</p>
+     */
+    private static int glyphHeight(Painter painter) {
+        return painter.lineHeight() - 1;
+    }
+
+    /** The box on screen, which is the local one scaled about the counter. */
+    private int[] bounds(Painter painter) {
+        int[] local = localBox(painter);
+        return new int[]{
+                x + Math.round(local[0] * previewScale),
+                y + Math.round(local[1] * previewScale),
+                Math.round(local[2] * previewScale),
+                Math.round(local[3] * previewScale)};
+    }
+
+    // ---- input ----
+
+    /** True when the click was taken, so the screen leaves it alone. */
+    public boolean mouseDown(Painter painter, double mouseX, double mouseY, int screenW, int screenH) {
+        // Not taken while the dialog is up: the three choices are widgets and
+        // the screen has to be free to hand the click to them. Dragging is
+        // already blocked by the same flag.
+        if (asking) return false;
+        int[] box = bounds(painter);
+        if (mouseX < box[0] || mouseX > box[0] + box[2]
+                || mouseY < box[1] || mouseY > box[1] + box[3]) {
+            return false;
+        }
+        dragging = true;
+        grabX = (int) mouseX - x;
+        grabY = (int) mouseY - y;
+        return true;
+    }
+
+    public void mouseDrag(double mouseX, double mouseY, int screenW, int screenH) {
+        if (!dragging || asking) return;
+        x = (int) mouseX - grabX;
+        y = (int) mouseY - grabY;
+    }
+
+    public void mouseUp() { dragging = false; }
+
+    /**
+     * @return true when the key was ours, so the screen does not also act on it
+     */
+    public boolean keyPressed(int keyCode) {
+        if (keyCode == 256) { // ESC
+            if (asking) { asking = false; return true; }
+            asking = true;
+            dragging = false;
+            return true;
+        }
+        if (asking) return false;
+        if (keyCode == 84) { // T
+            // Nothing to toggle when this timer has no titles: showing four
+            // samples would be showing something that is not there.
+            if (!anyTitle()) return true;
+            showTitles = !showTitles;
+            return true;
+        }
+        if (keyCode == 83) { // S
+            scaleAboutCentre(previewScale >= MAX_SCALE ? MIN_SCALE : previewScale + 1.0f);
+            return true;
+        }
+        return false;
+    }
+
+    /** Applied by the screen, which is the only thing that can close itself. */
+    private Choice answered;
+
+    private void answer(Choice choice) {
+        if (choice == Choice.CANCEL) {
+            asking = false;
+            return;
+        }
+        if (choice == Choice.SAVE) save.at(x, y);
+        answered = choice;
+    }
+
+    /** Non-null once the operator has chosen to leave; the screen then closes. */
+    public Choice answered() { return answered; }
+
+    // ---- drawing ----
+
+    public void draw(Painter painter, int screenW, int screenH) {
+        placeFromPreset(painter, screenW, screenH);
+        applyPendingScale(painter);
+        drawCounter(painter);
+        drawBounds(painter);
+        drawHint(painter, screenW, screenH);
+        if (asking) drawDialog(painter, screenW, screenH);
+    }
+
+    private void drawCounter(Painter painter) {
+        int[] local = localBox(painter);
+        int width = painter.textWidth(Component.literal(timeText));
+        int line = painter.lineHeight();
+
+        painter.pushScale(previewScale, x, y);
+        painter.text(Component.literal(timeText), x, y, TEXT);
+        if (showTitles) {
+            // Centred over the whole overlay, not over the counter: with a
+            // title on one side only, the two are not the same rectangle.
+            int centre = x + local[0] + local[2] / 2;
+            if (hasTitle(0)) {
+                painter.text(titleAt(0), centre - painter.textWidth(titleAt(0)) / 2, y - line, TEXT);
+            }
+            if (hasTitle(1)) {
+                painter.text(titleAt(1), centre - painter.textWidth(titleAt(1)) / 2, y + line, TEXT);
+            }
+            if (hasTitle(2)) {
+                painter.text(titleAt(2), x - painter.textWidth(titleAt(2)) - TITLE_GAP, y, TEXT);
+            }
+            if (hasTitle(3)) painter.text(titleAt(3), x + width + TITLE_GAP, y, TEXT);
+        }
+        painter.popScale();
+    }
+
+    /** Only while it is being moved: a permanent red box is noise. */
+    private void drawBounds(Painter painter) {
+        if (!dragging) return;
+        int[] box = bounds(painter);
+        painter.outline(box[0] - 1, box[1] - 1, box[2] + 2, box[3] + 2, BOUNDS_RED);
+    }
+
+    /**
+     * The one instruction, and it leaves.
+     *
+     * <p>At the height vanilla puts its own overlay message, white with the
+     * shadow the rest of the interface uses, faded in and out so it reads as a
+     * notice rather than as part of what is being placed.</p>
+     */
+    private void drawHint(Painter painter, int screenW, int screenH) {
+        if (asking) return;
+        long elapsed = System.currentTimeMillis() - openedAt;
+        long total = HINT_FADE_IN_MS + HINT_HOLD_MS + HINT_FADE_OUT_MS;
+        if (elapsed >= total) return;
+
+        float alpha;
+        if (elapsed < HINT_FADE_IN_MS) {
+            alpha = elapsed / (float) HINT_FADE_IN_MS;
+        } else if (elapsed < HINT_FADE_IN_MS + HINT_HOLD_MS) {
+            alpha = 1f;
+        } else {
+            alpha = 1f - (elapsed - HINT_FADE_IN_MS - HINT_HOLD_MS) / (float) HINT_FADE_OUT_MS;
+        }
+        int a = Math.max(0, Math.min(255, (int) (alpha * 255f)));
+        if (a == 0) return;
+
+        Component hint = Component.translatable("ontime.gui.picker.hint");
+        painter.text(hint, (screenW - painter.textWidth(hint)) / 2,
+                screenH - ACTION_BAR_FROM_BOTTOM, (a << 24) | WHITE);
+    }
+
+    /**
+     * The dimming, a title and a body. The three buttons are vanilla widgets
+     * the screen adds.
+     *
+     * <p>Shaped like the admin panel's warnings and for the same reason: with
+     * the whole screen dimmed behind it, a filled panel is a second frame
+     * around something already set apart, and its edges are what long text
+     * runs into. This one kept its box after the others lost theirs.</p>
+     */
+    private void drawDialog(Painter painter, int screenW, int screenH) {
+        int width = DIALOG_WIDTH;
+        int height = DIALOG_HEIGHT;
+        int left = (screenW - width) / 2;
+        int top = (screenH - height) / 2;
+
+        painter.rect(0, 0, screenW, screenH, DIALOG_SCRIM);
+
+        Component title = Component.translatable("ontime.gui.picker.exit.title");
+        painter.text(title, left + (width - painter.textWidth(title)) / 2, top + 14, TEXT);
+        Component body = Component.translatable("ontime.gui.picker.exit.body", timerName);
+        painter.text(body, left + (width - painter.textWidth(body)) / 2, top + 32, TEXT_DIM);
+    }
+
+    /** Where the screen puts the three buttons, so both agree on one rectangle. */
+    public int dialogLeft(int screenW) { return (screenW - DIALOG_WIDTH) / 2; }
+
+    public int dialogWidth() { return DIALOG_WIDTH; }
+
+    public int dialogButtonsY(int screenH) {
+        return (screenH - DIALOG_HEIGHT) / 2 + DIALOG_HEIGHT - 30;
+    }
+
+    /** Called by the buttons. */
+    public void choose(Choice choice) { answer(choice); }
+}

@@ -95,7 +95,13 @@ tasks.withType(JavaCompile).configureEach {
 
 processResources {
     from('../common/src/main/resources') {
+        // The web panel's page ships inside the jar and is read from there at
+        // runtime. Only 'assets/**' came across, so the NeoForge jar answered
+        // "Panel resources missing from the jar" to anyone who opened it --
+        // the Fabric one carried them because it compiles common's resources
+        // in wholesale.
         include 'assets/**'
+        include 'webpanel/**'
         exclude 'META-INF/**'
         exclude 'fabric.mod.json'
     }
