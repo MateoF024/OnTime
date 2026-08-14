@@ -12,6 +12,7 @@ def requireFamilyProperty = rootProject.ext.requireFamilyProperty
 
 def neoforgeVer    = requireFamilyProperty("neoforge_${vKey}")
 def minecraftRange = requireFamilyProperty("mc_range_neoforge_${vKey}")
+def neoforgeRange  = requireFamilyProperty("nf_range_${vKey}")
 
 base {
     archivesName = "${project.archives_base_name}+neoforge+${minecraftVer}"
@@ -90,9 +91,11 @@ processResources {
     def mixinCompatLevel = rootProject.ext.javaRelease.toString()
     inputs.property "version", mod_version
     inputs.property "minecraft_range", minecraftRange
+    inputs.property "neoforge_range", neoforgeRange
     inputs.property "mixin_compat_level", mixinCompatLevel
     filesMatching("META-INF/neoforge.mods.toml") {
-        expand "version": mod_version, "minecraft_range": minecraftRange
+        expand "version": mod_version, "minecraft_range": minecraftRange,
+                "neoforge_range": neoforgeRange
     }
     // See fabric/build.gradle: one templated mixin config instead of a copy
     // per family that only differed in compatibilityLevel.

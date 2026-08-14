@@ -29,7 +29,7 @@
     "fabricloader": ">=0.18.0",
     "minecraft": "${minecraft_range}",
     "java": "${java_requirement}",
-    "fabric-api": "*"
+    "fabric-api": "${fabric_api_requirement}"
   },
   "suggests": {
     "placeholder-api": "*"

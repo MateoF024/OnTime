@@ -128,13 +128,21 @@ def mixinCompatLevel = rootProject.ext.javaRelease.toString()
 
 processResources {
     def javaRequirement = ">=${rootProject.ext.javaRelease}".toString()
+    // The version this family was built against, and no ceiling: Fabric API
+    // keeps releasing for a given game version, and the minecraft range
+    // already closes the interval. A ceiling here would only break the mod
+    // on the next API release. It used to be "*", which asked for nothing at
+    // all from a mod that carries three different Fabric API source sets.
+    def fabricApiRequirement = ">=${fabricApiVer}".toString()
     inputs.property "version", mod_version
     inputs.property "minecraft_range", minecraftRange
     inputs.property "java_requirement", javaRequirement
+    inputs.property "fabric_api_requirement", fabricApiRequirement
     inputs.property "mixin_compat_level", mixinCompatLevel
     filesMatching("fabric.mod.json") {
         expand "version": mod_version, "minecraft_range": minecraftRange,
-                "java_requirement": javaRequirement
+                "java_requirement": javaRequirement,
+                "fabric_api_requirement": fabricApiRequirement
     }
     filesMatching("ontime*.mixins.json") {
         expand "mixin_compat_level": mixinCompatLevel
