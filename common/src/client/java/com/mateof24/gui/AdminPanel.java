@@ -2180,18 +2180,35 @@ public final class AdminPanel {
         if (name == null) return "";
         // The way a file system names a copy: the original keeps its name and
         // each copy takes the lowest free number. Lowest free, not next after
-        // the highest -- with "Timer" and "Timer (2)" about, the new one is
-        // "Timer (1)", because that gap is a name nothing is using.
+        // the highest -- with "Timer" and "Timer_2" about, the new one is
+        // "Timer_1", because that gap is a name nothing is using.
+        //
+        // Underscore and no brackets, because a timer is not a file: the
+        // server takes [A-Za-z0-9_.+-] and nothing else, so "Timer (1)" was
+        // the one name this could offer that was certain to be refused.
         String base = name;
         java.util.regex.Matcher matcher =
-                java.util.regex.Pattern.compile("^(.*) \\((\\d+)\\)$").matcher(name);
+                java.util.regex.Pattern.compile("^(.+?)_(\\d+)$").matcher(name);
         if (matcher.matches()) base = matcher.group(1);
 
         for (int copy = 1; copy < 1000; copy++) {
-            String candidate = base + " (" + copy + ")";
+            String candidate = fit(base, copy);
             if (model.timer(candidate) == null) return candidate;
         }
-        return base + " (1)";
+        return fit(base, 1);
+    }
+
+    /**
+     * The name with its number, inside the thirty-two the server allows.
+     *
+     * <p>The base gives way, not the number: a copy of a long name is still
+     * recognisably a copy, and two copies of it have to differ.</p>
+     */
+    private static String fit(String base, int copy) {
+        String tail = "_" + copy;
+        int room = 32 - tail.length();
+        if (base.length() > room) base = base.substring(0, room);
+        return base + tail;
     }
 
     private void buildTimerDialog() {

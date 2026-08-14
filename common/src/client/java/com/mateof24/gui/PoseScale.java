@@ -29,15 +29,24 @@ final class PoseScale {
     }
 
     /**
-     * Puts everything queued so far on the screen, so what is drawn next is
-     * genuinely on top of it.
+     * Lifts what comes next above everything drawn so far.
      *
-     * <p>Needed because text and fills go through different render types and
-     * the text pass is drawn last: a label queued early lands over a box
-     * filled late. Called flush() here; from 1.21.6 the same job is
-     * nextStratum().</p>
+     * <p>Nothing else here touches the pose, so the whole screen draws at z 0
+     * and an overlay tangles with what it is meant to cover however late it is
+     * drawn. Raising the z is vanilla's own answer -- it is what renderTooltip
+     * does before drawing over the inventory -- and it is undone by
+     * {@link #dropLayer}.</p>
+     *
+     * <p>From 1.21.6 the game grew nextStratum() for exactly this, which needs
+     * no undoing; the pair keeps the same shape at the call site.</p>
      */
     static void nextLayer(net.minecraft.client.gui.GuiGraphics graphics) {
         graphics.flush();
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 400);
+    }
+
+    static void dropLayer(net.minecraft.client.gui.GuiGraphics graphics) {
+        graphics.pose().popPose();
     }
 }
