@@ -21,6 +21,9 @@ public class TimerStorage {
     private static final Path EXPORTS_DIR = CONFIG_DIR.resolve("exports");
     private static final Path LEGACY_FILE = CONFIG_DIR.resolve("timers.json");
     private static final Path ACTIVE_FILE = TIMERS_DIR.resolve("_active.json");
+    private static final Path RUNS_FILE = TIMERS_DIR.resolve("_runs.json");
+    /** What every armed trigger has seen. Runtime state, so it sits with the runs. */
+    private static final Path TRIGGERS_FILE = TIMERS_DIR.resolve("_triggers.json");
 
     public static void saveTimers(Map<String, Timer> timers, String activeTimerName) {
         try {
@@ -84,6 +87,76 @@ public class TimerStorage {
         } catch (IOException e) {
             OnTimeConstants.LOGGER.error("Failed to save active timer state", e);
         }
+    }
+
+    /**
+     * Writes the executions in flight.
+     *
+     * <p>{@code _active.json} is still written alongside this, on purpose: it
+     * is the downgrade hatch. A world that goes back to 4.0.0 finds the pointer
+     * it expects and keeps its timer, instead of silently losing it.</p>
+     */
+    public static void saveRuns(java.util.Collection<com.mateof24.timer.TimerRun> runs) {
+        try {
+            Files.createDirectories(TIMERS_DIR);
+            JsonArray array = new JsonArray();
+            for (com.mateof24.timer.TimerRun run : runs) array.add(run.toJson());
+            JsonObject root = new JsonObject();
+            root.add("runs", array);
+            writeJsonAtomic(RUNS_FILE, root);
+        } catch (IOException e) {
+            OnTimeConstants.LOGGER.error("Failed to save timer runs", e);
+        }
+    }
+
+    /**
+     * Raw run entries from disk, for {@code TimerManager} to resolve against
+     * the loaded definitions.
+     *
+     * @return null when the file is absent, which is what tells the caller to
+     *         fall back to migrating {@code _active.json}
+     */
+    /**
+     * What the triggers have seen, so a round survives a restart.
+     *
+     * <p>Beside the runs rather than inside a timer: a timer file is what an
+     * operator configured, and this is what happened afterwards. Mixing the
+     * two would mean a backup of a configuration carried half a match with
+     * it.</p>
+     */
+    public static void saveTriggerState(JsonObject json) {
+        try {
+            Files.createDirectories(TIMERS_DIR);
+            writeJsonAtomic(TRIGGERS_FILE, json);
+        } catch (Exception e) {
+            com.mateof24.OnTimeConstants.LOGGER.warn("Could not save the trigger state", e);
+        }
+    }
+
+    public static JsonObject loadTriggerState() {
+        if (!Files.exists(TRIGGERS_FILE)) return null;
+        try (Reader reader = Files.newBufferedReader(TRIGGERS_FILE, StandardCharsets.UTF_8)) {
+            return GSON.fromJson(reader, JsonObject.class);
+        } catch (Exception e) {
+            com.mateof24.OnTimeConstants.LOGGER.warn("Could not read the trigger state", e);
+            return null;
+        }
+    }
+
+    public static List<JsonObject> loadRunElements() {
+        if (!Files.exists(RUNS_FILE)) return null;
+        List<JsonObject> entries = new ArrayList<>();
+        try (Reader reader = Files.newBufferedReader(RUNS_FILE, StandardCharsets.UTF_8)) {
+            JsonObject root = GSON.fromJson(reader, JsonObject.class);
+            if (root == null || !root.has("runs") || !root.get("runs").isJsonArray()) return entries;
+            for (JsonElement el : root.getAsJsonArray("runs")) {
+                if (el.isJsonObject()) entries.add(el.getAsJsonObject());
+            }
+        } catch (Exception e) {
+            OnTimeConstants.LOGGER.error("Failed to load timer runs", e);
+            return entries;
+        }
+        return entries;
     }
 
     public static TimerLoadResult loadTimers() {

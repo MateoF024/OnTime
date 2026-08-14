@@ -70,13 +70,28 @@ public enum TimerPositionPreset {
     }
 
     /**
-     * Obtiene el preset por nombre (case-insensitive)
+     * Obtiene el preset por nombre (case-insensitive), con BOSSBAR de reserva.
+     * Para distinguir "no es un preset" de "es bossbar" hace falta
+     * {@link #parse(String)}.
      */
     public static TimerPositionPreset fromString(String name) {
+        TimerPositionPreset parsed = parse(name);
+        return parsed != null ? parsed : BOSSBAR;
+    }
+
+    /**
+     * El preset con ese nombre, o null si no existe.
+     *
+     * <p>La desambiguación de {@code /timer position <algo> ...} necesita saber
+     * si el token es un preset o no; con el fallback silencioso a BOSSBAR
+     * cualquier palabra lo parecía.</p>
+     */
+    public static TimerPositionPreset parse(String name) {
+        if (name == null || name.isEmpty()) return null;
         try {
-            return TimerPositionPreset.valueOf(name.toUpperCase());
+            return TimerPositionPreset.valueOf(name.toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            return BOSSBAR; // Default
+            return null;
         }
     }
 

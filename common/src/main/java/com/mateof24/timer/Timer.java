@@ -14,14 +14,17 @@ public class Timer {
     public static final int MAX_SCHEDULED_ENTRIES = 64;
     public static final int MAX_COMMANDS_PER_POINT = 16;
 
+    /** Sanity cap on how many reasons one timer may have to start or end. */
+    public static final int MAX_TRIGGERS = 32;
+
     /** Commands fired when the displayed time crosses {@code atSeconds} (4.0.0). */
     public static final class CommandEvent {
         private final long atSeconds;
-        private final List<String> commands = new ArrayList<>();
+        private final List<TimedCommand> commands = new ArrayList<>();
 
         public CommandEvent(long atSeconds) { this.atSeconds = atSeconds; }
         public long getAtSeconds() { return atSeconds; }
-        public List<String> getCommands() { return commands; }
+        public List<TimedCommand> getCommands() { return commands; }
     }
 
     /**
@@ -30,34 +33,33 @@ public class Timer {
      * (events sorted by time ascending, commands in insertion order),
      * then finish commands. {@code atSeconds == null} means "on finish".
      */
-    public record ScheduledEntry(Long atSeconds, String command) {}
+    public record ScheduledEntry(Long atSeconds, String command, int delayTicks) {}
 
     private final String name;
     private long currentTicks;
     private final long targetTicks;
     private final boolean countUp;
     private boolean running;
-    private String command;
     private boolean silent;
     private boolean wasRunningBeforeShutdown;
     private boolean repeat = false;
     private int repeatCount = -1;
     private int repeatsDone = 0;
     private String nextTimer = null;
-    private String conditionObjective = null;
-    private int conditionScore = 0;
-    private String conditionTarget = "*";
     private long repeatCooldownTicks = 0L;
     private long sequenceCooldownTicks = 0L;
-    private String conditionExpression = null;
-    private String triggerType = null;
-    private String conditionExpressionAction = "finish";
-    private String scoreConditionAction = "finish";
-    private String triggerAction = "finish";
-    // Scheduled commands (4.0.0). commandEvents is kept sorted by atSeconds
-    // ascending; the legacy single 'command' field is untouched by these.
+
+    /**
+     * Every reason this timer starts or ends other than its own clock.
+     *
+     * <p>One list where there were three single-valued systems, each with its
+     * own action field. A timer can now hold several, including several of the
+     * same kind.</p>
+     */
+    private final List<com.mateof24.trigger.TriggerRule> rules = new ArrayList<>();
+    // commandEvents is kept sorted by atSeconds ascending.
     private final List<CommandEvent> commandEvents = new ArrayList<>();
-    private final List<String> finishCommands = new ArrayList<>();
+    private final List<TimedCommand> finishCommands = new ArrayList<>();
     // Decorative titles around the counter (4.0.0), stored as the RAW string
     // the user typed (tellraw-style JSON or plain text) — parsing is
     // version-specific and happens through the compat layer. null = unset.
@@ -65,14 +67,20 @@ public class Timer {
     private String titleBelow = null;
     private String titleLeft = null;
     private String titleRight = null;
+    // How this timer looks and sounds (5.0.0). Its own copy of the defaults,
+    // taken once when the timer is created — see TimerDisplay for why it is a
+    // copy and not a view.
+    private final TimerDisplay display = TimerDisplay.fromDefaults();
 
     public Timer(String name, int hours, int minutes, int seconds, boolean countUp) {
         this.name = name;
         this.targetTicks = (hours * 3600L + minutes * 60L + seconds) * 20L;
         this.countUp = countUp;
         this.currentTicks = countUp ? 0 : this.targetTicks;
+        // No command. A new timer runs nothing until it is told to: every one
+        // used to be handed "say Timer {name} has finished!" whether or not
+        // anybody asked, which is why a timer with no commands could not exist.
         this.running = false;
-        this.command = com.mateof24.command.PlaceholderSystem.DEFAULT_COMMAND;
         this.silent = false;
         this.wasRunningBeforeShutdown = false;
     }
@@ -129,6 +137,103 @@ public class Timer {
         }
     }
 
+    /**
+     * The trigger list, or the three older systems folded into it.
+     *
+     * <p>A timer saved before the three became one keeps what it had: the game
+     * event, the scoreboard comparison and the expression each become a
+     * trigger carrying the action they were saved with. Read once at load and
+     * never written back — the old keys do not survive the next save.</p>
+     */
+    private static void readTriggers(Timer timer, JsonObject json) {
+        if (json.has("rules") && json.get("rules").isJsonArray()) {
+            for (JsonElement element : json.getAsJsonArray("rules")) {
+                if (!element.isJsonObject()) continue;
+                com.mateof24.trigger.TriggerRule rule =
+                        com.mateof24.trigger.TriggerRule.fromJson(element.getAsJsonObject());
+                if (rule != null) timer.addRule(rule);
+            }
+            return;
+        }
+
+        // The flat list, one rule each. Lossless: a list of rules still means
+        // "any of these", which is what the flat list meant.
+        if (json.has("triggers") && json.get("triggers").isJsonArray()) {
+            for (JsonElement element : json.getAsJsonArray("triggers")) {
+                if (!element.isJsonObject()) continue;
+                com.mateof24.trigger.Trigger trigger =
+                        com.mateof24.trigger.Trigger.fromJson(element.getAsJsonObject());
+                if (trigger != null) timer.addRule(com.mateof24.trigger.TriggerRule.fromFlat(trigger));
+            }
+            return;
+        }
+
+        String type = json.has("triggerType") ? json.get("triggerType").getAsString() : "";
+        if (!type.isEmpty()) {
+            com.mateof24.trigger.Trigger.Action action = com.mateof24.trigger.Trigger.Action.parse(
+                    json.has("triggerAction") ? json.get("triggerAction").getAsString() : null);
+            timer.addRule(com.mateof24.trigger.TriggerRule.fromFlat(
+                    fromOldTriggerString(type, action)));
+        }
+
+        String objective = json.has("conditionObjective") ? json.get("conditionObjective").getAsString() : "";
+        if (!objective.isEmpty()) {
+            timer.addRule(com.mateof24.trigger.TriggerRule.fromFlat(
+                    com.mateof24.trigger.Trigger.scoreboard(
+                    com.mateof24.trigger.Trigger.Action.parse(
+                            json.has("scoreConditionAction") ? json.get("scoreConditionAction").getAsString() : null),
+                    objective,
+                    json.has("conditionScore") ? json.get("conditionScore").getAsInt() : 0,
+                    oldHolder(json.has("conditionTarget") ? json.get("conditionTarget").getAsString() : null))));
+        }
+
+        String expression = json.has("conditionExpression") ? json.get("conditionExpression").getAsString() : "";
+        if (!expression.isEmpty()) {
+            timer.addRule(com.mateof24.trigger.TriggerRule.fromFlat(
+                    com.mateof24.trigger.Trigger.expression(
+                    com.mateof24.trigger.Trigger.Action.parse(
+                            json.has("conditionExpressionAction") ? json.get("conditionExpressionAction").getAsString() : null),
+                    expression)));
+        }
+    }
+
+    /** The single scoreboard holder of the old form: "*" was everybody. */
+    private static com.mateof24.trigger.Who oldHolder(String target) {
+        if (target == null || target.isBlank() || "*".equals(target)) {
+            return new com.mateof24.trigger.Who(com.mateof24.trigger.Who.Scope.EVERYONE, "",
+                    com.mateof24.trigger.Who.Quantifier.ANY, 1);
+        }
+        return new com.mateof24.trigger.Who(com.mateof24.trigger.Who.Scope.PLAYERS, target,
+                com.mateof24.trigger.Who.Quantifier.ANY, 1);
+    }
+
+    /** {@code "dimension_change:minecraft:the_nether"} and friends, split once. */
+    private static com.mateof24.trigger.Trigger fromOldTriggerString(
+            String saved, com.mateof24.trigger.Trigger.Action action) {
+        String kindPart = saved;
+        String value = "";
+        int cut = saved.indexOf(':');
+        if (cut > 0) {
+            kindPart = saved.substring(0, cut);
+            value = saved.substring(cut + 1);
+        }
+        // "ftb_quest:quest:<id>" and "ftb_quest:reward:<id>" named the kind
+        // across two segments; everything else used one.
+        if ("ftb_quest".equals(kindPart)) {
+            if (value.startsWith("quest:")) {
+                return com.mateof24.trigger.Trigger.of(com.mateof24.trigger.Trigger.Kind.FTB_QUEST,
+                        action, value.substring("quest:".length()));
+            }
+            if (value.startsWith("reward:")) {
+                return com.mateof24.trigger.Trigger.of(com.mateof24.trigger.Trigger.Kind.FTB_REWARD,
+                        action, value.substring("reward:".length()));
+            }
+        }
+        com.mateof24.trigger.Trigger.Kind kind = com.mateof24.trigger.Trigger.Kind.parse(kindPart);
+        if (kind == null) return null;
+        return com.mateof24.trigger.Trigger.of(kind, action, value);
+    }
+
     public JsonObject toJson() {
         JsonObject json = new JsonObject();
         json.addProperty("name", name);
@@ -136,40 +241,35 @@ public class Timer {
         json.addProperty("targetTicks", targetTicks);
         json.addProperty("countUp", countUp);
         json.addProperty("running", running);
-        json.addProperty("command", command != null ? command : "");
         json.addProperty("silent", silent);
         json.addProperty("wasRunningBeforeShutdown", wasRunningBeforeShutdown);
         json.addProperty("repeat", repeat);
         json.addProperty("repeatCount", repeatCount);
         json.addProperty("repeatsDone", repeatsDone);
         json.addProperty("nextTimer", nextTimer != null ? nextTimer : "");
-        json.addProperty("conditionObjective", conditionObjective != null ? conditionObjective : "");
-        json.addProperty("conditionScore", conditionScore);
-        json.addProperty("conditionTarget", conditionTarget != null ? conditionTarget : "*");
         json.addProperty("repeatCooldownTicks", repeatCooldownTicks);
         json.addProperty("sequenceCooldownTicks", sequenceCooldownTicks);
-        json.addProperty("conditionExpression", conditionExpression != null ? conditionExpression : "");
-        json.addProperty("triggerType", triggerType != null ? triggerType : "");
-        json.addProperty("conditionExpressionAction", conditionExpressionAction);
-        json.addProperty("scoreConditionAction", scoreConditionAction);
-        json.addProperty("triggerAction", triggerAction);
+        JsonArray ruleArray = new JsonArray();
+        for (com.mateof24.trigger.TriggerRule rule : rules) ruleArray.add(rule.toJson());
+        json.add("rules", ruleArray);
         JsonArray events = new JsonArray();
         for (CommandEvent event : commandEvents) {
             JsonObject e = new JsonObject();
             e.addProperty("atSeconds", event.getAtSeconds());
             JsonArray cmds = new JsonArray();
-            for (String c : event.getCommands()) cmds.add(c);
+            for (TimedCommand c : event.getCommands()) cmds.add(c.toJson());
             e.add("commands", cmds);
             events.add(e);
         }
         json.add("commandEvents", events);
         JsonArray finish = new JsonArray();
-        for (String c : finishCommands) finish.add(c);
+        for (TimedCommand c : finishCommands) finish.add(c.toJson());
         json.add("finishCommands", finish);
         json.addProperty("titleAbove", titleAbove != null ? titleAbove : "");
         json.addProperty("titleBelow", titleBelow != null ? titleBelow : "");
         json.addProperty("titleLeft", titleLeft != null ? titleLeft : "");
         json.addProperty("titleRight", titleRight != null ? titleRight : "");
+        json.add("display", display.toJson());
         return json;
     }
 
@@ -186,9 +286,13 @@ public class Timer {
         Timer timer = new Timer(name, hours, minutes, seconds, countUp);
         timer.currentTicks = json.get("currentTicks").getAsLong();
         timer.running = json.get("running").getAsBoolean();
-        timer.command = json.has("command") && !json.get("command").isJsonNull()
-                ? json.get("command").getAsString()
-                : com.mateof24.command.PlaceholderSystem.DEFAULT_COMMAND;
+        // A timer saved with the old single command keeps it, as the first
+        // entry of the list it should always have been. Read once and never
+        // written back: nothing else in the mod knows the field exists.
+        if (json.has("command") && !json.get("command").isJsonNull()) {
+            String only = json.get("command").getAsString();
+            if (!only.isEmpty()) timer.addFinishCommand(only, 0);
+        }
         timer.silent = json.has("silent") && json.get("silent").getAsBoolean();
         timer.wasRunningBeforeShutdown = json.has("wasRunningBeforeShutdown")
                 && json.get("wasRunningBeforeShutdown").getAsBoolean();
@@ -197,19 +301,9 @@ public class Timer {
         timer.repeatsDone = json.has("repeatsDone") ? json.get("repeatsDone").getAsInt() : 0;
         timer.nextTimer = json.has("nextTimer") ? json.get("nextTimer").getAsString() : "";
         if (timer.nextTimer.isEmpty()) timer.nextTimer = null;
-        String condObj = json.has("conditionObjective") ? json.get("conditionObjective").getAsString() : "";
-        timer.conditionObjective = condObj.isEmpty() ? null : condObj;
-        timer.conditionScore = json.has("conditionScore") ? json.get("conditionScore").getAsInt() : 0;
-        timer.conditionTarget = json.has("conditionTarget") ? json.get("conditionTarget").getAsString() : "*";
         timer.repeatCooldownTicks = json.has("repeatCooldownTicks") ? json.get("repeatCooldownTicks").getAsLong() : 0L;
         timer.sequenceCooldownTicks = json.has("sequenceCooldownTicks") ? json.get("sequenceCooldownTicks").getAsLong() : 0L;
-        String condExpr = json.has("conditionExpression") ? json.get("conditionExpression").getAsString() : "";
-        timer.conditionExpression = condExpr.isEmpty() ? null : condExpr;
-        String trig = json.has("triggerType") ? json.get("triggerType").getAsString() : "";
-        timer.triggerType = trig.isEmpty() ? null : trig;
-        timer.conditionExpressionAction = json.has("conditionExpressionAction") ? json.get("conditionExpressionAction").getAsString() : "finish";
-        timer.scoreConditionAction = json.has("scoreConditionAction") ? json.get("scoreConditionAction").getAsString() : "finish";
-        timer.triggerAction = json.has("triggerAction") ? json.get("triggerAction").getAsString() : "finish";
+        readTriggers(timer, json);
 
         // Scheduled commands (absent in pre-4.0.0 files = empty). Malformed
         // entries are skipped instead of failing the whole timer.
@@ -222,13 +316,15 @@ public class Timer {
                 try { at = e.get("atSeconds").getAsLong(); } catch (Exception ex) { continue; }
                 if (at <= 0) continue;
                 for (JsonElement c : e.getAsJsonArray("commands")) {
-                    try { timer.addScheduledCommand(at, c.getAsString()); } catch (Exception ignored) {}
+                    TimedCommand read = TimedCommand.fromJson(c);
+                    if (read != null) timer.addScheduledCommand(at, read.command(), read.delayTicks());
                 }
             }
         }
         if (json.has("finishCommands") && json.get("finishCommands").isJsonArray()) {
             for (JsonElement c : json.getAsJsonArray("finishCommands")) {
-                try { timer.addFinishCommand(c.getAsString()); } catch (Exception ignored) {}
+                TimedCommand read = TimedCommand.fromJson(c);
+                if (read != null) timer.addFinishCommand(read.command(), read.delayTicks());
             }
         }
 
@@ -237,7 +333,41 @@ public class Timer {
         timer.titleLeft = readOptionalString(json, "titleLeft");
         timer.titleRight = readOptionalString(json, "titleRight");
 
+        // Whatever the file records wins; whatever it does not, the constructor
+        // already filled with today's defaults.
+        if (json.has("display") && json.get("display").isJsonObject()) {
+            timer.display.readFrom(json.getAsJsonObject("display"));
+        }
+        // The four flat keys are how the first 5.0.0 development builds wrote
+        // the display overrides, before the rest of the settings joined them.
+        String position = readOptionalString(json, "position");
+        if (position != null) timer.display.setPreset(position);
+        Integer legacyX = readOptionalInt(json, "timerX");
+        if (legacyX != null) timer.display.setX(legacyX);
+        Integer legacyY = readOptionalInt(json, "timerY");
+        if (legacyY != null) timer.display.setY(legacyY);
+        Float legacyScale = readOptionalFloat(json, "scale");
+        if (legacyScale != null) timer.display.setScale(legacyScale);
+
         return timer;
+    }
+
+    private static Integer readOptionalInt(JsonObject json, String key) {
+        if (!json.has(key) || json.get(key).isJsonNull()) return null;
+        try {
+            return json.get(key).getAsInt();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static Float readOptionalFloat(JsonObject json, String key) {
+        if (!json.has(key) || json.get(key).isJsonNull()) return null;
+        try {
+            return json.get(key).getAsFloat();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static String readOptionalString(JsonObject json, String key) {
@@ -256,8 +386,6 @@ public class Timer {
     public boolean isCountUp() { return countUp; }
     public boolean isRunning() { return running; }
     public void setRunning(boolean running) { this.running = running; }
-    public String getCommand() { return command; }
-    public void setCommand(String command) { this.command = command != null ? command : ""; }
     public void setCurrentTicks(long ticks) { this.currentTicks = ticks; }
     public boolean isSilent() { return silent; }
     public void setSilent(boolean silent) { this.silent = silent; }
@@ -265,11 +393,14 @@ public class Timer {
     public void setWasRunningBeforeShutdown(boolean was) { this.wasRunningBeforeShutdown = was; }
     public boolean isRepeat() { return repeat; }
     public void setRepeat(boolean repeat) { this.repeat = repeat; }
+
     public int getRepeatCount() { return repeatCount; }
     public void setRepeatCount(int count) { this.repeatCount = count; }
     public int getRepeatsDone() { return repeatsDone; }
     public void incrementRepeatsDone() { repeatsDone++; }
     public void resetRepeatsDone() { repeatsDone = 0; }
+    /** Used by {@link TimerRun#mirrorToTimer()} to keep the stored value current. */
+    public void setRepeatsDone(int done) { this.repeatsDone = done; }
     public boolean shouldRepeatAgain() {
         if (!repeat) return false;
         if (repeatCount == -1) return true;
@@ -279,34 +410,74 @@ public class Timer {
     public void setNextTimer(String nextTimer) {
         this.nextTimer = (nextTimer == null || nextTimer.isEmpty()) ? null : nextTimer;
     }
-    public String getConditionObjective() { return conditionObjective; }
-    public int getConditionScore() { return conditionScore; }
-    public String getConditionTarget() { return conditionTarget; }
-    public boolean hasCondition() { return conditionObjective != null && !conditionObjective.isEmpty(); }
-    public void setCondition(String objective, int score, String target) {
-        this.conditionObjective = objective;
-        this.conditionScore = score;
-        this.conditionTarget = (target == null || target.isEmpty()) ? "*" : target;
+    /** Live list, insertion order. Server thread only. */
+    public List<com.mateof24.trigger.TriggerRule> rules() { return rules; }
+
+    public boolean hasRules() { return !rules.isEmpty(); }
+
+    /**
+     * Removes whatever goes by that id: a rule, a group, or one condition.
+     *
+     * <p>One door, because the surfaces draw one tree and every row of it has
+     * an id. Asking them to know which of three operations a row needs is
+     * asking them to know something they cannot see — and getting it wrong
+     * used to answer "no such condition" for every rule on the page.</p>
+     *
+     * @return true when something was found and taken out
+     */
+    public boolean removeNode(String id) {
+        if (id == null || id.isBlank()) return false;
+
+        for (com.mateof24.trigger.TriggerRule rule : rules) {
+            if (rule.id().equals(id)) {
+                rules.remove(rule);
+                return true;
+            }
+        }
+        for (int i = 0; i < rules.size(); i++) {
+            com.mateof24.trigger.TriggerRule rule = rules.get(i);
+            if (!com.mateof24.trigger.Condition.holds(rule.condition(), id)) continue;
+            com.mateof24.trigger.Condition pruned =
+                    com.mateof24.trigger.Condition.without(rule.condition(), id);
+            // A rule with nothing left to watch goes with it. Keeping it would
+            // leave a row that names an action and can never take it.
+            if (pruned == null || pruned.leaves().isEmpty()) {
+                rules.remove(i);
+            } else {
+                rules.set(i, new com.mateof24.trigger.TriggerRule(
+                        rule.id(), rule.action(), pruned, rule.delayTicks(), rule.once()));
+            }
+            return true;
+        }
+        return false;
     }
-    public void clearCondition() {
-        this.conditionObjective = null;
-        this.conditionScore = 0;
-        this.conditionTarget = "*";
+
+    /** Refuses one that could never fire rather than storing a rule that does nothing. */
+    public boolean addRule(com.mateof24.trigger.TriggerRule rule) {
+        if (rule == null || !rule.isValid()) return false;
+        if (rules.size() >= MAX_TRIGGERS) return false;
+        rules.add(rule);
+        return true;
     }
+
+    /** Removes by position in {@link #rules()}, zero-based. */
+    public boolean removeRule(int index) {
+        if (index < 0 || index >= rules.size()) return false;
+        rules.remove(index);
+        return true;
+    }
+
+    public void clearRules() { rules.clear(); }
     public long getRepeatCooldownTicks() { return repeatCooldownTicks; }
     public void setRepeatCooldownTicks(long ticks) { this.repeatCooldownTicks = Math.max(0, ticks); }
     public long getSequenceCooldownTicks() { return sequenceCooldownTicks; }
     public void setSequenceCooldownTicks(long ticks) { this.sequenceCooldownTicks = Math.max(0, ticks); }
-    public String getConditionExpression() { return conditionExpression; }
-    public void setConditionExpression(String expr) { this.conditionExpression = (expr == null || expr.isEmpty()) ? null : expr; }
-    public String getTriggerType() { return triggerType; }
-    public void setTriggerType(String type) { this.triggerType = (type == null || type.isEmpty()) ? null : type; }
 
     /** Live list, sorted by atSeconds ascending. Server thread only. */
     public List<CommandEvent> getCommandEvents() { return commandEvents; }
 
     /** Live list, insertion order. Server thread only. */
-    public List<String> getFinishCommands() { return finishCommands; }
+    public List<TimedCommand> getFinishCommands() { return finishCommands; }
 
     public boolean hasScheduledCommands() {
         return !commandEvents.isEmpty() || !finishCommands.isEmpty();
@@ -324,27 +495,50 @@ public class Timer {
      * the same instant run in insertion order. Returns false when a sanity
      * cap is hit ({@link #MAX_SCHEDULED_ENTRIES} / {@link #MAX_COMMANDS_PER_POINT}).
      */
-    public boolean addScheduledCommand(long atSeconds, String command) {
+    public boolean addScheduledCommand(long atSeconds, String command, int delayTicks) {
         if (scheduledEntryCount() >= MAX_SCHEDULED_ENTRIES) return false;
+        TimedCommand timed = new TimedCommand(command, delayTicks);
         for (CommandEvent event : commandEvents) {
             if (event.getAtSeconds() == atSeconds) {
                 if (event.getCommands().size() >= MAX_COMMANDS_PER_POINT) return false;
-                event.getCommands().add(command);
+                event.getCommands().add(timed);
                 return true;
             }
         }
         CommandEvent event = new CommandEvent(atSeconds);
-        event.getCommands().add(command);
+        event.getCommands().add(timed);
         int pos = 0;
         while (pos < commandEvents.size() && commandEvents.get(pos).getAtSeconds() < atSeconds) pos++;
         commandEvents.add(pos, event);
         return true;
     }
 
-    public boolean addFinishCommand(String command) {
+    public boolean addFinishCommand(String command, int delayTicks) {
         if (scheduledEntryCount() >= MAX_SCHEDULED_ENTRIES) return false;
         if (finishCommands.size() >= MAX_COMMANDS_PER_POINT) return false;
-        finishCommands.add(command);
+        finishCommands.add(new TimedCommand(command, delayTicks));
+        return true;
+    }
+
+    /**
+     * Sets the pause after the entry at that position of the flat list.
+     *
+     * <p>By position rather than by text: the same command may be in the list
+     * twice, at two times, and they are two entries with two answers.</p>
+     */
+    public boolean setEntryDelay(int index, int delayTicks) {
+        if (index < 0) return false;
+        for (CommandEvent event : commandEvents) {
+            if (index < event.getCommands().size()) {
+                TimedCommand was = event.getCommands().get(index);
+                event.getCommands().set(index, new TimedCommand(was.command(), delayTicks));
+                return true;
+            }
+            index -= event.getCommands().size();
+        }
+        if (index >= finishCommands.size()) return false;
+        TimedCommand was = finishCommands.get(index);
+        finishCommands.set(index, new TimedCommand(was.command(), delayTicks));
         return true;
     }
 
@@ -352,19 +546,24 @@ public class Timer {
     public List<ScheduledEntry> scheduledEntries() {
         List<ScheduledEntry> entries = new ArrayList<>();
         for (CommandEvent event : commandEvents) {
-            for (String c : event.getCommands()) entries.add(new ScheduledEntry(event.getAtSeconds(), c));
+            for (TimedCommand c : event.getCommands()) {
+                entries.add(new ScheduledEntry(event.getAtSeconds(), c.command(), c.delayTicks()));
+            }
         }
-        for (String c : finishCommands) entries.add(new ScheduledEntry(null, c));
+        for (TimedCommand c : finishCommands) {
+            entries.add(new ScheduledEntry(null, c.command(), c.delayTicks()));
+        }
         return Collections.unmodifiableList(entries);
     }
 
     /** Removes the entry at the given 0-based index of {@link #scheduledEntries()}. */
     public boolean removeScheduledEntry(int index) {
         if (index < 0) return false;
-        for (CommandEvent event : commandEvents) {
+        for (java.util.Iterator<CommandEvent> it = commandEvents.iterator(); it.hasNext(); ) {
+            CommandEvent event = it.next();
             if (index < event.getCommands().size()) {
                 event.getCommands().remove(index);
-                if (event.getCommands().isEmpty()) commandEvents.remove(event);
+                if (event.getCommands().isEmpty()) it.remove();
                 return true;
             }
             index -= event.getCommands().size();
@@ -424,11 +623,7 @@ public class Timer {
         titleRight = null;
     }
 
-    public String getConditionExpressionAction() { return conditionExpressionAction; }
-    public void setConditionExpressionAction(String a) { this.conditionExpressionAction = "start".equals(a) ? "start" : "finish"; }
-    public String getScoreConditionAction() { return scoreConditionAction; }
-    public void setScoreConditionAction(String a) { this.scoreConditionAction = "start".equals(a) ? "start" : "finish"; }
-    public String getTriggerAction() { return triggerAction; }
-    public void setTriggerAction(String a) { this.triggerAction = "start".equals(a) ? "start" : "finish"; }
+    /** How this timer looks and sounds. Never null, and never the defaults themselves. */
+    public TimerDisplay display() { return display; }
 
 }

@@ -39,7 +39,9 @@ public class TimerLogger {
             entry.addProperty("name", timer.getName());
             entry.addProperty("duration", formatSeconds(timer.getTargetTicks() / 20L));
             entry.addProperty("mode", timer.isCountUp() ? "count-up" : "countdown");
-            entry.addProperty("command", timer.getCommand() != null ? timer.getCommand() : "");
+            entry.addProperty("finishCommands", timer.getFinishCommands().stream()
+                    .map(com.mateof24.timer.TimedCommand::command)
+                    .collect(java.util.stream.Collectors.joining(" ; ")));
             if (timer.isRepeat()) {
                 entry.addProperty("repeatsDone", timer.getRepeatsDone());
             }
