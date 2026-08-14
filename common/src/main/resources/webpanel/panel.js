@@ -29,12 +29,12 @@
       "timers.search": "Search", "timers.empty": "No timers exist yet",
       "timers.noMatch": "Nothing matches that", "settings.title": "Server defaults",
       pause: "Pause", resume: "Resume", reset: "Reset", stop: "Stop", start: "Start",
-      clone: "Clone", "delete": "Delete", "state.running": "Running", "state.paused": "Paused", "state.cooldown": "In cooldown",
+      clone: "Clone", accept: "Accept", "delete": "Delete", "state.running": "Running", "state.paused": "Paused", "state.cooldown": "In cooldown",
       "confirm.stopAll": "Stop every execution?",
       "confirm.stopAll.body": "%s execution(s) will be stopped.",
       "confirm.delete": "Delete '%s'?",
       "confirm.delete.body": "This permanently deletes the timer and stops every execution of it. It cannot be undone.",
-      "dialog.new": "New timer", "dialog.clone": "Copy '%s'", "dialog.start": "Start '%s'",
+      "dialog.new": "New timer", "dialog.clone": "Clone '%s'", "dialog.start": "Start '%s'",
       "editor.timer": "Timer", "editor.look": "Appearance",
       "editor.triggers": "Triggers", "editor.commands": "Commands",
       "field.hours": "Hours", "field.minutes": "Minutes", "field.seconds": "Seconds",
@@ -159,12 +159,12 @@
       "timers.search": "Buscar", "timers.empty": "Todavía no hay contadores",
       "timers.noMatch": "Nada coincide con eso", "settings.title": "Valores por defecto",
       pause: "Pausar", resume: "Reanudar", reset: "Reiniciar", stop: "Parar", start: "Arrancar",
-      clone: "Clonar", "delete": "Borrar", "state.running": "En marcha", "state.paused": "En pausa", "state.cooldown": "En cooldown",
+      clone: "Clonar", accept: "Aceptar", "delete": "Borrar", "state.running": "En marcha", "state.paused": "En pausa", "state.cooldown": "En cooldown",
       "confirm.stopAll": "¿Parar todas las ejecuciones?",
       "confirm.stopAll.body": "Se pararán %s ejecución(es).",
       "confirm.delete": "¿Borrar '%s'?",
       "confirm.delete.body": "Esto elimina el contador de forma permanente y detiene todas sus ejecuciones. No se puede deshacer.",
-      "dialog.new": "Contador nuevo", "dialog.clone": "Copiar '%s'", "dialog.start": "Arrancar '%s'",
+      "dialog.new": "Contador nuevo", "dialog.clone": "Clonar '%s'", "dialog.start": "Arrancar '%s'",
       "editor.timer": "Contador", "editor.look": "Apariencia",
       "editor.triggers": "Disparadores", "editor.commands": "Comandos",
       "field.hours": "Horas", "field.minutes": "Minutos", "field.seconds": "Segundos",
@@ -1523,12 +1523,32 @@
     ]);
   }
 
+  /**
+   * The name a copy is offered, the way the in-game panel offers it: the
+   * original keeps its own and the copy takes the lowest free number, so
+   * "test" and "test_2" leave "test_1" free.
+   *
+   * <p>Underscore and no brackets, and never past thirty-two characters: a
+   * timer name is [A-Za-z0-9_.+-] and the server refuses anything else.</p>
+   */
+  function copyName(name) {
+    const base = /^(.+?)_(\d+)$/.exec(name);
+    const stem = base ? base[1] : name;
+    const taken = new Set((state.timers || []).map(x => x.name));
+    for (let copy = 1; copy < 1000; copy++) {
+      const tail = "_" + copy;
+      const candidate = stem.slice(0, 32 - tail.length) + tail;
+      if (!taken.has(candidate)) return candidate;
+    }
+    return stem.slice(0, 30) + "_1";
+  }
+
   function cloneDialog(timer) {
     modal(t("dialog.clone", timer.name), body => {
-      body.append(field("dest", "text", timer.name + "2"));
+      body.append(field("dest", "text", copyName(timer.name)));
     }, [
       [t("cancel"), "", null],
-      [t("clone"), "primary", () =>
+      [t("accept"), "primary", () =>
         act("timer.clone", { name: timer.name, dest: $("#modal-body [data-key='dest']").value.trim() })]
     ]);
   }

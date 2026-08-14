@@ -73,6 +73,7 @@ public class AdminScreen extends Screen implements PanelHost {
         if (commandField.suggestions() != null) {
             commandField.suggestions().extractRenderState(graphics, mouseX, mouseY);
         }
+        PoseScale.dropLayer(graphics);
     }
 
     @Override

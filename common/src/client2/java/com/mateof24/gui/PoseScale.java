@@ -40,4 +40,7 @@ final class PoseScale {
     static void nextLayer(net.minecraft.client.gui.GuiGraphics graphics) {
         graphics.nextStratum();
     }
+
+    static void dropLayer(net.minecraft.client.gui.GuiGraphics graphics) {
+    }
 }
