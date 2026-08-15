@@ -41,11 +41,12 @@ Libs/
 
 Wiki/
 Logs/
-roadmap.md
-roadmap-1.20.1.md
 git_explicacion.md
 explicacion_5.0.0.md
-API-MIGRATION.md
+
+# release configuration (ids are local; tokens are never in a file at all)
+
+publish/projects.json
 
 # java
 
