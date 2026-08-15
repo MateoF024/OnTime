@@ -2,178 +2,42 @@
 
 ## Version 5.0.0
 
+### Added
+
+- Several executions of the same timer at once: `shared` gives everyone one clock, `each` gives every player their own (`/timer start`)
+- Audiences: an execution can be for everybody, for a list of players or for a selector such as `@a[team=red]`
+- In-game admin panel with `/timer gui`: executions, timers and settings, with a full-screen editor for everything a timer has
+- Combinable trigger conditions: any of them, all of them at once, or at least N, each watching whoever you choose
+- A pause per command instead of one figure for the whole timer
+- Visual placement screen for the `CUSTOM` position, with a live preview of the counter
+- Hide during cooldown, per timer and as a server default
+- `/timer confirm`, asked before creating more executions at once than the configured threshold
+
 ### Changed
 
-- **Breaking:** a command is a command and a pause, not a string. `TimerDefinition`
-  reports `finishCommands` and `scheduledCommands` as `TimedCommand` rather than
-  `String`. The server-wide `commandDelayTicks` setting and the per-timer copy of
-  it are gone with it: one figure for a whole timer could only ever be right for
-  one pair of its commands.
-
-- **Breaking:** "all of these hold" means at the same moment. Conditions that
-  have a state behind them are asked rather than remembered: being in a
-  dimension, holding an advancement, having completed a quest or claimed a
-  reward, being online. Each is true while it is true and stops when it stops,
-  so an "and" of two of them asks for both at once — one player can no longer
-  satisfy "in the Nether and in the End" by visiting them in turn. Leaving,
-  dying and respawning leave nothing behind to ask about, so they are true for
-  the one pass that reads them: two of those in one alternative have to land in
-  the same tick.
-- **Breaking:** a condition no longer carries `latched` and a group no longer
-  carries `windowMillis`. The latch is what made an "and" mean "both happened
-  at some point"; the window was its bound and nothing ever set it. Both are
-  dropped from the stored shape and from `Condition`.
-- **Breaking:** the FTB quest poller, the trigger registry and the trigger
-  evaluator are gone. They were the pre-5.0.0 engine, and nothing read what
-  they wrote: FTB quests and rewards are polled per player by the condition
-  engine, which respects who the condition is watching. Nothing in the API
-  referred to them.
-
-- The event feed is a real WebSocket. Browsers and the `ws` libraries of Node
-  and Python can connect to it now; the plain TCP line protocol still works on
-  the same port.
-- **Breaking:** the event feed requires a token. A TCP consumer must send it as
-  its first line, before anything is delivered:
-
-  ```
-  printf '%s
-' "$TOKEN" | nc localhost 25581
-  ```
-
-  A browser passes it as `?t=<token>` or as the `ontime.token.<token>`
-  subprotocol. The token is printed to the server console on every start.
-- The event feed can be bound to one interface with `webSocketBindAddress`,
-  the same way the web panel already could.
-- The web panel no longer serves `/api/history`. The history is still available
-  through `/timer history`.
+- Cloth Config and ModMenu are no longer used or required; every setting lives in the in-game panel
+- Every setting a counter draws with belongs to that counter: the twelve display values are copied when it is created, so changing a server default now only affects new timers
+- The finish command is one entry in the command list rather than a field of its own, and a timer may have none
+- Conditions folded into `/timer trigger`; every trigger says whether it starts or ends the timer
+- **Breaking:** the WebSocket feed requires an access token; existing consumers will need updating
+- **Breaking:** the `Command Delay` setting is gone, replaced by the pause each command carries
+- **Breaking, for mod developers:** the API was rebuilt for concurrent executions and no longer carries its 4.0.0 shape
+- `/timer` was rewritten: one form per command, and completions that offer what the argument actually accepts
+- The web panel was rebuilt: light and dark themes, a language picker, and everything the in-game panel can do
 
 ### Fixed
 
-- Escape steps back one thing rather than closing the panel: a warning answers
-  itself with Cancel, the advanced editor goes back to the list, and a tab with
-  unapplied changes asks the same question the Exit button asks. It used to
-  take the whole panel with it, unapplied changes and all.
-- Applying no longer makes the value flicker. What was typed stayed on screen
-  until the server's answer arrived; it was being dropped the instant the
-  request was sent, so the old figure came back for the moment in between.
-- The trigger state file only ever grew. Anything remembered about a timer that
-  no longer exists is dropped when the file is written and again when it is
-  read, so a file left behind by an earlier version is cleaned on first load.
-- Every tooltip follows one convention: no colour at the front, grey for the
-  qualifier, yellow for a value you type or pick, red only where something is
-  destroyed. A button that appears in two places says the same thing from one
-  key -- fourteen keys held a sentence that was already written elsewhere.
+- A timer with a start trigger could never fire while another timer was running
+- The NeoForge jar never contained the web panel's page, so the panel failed to open on that loader
+- The counter overlapped Jade when placed with a custom position preset
+- More than one timer's tick sound could play at once
 
-- A warning is the dimming and its words, with no panel drawn on top. The
-  screen behind it is already dimmed to near black, so the box was a second
-  frame around something already separate — and its edges were what the text
-  kept running into.
-- Stopping a timer and stopping one of its executions are one warning, worded
-  once, naming what it ends and how many. They were two dialogs with different
-  words for the same act.
-- The copy of a timer is named the way a file system names one: the original
-  keeps its name and each copy takes the lowest free number, so with "Timer"
-  and "Timer (2)" about, the next is "Timer (1)".
-- A dialog forgets what was typed into it when it closes as well as when it
-  opens.
-- Copying the same timer twice offers a name both times. The buttons on a
-  list row went through the same call that picks and unpicks a timer, so the
-  second press unpicked it and the dialog had no timer to name a copy after.
-- The placement screen's warning lost its box too. It was the one left.
-- While a timer is being filled in, the third button is Cancel and it leaves
-  the creation. It said Discard, and pressing it cleared the complaint about
-  the missing name and nothing else, as many times as you liked.
+### Improved
 
-- Starting a timer "one each" for everyone did nothing and said "already
-  running for those players, or its slot is taken". The API refuses a global
-  audience in that mode because it has no player list to expand; the panel
-  expands it to whoever is online first.
-- Stop, on an execution, asks before ending it. Stop all always has.
-- The runs page rebuilt itself on every snapshot, once a second, whether
-  anything about the list had changed or not. That threw away every widget --
-  and every tooltip counting down to its own appearance, which is why they
-  blinked in step with the timer. It rebuilds when an execution appears,
-  disappears or changes state.
-- Clicking away from the command box and back again left it dead. Clearing the
-  flag on a widget does not tell the screen to stop pointing at it, so the
-  second click was landing on the box the screen already believed was focused.
-- A command box opened and left alone no longer keeps whatever the completion
-  list put in it on the way past. It keeps what was typed, and Tab counts as
-  typing, because taking a suggestion is a decision.
+- Executions are sent to each player as one message per distinct view rather than one per player
+- The web panel's board is built only while somebody is watching it
 
-### Added
-
-- The trigger page is two fixed headings, "Starts it when..." and "Ends it
-  when...", always both. Under a heading sit alternatives, any one of which is
-  enough; inside an alternative everything has to hold at once. Adding a
-  condition asks four questions in game, one at a time, and each answer
-  explains itself; in the web panel it writes a sentence, in place, where the
-  condition will land. Answering the last one adds it -- there is no summary
-  page to press through.
-- The command box is the command block's. Completions come from the dispatcher
-  the server sent this client, so they are that server's actual commands --
-  another mod's and a datapack's functions included. The text is coloured
-  argument by argument the way the chat line colours it, whatever brigadier
-  could not make sense of goes red from the point it gave up, and Add stays
-  dead until the whole command parses.
-- The execution panel lists what starts or ends a timer, as the same tree the
-  editor draws and with nothing to press. A heading with nothing under it is
-  left out, the way a timer with no commands has no command section.
-- Everything under a run's actions scrolls: who is watching, what it runs and
-  what starts or ends it, in one list with a bar that appears only while
-  something is out of view. Long lists used to stop at the bottom of the pane
-  and say "+3 more", which is a way of saying there is more without offering
-  it.
-- Suggestions appear the moment a field is focused, in alphabetical order,
-  rather than waiting for a first letter. Selector fields offer the five
-  selectors, and the arguments one takes once a bracket is open.
-- "Stop all" sits at the foot of the list it acts on, and the list gives up the
-  room for it.
-- The trigger page draws its tree: a spine down each heading and a stub into
-  every row under it, redrawn as conditions are added and removed. A spine
-  never crosses between the two headings.
-- A line too long for its row is cut short and carries the whole of it in
-  vanilla's own tooltip.
-- The boxes that add a command sit above the list they add to: the command
-  across the whole line, the four numbers under it, each with its whole name
-  written above rather than a letter inside. A box with its own name in it
-  is empty and looks filled.
-- Commands are drawn as a tree wherever they are listed: a time reading, or
-  "At the end", with the commands that fire at it hanging off it. Every row
-  used to repeat the reading beside the command, so five commands at the end
-  said "At the end" five times and nothing said they were one batch.
-- The advanced editor is the two things that are lists: commands and
-  triggers. Titles, repeating and handing over are values like any other and
-  sit with the rest of them in the column beside the list, which is also the
-  only place with an Apply. Inside the advanced editor there is no Exit at
-  all -- Back stands where it stood.
-- Typed values are checked as they are typed, on both surfaces and by the same
-  rules: an id has to be an id, a selector a selector, and a list of names a
-  list of names. Advancements, dimensions and the players online complete as
-  you type, from what the server actually has.
-- Every command carries its own pause: how long to wait after it before the
-  next one in the same batch. Set it as the command is added, on either
-  surface, or afterwards with `/timer commands <name> delay <index> <ticks>`.
-  Zero, which is what a command starts with, runs the batch together in one
-  tick.
-- The counter can hide itself while it waits out a cooldown, so a timer between
-  repeats no longer reads as a timer that has broken. On by default.
-- Advancement fields complete as you type, from the list the server holds, the
-  same way the commands complete.
-- The web panel is rebuilt: cards, light and dark themes, a language selector,
-  and progress bars in the same colour the counter has in game.
-- The web panel can do everything the in-game screen and the commands can do.
-- The address `/timer webpanel` gives you is clickable in chat.
-- Clicking a timer in the web panel opens its editor; clicking a running one
-  opens a read-only summary of everything about it.
-- Web panel clocks are predicted between updates, so they no longer read a
-  second behind the counters in game.
-- Consumers receive a `HELLO` message on connecting, listing everything already
-  running, so one that starts halfway through a countdown knows it is there.
-- Events carry `runId`, `scope` and `audienceSize` alongside the fields they
-  always had.
-- A limit on how many consumers may be connected at once, and a lockout for
-  addresses that keep guessing the token.
+---
 
 ## Version 4.0.0
 
