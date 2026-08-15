@@ -126,6 +126,3 @@ tasks.withType(Jar) {
 
 java {
 }
-
-// Modrinth and CurseForge release tasks (never part of 'build').
-apply from: rootProject.file('publish.gradle')
