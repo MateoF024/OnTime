@@ -1,0 +1,196 @@
+// ============================================================
+//  Publishing one family's jar to Modrinth and CurseForge.
+//
+//  Applied by the fabric and forge subprojects. Everything it needs
+//  it reads from what the build already knows -- the family, its
+//  Minecraft range, the mod version -- so a jar and its listing
+//  cannot drift apart. The one thing it adds is the range spelled
+//  out as a list, which the platforms want instead of an interval,
+//  and publishCheck refuses to let the two disagree.
+//
+//  Run:
+//      gradlew publishCheck            -Pminecraft_version=1.21.1
+//      gradlew modrinth                -Pminecraft_version=1.21.1
+//      gradlew publishCurseForge       -Pminecraft_version=1.21.1
+//
+//  Nothing here runs as part of 'build'. Uploading is always something
+//  you ask for by name.
+// ============================================================
+
+apply plugin: 'com.modrinth.minotaur'
+apply plugin: 'net.darkhax.curseforgegradle'
+
+def isFabric = (project.name == 'fabric')
+def loaderId = isFabric ? 'fabric' : 'neoforge'
+def loaderName = isFabric ? 'Fabric' : 'NeoForge'
+
+def vKey = rootProject.ext.vKey
+def familyVersions = requirePublishProperty("publish_versions_${vKey}").split(',').collect { it.trim() }
+def declaredRange = project.property(isFabric ? "mc_range_fabric_${vKey}" : "mc_range_neoforge_${vKey}")
+
+// The family compiles at this level, and CurseForge asks for it by name.
+def javaName = "Java ${rootProject.ext.javaRelease}"
+
+def oldest = familyVersions.first()
+def newest = familyVersions.last()
+def label = (oldest == newest) ? oldest : "${oldest}-${newest}"
+
+// Sixteen files all called 5.0.0 would be sixteen collisions, so the
+// number carries the loader and the family it is for.
+def uploadVersion = "${project.mod_version}+${loaderId}.${oldest}"
+def uploadName = "OnTime ${project.mod_version} - ${loaderName} ${label}"
+
+// Under fabric-loom the final artifact is remapped; at 26.1+ it is not.
+def finalJarTask = tasks.named(
+        isFabric && !rootProject.ext.unobfuscatedMc ? 'remapJar' : 'jar')
+
+String requirePublishProperty(String key) {
+    if (!project.hasProperty(key) || !project.property(key)?.trim()) {
+        throw new GradleException("publish: '${key}' is missing from gradle.properties. " +
+                "Every family needs its list of Minecraft versions spelled out.")
+    }
+    return project.property(key)
+}
+
+// -PdryRun does everything except the upload: both plugins build the request
+// and print it. It is the way to see what a release would say before saying it.
+def dryRun = project.hasProperty('dryRun')
+
+String publishToken(String gradleKey, String envKey) {
+    if (project.hasProperty('dryRun')) return 'dry-run-no-token'
+    def value = project.findProperty(gradleKey) ?: System.getenv(envKey)
+    if (!value?.trim()) {
+        throw new GradleException("publish: no token. Put '${gradleKey}' in your " +
+                "~/.gradle/gradle.properties, or set ${envKey} in this shell. " +
+                "It must never go in the repository.")
+    }
+    return value
+}
+
+String projectIdOrFail(String key) {
+    def value = project.findProperty(key)
+    if (!value?.trim()) {
+        throw new GradleException("publish: '${key}' is empty in gradle.properties. " +
+                "Fill in the id from your project's page on the platform.")
+    }
+    return value
+}
+
+// The changelog is the top section of CHANGELOG.md, read rather than
+// restated, so a release cannot be announced with stale notes.
+def releaseChangelog = {
+    def file = rootProject.file('CHANGELOG.md')
+    if (!file.exists()) throw new GradleException("publish: CHANGELOG.md is missing.")
+    def sections = file.getText('UTF-8').split(/(?m)^## /)
+    if (sections.length < 2) throw new GradleException("publish: CHANGELOG.md has no '## Version' section.")
+    return ('## ' + sections[1]).trim()
+}
+
+// ------------------------------------------------------------
+//  The check that keeps the list and the range honest
+// ------------------------------------------------------------
+
+def publishCheck = tasks.register('publishCheck') {
+    group = 'publishing'
+    description = 'Verifies the published version list matches the range the jar declares.'
+    dependsOn tasks.named('verifyLoaderMetadata')
+    doLast {
+        // Both loaders write the same interval in different notation.
+        def matcher = (declaredRange =~ /\[([^,]+),([^)]+)\)/)
+        def low, high
+        if (matcher.find()) {
+            low = matcher.group(1); high = matcher.group(2)
+        } else {
+            low = (declaredRange =~ />=\s*([\d.]+)/)[0][1]
+            high = (declaredRange =~ /<\s*([\d.]+)/)[0][1]
+        }
+        def asList = { String v -> v.split(/\./).collect { it as int } }
+        def compare = { a, b ->
+            def x = asList(a), y = asList(b)
+            for (int i = 0; i < Math.max(x.size(), y.size()); i++) {
+                int l = i < x.size() ? x[i] : 0
+                int r = i < y.size() ? y[i] : 0
+                if (l != r) return l <=> r
+            }
+            return 0
+        }
+        familyVersions.each { v ->
+            if (compare(v, low) < 0 || compare(v, high) >= 0) {
+                throw new GradleException("publishCheck: ${v} is listed for ${vKey} but falls " +
+                        "outside the declared range ${declaredRange}.")
+            }
+        }
+        if (compare(oldest, low) != 0) {
+            throw new GradleException("publishCheck: the range ${declaredRange} starts at ${low}, " +
+                    "but the published list starts at ${oldest}. The bottom of the range must be covered.")
+        }
+        logger.lifecycle("publishCheck: ${loaderName} ${vKey} -> ${familyVersions.join(', ')} " +
+                "(${javaName}, range ${declaredRange}) ok")
+    }
+}
+
+// ------------------------------------------------------------
+//  Modrinth
+// ------------------------------------------------------------
+
+modrinth {
+    token = provider { publishToken('modrinth_token', 'MODRINTH_TOKEN') }
+    projectId = provider { projectIdOrFail('modrinth_project_id') }
+    versionNumber = uploadVersion
+    versionName = uploadName
+    versionType = 'release'
+    uploadFile = finalJarTask
+    gameVersions = familyVersions
+    loaders = [loaderId]
+    changelog = provider(releaseChangelog)
+    // Loom and NeoGradle are both present, and either would guess at the
+    // list above; the family already knows the answer.
+    detectLoaders = false
+    debugMode = dryRun
+    if (isFabric) {
+        dependencies {
+            required.project 'fabric-api'
+        }
+    }
+}
+
+tasks.named('modrinth') {
+    dependsOn publishCheck
+}
+
+// ------------------------------------------------------------
+//  CurseForge
+// ------------------------------------------------------------
+
+// Resolved by name rather than imported: this script is compiled before the
+// apply above has put the plugin on the classpath, so an import cannot see
+// the class. It is loaded through the plugin's own loader, which is the only
+// one that has it.
+def curseForgeTask = plugins.findPlugin('net.darkhax.curseforgegradle')
+        .class.classLoader.loadClass('net.darkhax.curseforgegradle.TaskPublishCurseForge')
+
+tasks.register('publishCurseForge', curseForgeTask) {
+    group = 'publishing'
+    description = "Uploads this family's ${loaderName} jar to CurseForge."
+    dependsOn publishCheck
+
+    // Plain values, not providers: the plugin parses the project id eagerly.
+    // The whole block is lazy anyway -- it runs only if the task is asked for.
+    apiToken = publishToken('curseforge_token', 'CURSEFORGE_TOKEN')
+    debugMode = dryRun
+
+    def artifact = upload(projectIdOrFail('curseforge_project_id'), finalJarTask)
+    // Auto-detection reads the toolchain and the loader plugins and would
+    // guess a single game version; the family's list is the true answer.
+    disableVersionDetection()
+    artifact.displayName = uploadName
+    artifact.releaseType = 'release'
+    artifact.changelogType = 'markdown'
+    artifact.changelog = releaseChangelog()
+    artifact.addModLoader(loaderName)
+    artifact.addJavaVersion(javaName)
+    familyVersions.each { artifact.addGameVersion(it) }
+    if (isFabric) {
+        artifact.addRequirement('fabric-api')
+    }
+}

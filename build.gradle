@@ -1,5 +1,10 @@
 plugins {
     id 'java'
+    // Publishing only. Applied by the loader subprojects through
+    // publish.gradle; neither is on the mod's classpath and neither ships
+    // in a jar.
+    id 'com.modrinth.minotaur' version '2.9.0' apply false
+    id 'net.darkhax.curseforgegradle' version '1.1.28' apply false
 }
 
 jar.enabled = false
@@ -118,7 +123,7 @@ ext.requireFamilyProperty = { String name ->
     def value = project.findProperty(name)
     if (value == null) {
         throw new GradleException("Missing '${name}' in gradle.properties — " +
-                "the '${vt}' family is not fully configured yet (see roadmap.md).")
+                "the '${vt}' family is not fully configured yet.")
     }
     return value
 }

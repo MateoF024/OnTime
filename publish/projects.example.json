@@ -1,8 +1,0 @@
-{
-  "_comment": "Copy this file to projects.json and fill in the two ids. Tokens do NOT go here — they are environment variables, so this file is safe to commit.",
-
-  "modrinth_project_id": "<the ID from your Modrinth project's Settings page>",
-  "curseforge_project_id": "<the numeric Project ID from your CurseForge project page>",
-
-  "release_type": "release"
-}
