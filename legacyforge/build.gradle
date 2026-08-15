@@ -143,3 +143,6 @@ jar {
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
+
+// Modrinth and CurseForge release tasks (never part of 'build').
+apply from: rootProject.file('publish.gradle')
