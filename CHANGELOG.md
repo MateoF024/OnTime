@@ -1,10 +1,49 @@
 # OnTime Mod - Changelog
 
+## Version 5.0.0
+
+### Added
+
+- Several executions of the same timer at once: `shared` gives everyone one clock, `each` gives every player their own (`/timer start`)
+- Audiences: an execution can be for everybody, for a list of players or for a selector such as `@a[team=red]`
+- In-game admin panel with `/timer gui`: executions, timers and settings, with a full-screen editor for everything a timer has
+- Combinable trigger conditions: any of them, all of them at once, or at least N, each watching whoever you choose
+- A pause per command instead of one figure for the whole timer
+- Visual placement screen for the `CUSTOM` position, with a live preview of the counter
+- Hide during cooldown, per timer and as a server default
+- `/timer confirm`, asked before creating more executions at once than the configured threshold
+
+### Changed
+
+- Cloth Config and ModMenu are no longer used or required; every setting lives in the in-game panel
+- Every setting a counter draws with belongs to that counter: the twelve display values are copied when it is created, so changing a server default now only affects new timers
+- The finish command is one entry in the command list rather than a field of its own, and a timer may have none
+- Conditions folded into `/timer trigger`; every trigger says whether it starts or ends the timer
+- **Breaking:** the WebSocket feed requires an access token; existing consumers will need updating
+- **Breaking:** the `Command Delay` setting is gone, replaced by the pause each command carries
+- **Breaking, for mod developers:** the API was rebuilt for concurrent executions and no longer carries its 4.0.0 shape
+- `/timer` was rewritten: one form per command, and completions that offer what the argument actually accepts
+- The web panel was rebuilt: light and dark themes, a language picker, and everything the in-game panel can do
+
+### Fixed
+
+- A timer with a start trigger could never fire while another timer was running
+- The NeoForge jar never contained the web panel's page, so the panel failed to open on that loader
+- The counter overlapped Jade when placed with a custom position preset
+- More than one timer's tick sound could play at once
+
+### Improved
+
+- Executions are sent to each player as one message per distinct view rather than one per player
+- The web panel's board is built only while somebody is watching it
+
+---
+
 ## Version 4.0.0
 
 ### Added
 
-- Minecraft 1.21.5 support is back
+- Minecraft 1.21.5 support is back (Omitted in 3.0.0)
 - Minecraft 1.21.11 support
 - Minecraft 26.1.X support
 - Minecraft 26.2 support
