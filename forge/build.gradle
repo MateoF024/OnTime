@@ -160,6 +160,3 @@ def verifyLoaderMetadata = tasks.register('verifyLoaderMetadata') {
     }
 }
 tasks.named('check') { dependsOn verifyLoaderMetadata }
-
-// Modrinth and CurseForge release tasks (never part of 'build').
-apply from: rootProject.file('publish.gradle')
