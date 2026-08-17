@@ -1,6 +1,6 @@
 # OnTime Mod - Changelog
 
-## Version 5.0.0
+## Version 5.0.0 — a thank-you for the 2,000+ downloads across both platforms! Major changes!
 
 ### Added
 
