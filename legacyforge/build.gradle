@@ -129,7 +129,18 @@ java {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
+// The Mixin annotation processor writes the refmap next to the compiled
+// classes, not into them, so nothing ever carried it into the jar. Forge
+// 1.20.1 is the last version whose classes are SRG-named at runtime, which
+// makes the refmap the only way Mixin can tell that 'render' means
+// 'm_280652_'; without it the config loaded and every injection failed.
+// Fabric needs no equivalent -- Loom rewrites the mixin at build time -- and
+// neither does NeoForge on 1.21+, which runs on Mojang names.
+def refMapFile = layout.buildDirectory.file("tmp/compileJava/mixins.ontime.refmap.json")
+
 jar {
+    dependsOn tasks.named('compileJava')
+    from(refMapFile)
     manifest {
         attributes([
                 'Specification-Title'  : mod_name,

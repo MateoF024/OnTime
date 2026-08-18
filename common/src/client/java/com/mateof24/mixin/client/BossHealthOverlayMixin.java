@@ -3,16 +3,13 @@ package com.mateof24.mixin.client;
 import com.mateof24.render.ClientTimerState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.BossHealthOverlay;
-import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 @Mixin(BossHealthOverlay.class)
 public class BossHealthOverlayMixin {
 
-    @Shadow @Final private Minecraft minecraft;
     private static final int BOSSBAR_DEFAULT_Y = 12;
     private static final int BOSSBAR_HEIGHT = 19;
     private static final int BOSSBAR_WIDTH = 182;
@@ -22,8 +19,16 @@ public class BossHealthOverlayMixin {
     private int adjustBossBarY(int y) {
         if (!ClientTimerState.shouldDisplay()) return y;
 
-        int screenWidth = this.minecraft.getWindow().getGuiScaledWidth();
-        int screenHeight = this.minecraft.getWindow().getGuiScaledHeight();
+        // The target's own 'minecraft' field would do, but reaching it needs a
+        // @Shadow, and a shadowed field has to be renamed to match whatever
+        // names the game is running under. Forge 1.20.1 runs on SRG names and
+        // the renaming never happened, so the field was looked up as
+        // 'minecraft', not found, and the game died before the main menu. The
+        // singleton is the same object and needs no such translation.
+        Minecraft minecraft = Minecraft.getInstance();
+
+        int screenWidth = minecraft.getWindow().getGuiScaledWidth();
+        int screenHeight = minecraft.getWindow().getGuiScaledHeight();
 
         int bossBarLeft = (screenWidth - BOSSBAR_WIDTH) / 2;
         int bossBarRight = bossBarLeft + BOSSBAR_WIDTH;
@@ -35,7 +40,7 @@ public class BossHealthOverlayMixin {
         // send it halfway down the screen to avoid empty space.
         int bottomEdge = Integer.MIN_VALUE;
         for (int[] occupied : com.mateof24.render.TitleBlock.occupiedRects(
-                this.minecraft.font, screenWidth, screenHeight)) {
+                minecraft.font, screenWidth, screenHeight)) {
             boolean horizontalOverlap = occupied[2] > bossBarLeft && occupied[0] < bossBarRight;
             boolean verticalOverlap = occupied[3] > BOSSBAR_DEFAULT_Y && occupied[1] < bossBarBottom;
             if (horizontalOverlap && verticalOverlap) {
