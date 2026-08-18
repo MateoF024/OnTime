@@ -14,8 +14,19 @@ public interface PanelHost {
     /** Registers a widget so the screen draws it and routes input to it. */
     <T extends AbstractWidget> T addWidget(T widget);
 
-    /** Drops every widget, before laying the panel out again. */
-    void clearWidgets();
+    /**
+     * Drops every widget, before laying the panel out again.
+     *
+     * <p>Deliberately not called {@code clearWidgets}. Forge 1.20.1 reobfuscates
+     * the mod into SRG names, and it matches by name and descriptor: an
+     * interface method of this mod's own that happened to read
+     * {@code clearWidgets()V}, exactly like {@link net.minecraft.client.gui.screens.Screen}'s,
+     * had its call sites rewritten to {@code m_169413_} while the declaration
+     * here kept its name. The panel then died laying itself out -- silently on
+     * the way in, leaving a screen with no buttons on it, and loudly on every
+     * resize. Any name vanilla does not also use is safe.</p>
+     */
+    void dropWidgets();
 
     /**
      * Makes this box behave like the one on a command block.
@@ -40,7 +51,7 @@ public interface PanelHost {
      * clicking the box the screen already believed was focused, and nothing
      * happened.</p>
      */
-    void clearFocus();
+    void dropFocus();
 
     /** Closes the panel, which also unsubscribes from the server's updates. */
     void closePanel();

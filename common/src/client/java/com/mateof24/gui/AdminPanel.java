@@ -368,7 +368,7 @@ public final class AdminPanel {
         visibleRows = Math.max(1, (listBottom - listTop + ROW_GAP) / (ROW_HEIGHT + ROW_GAP));
         clampScroll();
 
-        host.clearWidgets();
+        host.dropWidgets();
         // Whatever was bound belonged to a box that has just been thrown away.
         // The page that wants one binds it again as it builds.
         host.bindCommandField(null);
@@ -3610,7 +3610,7 @@ public final class AdminPanel {
                 commandBox.setValue("");
             }
             commandTyped = false;
-            host.clearFocus();
+            host.dropFocus();
         }
 
         if (button != 1) return false;

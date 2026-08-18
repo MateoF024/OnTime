@@ -160,7 +160,7 @@ public class AdminScreen extends Screen implements PanelHost {
     }
 
     @Override
-    public void clearFocus() {
+    public void dropFocus() {
         setFocused(null);
     }
 
@@ -187,8 +187,10 @@ public class AdminScreen extends Screen implements PanelHost {
     }
 
     @Override
-    public void clearWidgets() {
-        super.clearWidgets();
+    public void dropWidgets() {
+        // The vanilla one, which is free to be renamed: this is a call into
+        // Screen and reobfuscation is right to rewrite it.
+        clearWidgets();
     }
 
     @Override

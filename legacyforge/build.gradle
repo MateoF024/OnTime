@@ -149,7 +149,10 @@ tasks.named('compileJava') {
 // A silent omission is what let a crashing jar reach two platforms, so the
 // build now refuses to call itself finished without looking inside.
 def verifyRefMap = tasks.register('verifyRefMap') {
-    dependsOn tasks.named('jar')
+    // reobfJar, not jar: reobfuscation rewrites the archive in place after
+    // jar has produced it, and checking in between reads a file that is not
+    // the one that ships.
+    dependsOn tasks.named('reobfJar')
     doLast {
         def jarFile = tasks.named('jar').get().archiveFile.get().asFile
         def entry = new java.util.zip.ZipFile(jarFile).withCloseable { zip ->
@@ -169,6 +172,51 @@ def verifyRefMap = tasks.register('verifyRefMap') {
     }
 }
 tasks.named('check') { dependsOn verifyRefMap }
+
+// Reobfuscation matches by name and descriptor, not by which mod owns the
+// class. Give a method of ours the exact signature of one of vanilla's --
+// PanelHost.clearWidgets()V against Screen.clearWidgets()V -- and the call
+// sites are rewritten to the SRG name while the declaration keeps its own.
+// Nothing warns; the jar builds; the screen opens with no buttons on it and
+// the game dies on the first resize. Any reference to one of this mod's own
+// classes under an SRG name is that mistake, so the finished jar is read for
+// them rather than trusted.
+def verifyNoSrgOnOwnClasses = tasks.register('verifyNoSrgOnOwnClasses') {
+    // Only reobfuscation can introduce this fault, so the check has to come
+    // after it -- and 'check' alone does not build the jar, hence assemble.
+    dependsOn tasks.named('reobfJar')
+    doLast {
+        def jarFile = tasks.named('jar').get().archiveFile.get().asFile
+        def classes = []
+        new java.util.zip.ZipFile(jarFile).withCloseable { zip ->
+            zip.entries().each { entry ->
+                if (entry.name.startsWith('com/mateof24/') && entry.name.endsWith('.class')) {
+                    classes << entry.name[0..-7].replace('/', '.')
+                }
+            }
+        }
+        def output = new ByteArrayOutputStream()
+        exec {
+            commandLine(["${System.getProperty('java.home')}/bin/javap", '-c', '-p',
+                         '-cp', jarFile.absolutePath] + classes)
+            standardOutput = output
+            errorOutput = new ByteArrayOutputStream()
+            ignoreExitValue = true
+        }
+        def offenders = (output.toString('UTF-8') =~
+                /(?:Method|InterfaceMethod|Field) (com\/mateof24\/[A-Za-z0-9\/\$]+\.(?:m_[0-9_]+|f_[0-9_]+))/)
+                .collect { it[1] } as SortedSet
+        if (offenders) {
+            throw new GradleException("verifyNoSrgOnOwnClasses: ${jarFile.name} refers to this " +
+                    "mod's own members under SRG names, which cannot resolve at runtime:\n  " +
+                    offenders.join("\n  ") +
+                    "\nRename them: a method of ours must not share a name and " +
+                    "descriptor with one of vanilla's.")
+        }
+        logger.lifecycle("verifyNoSrgOnOwnClasses: ${classes.size()} classes, none mangled")
+    }
+}
+tasks.named('check') { dependsOn verifyNoSrgOnOwnClasses }
 
 jar {
     manifest {
