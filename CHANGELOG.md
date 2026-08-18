@@ -1,5 +1,15 @@
 # OnTime Mod - Changelog
 
+## Version 5.0.1
+
+Forge 1.20.1 only. Every other version stays on 5.0.0.
+
+### Fixed
+
+- The game crashed while starting up, before the main menu, on Forge 1.20.1
+
+---
+
 ## Version 5.0.0
 
 ### Added

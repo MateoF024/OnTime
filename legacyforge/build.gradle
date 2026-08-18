@@ -13,7 +13,7 @@ base {
     archivesName = "${project.archives_base_name}+forge+${forgeMcVer}"
 }
 
-version = project.mod_version
+version = project.forge_mod_version
 group = project.maven_group
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
@@ -113,11 +113,11 @@ processResources {
         exclude 'fabric.mod.json'
     }
 
-    inputs.property "version", mod_version
+    inputs.property "version", forge_mod_version
     inputs.property "minecraft_range", minecraftRange
     inputs.property "forge_range", forgeRange
     filesMatching("META-INF/mods.toml") {
-        expand 'version': mod_version, 'minecraft_range': minecraftRange,
+        expand 'version': forge_mod_version, 'minecraft_range': minecraftRange,
                 'forge_range': forgeRange
     }
 
@@ -129,25 +129,55 @@ java {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
-// The Mixin annotation processor writes the refmap next to the compiled
-// classes, not into them, so nothing ever carried it into the jar. Forge
-// 1.20.1 is the last version whose classes are SRG-named at runtime, which
-// makes the refmap the only way Mixin can tell that 'render' means
-// 'm_280652_'; without it the config loaded and every injection failed.
+// Forge 1.20.1 is the last version whose classes are SRG-named at runtime,
+// so the refmap is the only way Mixin can tell that 'render' means
+// 'm_280652_'. MixinGradle does put it in the jar -- but the annotation
+// processor writes it into a temp directory Gradle does not know is an
+// output of compileJava. Restore that task from the build cache, which is
+// exactly what happened when 5.0.0 was built, and the file is simply never
+// created: MixinGradle skips it without a word and the jar ships unable to
+// translate a single target. Declaring it as an output makes the cache
+// carry it like any other compiled result.
 // Fabric needs no equivalent -- Loom rewrites the mixin at build time -- and
 // neither does NeoForge on 1.21+, which runs on Mojang names.
 def refMapFile = layout.buildDirectory.file("tmp/compileJava/mixins.ontime.refmap.json")
 
+tasks.named('compileJava') {
+    outputs.file(refMapFile)
+}
+
+// A silent omission is what let a crashing jar reach two platforms, so the
+// build now refuses to call itself finished without looking inside.
+def verifyRefMap = tasks.register('verifyRefMap') {
+    dependsOn tasks.named('jar')
+    doLast {
+        def jarFile = tasks.named('jar').get().archiveFile.get().asFile
+        def entry = new java.util.zip.ZipFile(jarFile).withCloseable { zip ->
+            zip.getEntry('mixins.ontime.refmap.json')?.with { zip.getInputStream(it).text }
+        }
+        if (entry == null) {
+            throw new GradleException("verifyRefMap: ${jarFile.name} has no " +
+                    "mixins.ontime.refmap.json. Forge 1.20.1 needs it to resolve " +
+                    "every mixin target; without it the game crashes on startup.")
+        }
+        if (!entry.contains('m_280652_')) {
+            throw new GradleException("verifyRefMap: the refmap in ${jarFile.name} " +
+                    "does not map BossHealthOverlay.render. It was built without " +
+                    "SRG mappings and will not apply at runtime.")
+        }
+        logger.lifecycle("verifyRefMap: ${jarFile.name} carries a refmap that maps render ok")
+    }
+}
+tasks.named('check') { dependsOn verifyRefMap }
+
 jar {
-    dependsOn tasks.named('compileJava')
-    from(refMapFile)
     manifest {
         attributes([
                 'Specification-Title'  : mod_name,
                 'Specification-Vendor' : 'MateoF24',
                 'Specification-Version': '1',
                 'Implementation-Title' : mod_name,
-                'Implementation-Version': mod_version,
+                'Implementation-Version': forge_mod_version,
                 'Implementation-Vendor': 'MateoF24',
                 'MixinConfigs'         : 'ontime.client.mixins.json'
         ])
